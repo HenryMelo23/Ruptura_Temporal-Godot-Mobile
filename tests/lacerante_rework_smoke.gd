@@ -53,11 +53,18 @@ func _run() -> void:
 	var target: Dictionary = game.enemies[0]
 	target["hp"] = 1.0
 	target["max_hp"] = 100.0
+	# Rework: Reforco so arma; o ATK reforcado executa se o corte pegar um executavel.
 	_check(game._try_arm_lacerante_empower(), "reinforced slash did not arm")
+	_check(not game._lacerante_exec().is_active(), "reinforcement executed before the attack")
 	game._fire_lacerante(0, Vector2.RIGHT)
+	_check(game._lacerante_exec().is_active(), "reinforcement did not start an execution")
+	for _exec_step in range(60):
+		game.time_alive += 1.0 / 60.0
+		game._lacerante_exec().update(1.0 / 60.0)
 	_check(game.lacerante_coagula == 1, "reinforced execution did not grant exactly one Coagulum")
 	_check(not game.lacerante_empowered_ready, "reinforced slash was not consumed")
-	_check(not game._try_arm_lacerante_empower(), "reinforcement ignored its 3 second cooldown")
+	_check(not game._lacerante_exec().is_active(), "execution did not end")
+	_check(not game._try_arm_lacerante_empower(), "reinforcement ignored its 10 second cooldown")
 
 	game._update_button_layout(Vector2(1280, 720))
 	_check(game.buttons.has("lacerante_empower"), "Lacerante reinforcement button is missing")
@@ -101,6 +108,7 @@ func _run() -> void:
 	game.lacerante_coagula = 0
 
 	game.enemies.clear()
+	game.heal_orbs.clear() # a execucao acima deixa a orbe de pontos do alvo executado
 	game.score = 0
 	game.score_total = 0
 	game._spawn_enemy(game.ENEMY_PROJECTOR, Vector2(900, 450))

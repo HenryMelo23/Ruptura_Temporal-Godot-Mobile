@@ -69,7 +69,7 @@ func _run_manifest_regression() -> void:
 	_check(checked == game.MANIFESTATIONS.size(), "not all manifestations passed through a typed combat hook")
 
 
-func _run_lacerante_and_acorrentada() -> void:
+func _run_lacerante_melee() -> void:
 	game.enemies.clear()
 	var lacerante_link := _entry_for("lacerante", "impact_link")
 	_activate("lacerante", lacerante_link)
@@ -86,31 +86,10 @@ func _run_lacerante_and_acorrentada() -> void:
 	_check(_has_event("hit_resolved", "boss"), "lacerante boss hit did not resolve evolution event")
 	game.boss_active = false
 
-	game.enemies.clear()
-	var chained_link := _entry_for("acorrentada", "impact_link")
-	_activate("acorrentada", chained_link)
-	var chain_target := _spawn_target(game.player_pos + Vector2(100, 0))
-	game._resolve_acorrentada_attack_motion({"stage": 1, "dir": Vector2.RIGHT, "target": {"kind": "enemy", "uid": int(chain_target["uid"])}, "damage_impact": Vector2(chain_target["pos"]), "manifest_evolution_event_id": "acorrentada:test"})
-	_check(float(chain_target.get("evolution_slow", 0.0)) > 0.0, "acorrentada chain hit did not resolve evolution impact")
-	_check(_has_event("hit_resolved", str(chain_target.get("uid", ""))), "acorrentada typed hit missing")
-
 	var log_before: int = game.manifest_evolution_combat_event_log.size()
-	game._manifest_evolution_on_combat_hit("duplicate:one", "acorrentada", chain_target, Vector2(chain_target["pos"]))
-	game._manifest_evolution_on_combat_hit("duplicate:one", "acorrentada", chain_target, Vector2(chain_target["pos"]))
+	game._manifest_evolution_on_combat_hit("duplicate:one", "lacerante", lacerante_target, Vector2(lacerante_target["pos"]))
+	game._manifest_evolution_on_combat_hit("duplicate:one", "lacerante", lacerante_target, Vector2(lacerante_target["pos"]))
 	_check(game.manifest_evolution_combat_event_log.size() == log_before + 1, "duplicate combat event was consumed twice")
-
-
-func _run_necronada_skill() -> void:
-	var field := _entry_for("necronada", "skill_field")
-	_activate("necronada", field)
-	game.necronada_vestiges.clear()
-	var fields_before := Array(game.manifest_evolution_state.get("fields", [])).size()
-	_check(not game._try_use_necronada_skill(game.player_pos), "empty necronada Q reported success")
-	_check(Array(game.manifest_evolution_state.get("fields", [])).size() == fields_before, "failed necronada Q emitted skill field")
-	game.necronada_vestiges.append({"id": 9001, "enemy_type": game.ENEMY_COMMON, "pos": game.player_pos + Vector2(24, 0), "profile": game._necronada_profile(game.ENEMY_COMMON), "depth": 1})
-	_check(game._try_use_necronada_skill(game.player_pos), "valid necronada Q did not report success")
-	_check(Array(game.manifest_evolution_state.get("fields", [])).size() == fields_before + 1, "valid necronada Q missed skill hook")
-	_check(_has_event("skill_cast"), "necronada skill event missing")
 
 
 func _run_multiplayer_event_identity() -> void:
@@ -122,17 +101,37 @@ func _run_multiplayer_event_identity() -> void:
 	_check(game.manifest_evolution_combat_event_log.size() == before + 2, "author-scoped multiplayer events did not deduplicate correctly")
 
 
+func _run_bounded_event_ledger() -> void:
+	game.manifest_evolution_combat_event_log.clear()
+	game.manifest_evolution_combat_event_seen.clear()
+	for index in range(120):
+		game._manifest_evolution_dispatch_combat_event({
+			"type": "attack_emitted",
+			"event_id": "bounded:%d" % index,
+			"source": "ledger_smoke"
+		})
+	_check(game.manifest_evolution_combat_event_log.size() == 96, "combat event log exceeded its transient window")
+	_check(game.manifest_evolution_combat_event_seen.size() == 96, "combat event dedupe ledger grew beyond its transient window")
+	var before_duplicate: int = game.manifest_evolution_combat_event_log.size()
+	game._manifest_evolution_dispatch_combat_event({"type": "attack_emitted", "event_id": "bounded:119", "source": "ledger_smoke"})
+	_check(game.manifest_evolution_combat_event_log.size() == before_duplicate, "recent event replay escaped the bounded dedupe ledger")
+
+
 func _run() -> void:
+	if not game.MANIFEST_EVOLUTIONS_ENABLED:
+		print("MANIFEST_EVOLUTION_COMBAT_HOOKS_OK disabled=true roster=%d" % game.MANIFESTATIONS.size())
+		quit(0)
+		return
 	game._start_game()
 	game.mode = "game"
 	game.player_pos = Vector2(640, 360)
 	game.player_damage = 100.0
 	game.last_facing = Vector2.RIGHT
 	_run_manifest_regression()
-	_run_lacerante_and_acorrentada()
-	_run_necronada_skill()
+	_run_lacerante_melee()
 	_run_multiplayer_event_identity()
-	print("MANIFEST_EVOLUTION_COMBAT_HOOKS_OK manifestations=15 melee=lacerante/acorrentada necronada=valid_only multiplayer=deduped")
+	_run_bounded_event_ledger()
+	print("MANIFEST_EVOLUTION_COMBAT_HOOKS_OK manifestations=5 melee=lacerante multiplayer=deduped ledger=bounded")
 	game.set_process(false)
 	game._cleanup_runtime_resources()
 	game.queue_free()

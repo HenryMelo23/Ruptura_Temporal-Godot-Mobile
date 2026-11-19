@@ -2,7 +2,6 @@ extends SceneTree
 
 const Boss3AnimationPresentation = preload("res://scripts/presentation/boss3_animation_presentation.gd")
 const EntitiesPresentation = preload("res://scripts/presentation/entities_presentation.gd")
-const ManifestationVisualSnapshot = preload("res://scripts/systems/online/runtime_manifestation_visual_snapshot.gd")
 const VisualSyncContract = preload("res://scripts/systems/online/runtime_visual_sync_contract.gd")
 
 
@@ -19,26 +18,12 @@ func _canonical_fixture(game: Node, key: String, action: int, origin: Vector2, t
 		match key:
 			"lacerante":
 				state["slashes"] = [{"a": origin, "b": target, "life": 0.7, "max": 0.7, "color": Color.RED, "width": 42.0, "kind": "lacerante_attack"}]
-			"acorrentada":
-				state["acorrentada_tension"] = 30.0
-				state["acorrentada_visuals"] = []
-				state["acorrentada_worn_chains"] = [{
-					"index": 0,
-					"attack_motion": {"stage": 1, "elapsed": 0.12},
-					"physics": {"a": origin, "b": target, "points": [
-						origin, origin.lerp(target, 0.33) + Vector2(0, -18),
-						origin.lerp(target, 0.66) + Vector2(0, 14), target
-					]}
-				}]
-			"eclipsada":
-				state["eclipsada_vfx"] = [{"kind": "q_dash", "origin": origin, "target": target, "dir": (target - origin).normalized(), "life": 0.7, "max": 0.7, "color": Color(0.58, 0.42, 1.0)}]
 		return state
 	if action == game.NET_ABILITY_SECONDARY:
 		state["secondary"] = {"kind": key, "life": 1.2, "max": 1.2, "center": target, "seed": 91, "targets": [], "cuts": [], "ghosts": [], "zaps": []}
 		return state
 	if action == game.NET_ABILITY_TELEPORT:
-		var teleport_kind := "eclipsada_lua_tp" if key == "eclipsada" else key
-		state["tp_effects"] = [{"kind": teleport_kind, "life": 0.8, "max": 0.8, "a": origin, "b": target, "color": Color(0.4, 0.86, 1.0)}]
+		state["tp_effects"] = [{"kind": key, "life": 0.8, "max": 0.8, "a": origin, "b": target, "color": Color(0.4, 0.86, 1.0)}]
 		if key == "lacerante":
 			state["slashes"] = [{"a": origin, "b": target, "life": 0.8, "max": 0.8, "color": Color(1.0, 0.08, 0.18), "width": 42.0, "kind": "lacerante_tp"}]
 		return state
@@ -46,26 +31,8 @@ func _canonical_fixture(game: Node, key: String, action: int, origin: Vector2, t
 		"eletrica": state["eletrica_waves"] = [{"pos": origin, "dir": (target - origin).normalized(), "age": 0.0, "life": 0.7, "max": 0.7, "phase": 0.2}]
 		"lacerante": state["slashes"] = [{"center": origin, "radius": 128.0, "life": 0.7, "max": 0.7, "rotations": 3.0, "color": Color.RED, "width": 86.0, "kind": "lacerante_spin"}]
 		"prismatica": state["prisms"] = [{"pos": target, "life": 1.2, "max_life": 1.2, "radius": 42.0}]
-		"retornante": state["return_bullets"] = [{"pos": target, "origin": origin, "dir": (target - origin).normalized(), "life": 1.2, "kind": "retornante"}]
 		"parasitica": state["parasite_spit_zones"] = [{"state": "flying", "origin": origin, "target": target, "age": 0.1, "travel": 0.6, "life": 1.2, "max": 1.2, "phase": 0.3}]
 		"gravitante": state["gravitante_vfx_events"] = [{"kind": "gravity_q", "pos": target, "points": [origin, origin.lerp(target, 0.5)], "life": 0.55, "max": 0.55}]
-		"ancorada": state["anchors"] = [{"pos": target, "link_from": origin, "source": "ancorada_hab1", "life": 1.2, "max": 1.2}]
-		"cartografica":
-			state["cartographic_route_timer"] = 1.0
-			state["cartographic_trace_flash"] = 0.2
-			state["cartographic_complete_map_timer"] = 1.0
-			state["cartographic_coords"] = [{"pos": origin, "life": 1.2, "max": 1.2, "slot": 0}, {"pos": target, "life": 1.2, "max": 1.2, "slot": 1}]
-		"mnesica": state["shockwaves"] = [{"pos": target, "radius": 72.0, "life": 0.7, "max": 0.7, "visual_only": true}]
-		"ressonante": state["shockwaves"] = [{"pos": origin, "radius": 180.0, "life": 0.9, "max_life": 1.2, "kind": "sinfonia_silencio"}]
-		"contratual": state["contractual_notifications"] = [{"pos": target, "life": 1.2, "max": 1.2, "phase": 0.4}]
-		"acorrentada": state["acorrentada_links"] = [{"kind": "anchor", "target": {}, "anchor": target, "life": 1.2, "max": 1.2, "hit_cd": {}}]
-		"eclipsada": state["eclipsada_vfx"] = [{"kind": "q_dash", "origin": origin, "target": target, "dir": (target - origin).normalized(), "life": 0.7, "max": 0.7, "color": Color(0.58, 0.42, 1.0)}]
-		"bombastica": state["bombastica_bombs"] = [{"id": 1, "kind": "q_bomb", "pos": target, "target": target, "state": "armed", "age": 0.0, "travel": 0.3, "fuse": 1.2, "fuse_total": 1.2, "radius": 110.0, "phase": 0.2, "exploded": false}]
-		"necronada":
-			state["necronada_vfx"] = [{"kind": "rose_summon_ring", "pos": target, "radius": 96.0, "life": 0.7, "max": 0.7}]
-			state["necronada_vestiges"] = []
-			state["necronada_remnants"] = []
-			state["necronada_requiem"] = {}
 	return state
 
 
@@ -127,7 +94,9 @@ func _run() -> void:
 	host_game.boss3_miasma_qte_taps = 6
 	host_game.boss3_faith_link_timer = 2.0
 	host_game.phase4_enemy_hazards = [{"kind": "boss4_pulse", "pos": Vector2(360, 320), "age": 0.10, "life": 1.0, "max": 1.0, "radius": 180.0}]
-	host_game.current_music = "Fases1.mp3"
+	var shared_phase_tracks: Array = host_game._shared_phase_music_tracks()
+	_check(not shared_phase_tracks.is_empty(), "shared phase playlist is empty")
+	host_game.current_music = shared_phase_tracks[0]
 	client_game._apply_remote_world_snapshot(
 		host_game._pack_net_enemies(),
 		host_game._pack_net_boss(),
@@ -242,7 +211,7 @@ func _run() -> void:
 	_check(int(remote_electric_target.get("eletrica_static_stacks", 0)) == 2, "remote electric player did not stack a second damage source on authority")
 
 	host_game.current_phase = 6
-	client_game.current_phase = 6
+	client_game.current_phase = 2
 	host_game.enemies = [{
 		"uid": 7601, "type": host_game.ENEMY_LODARIO, "pos": Vector2(385.4, 310),
 		"hp": 500.0, "max_hp": 500.0, "phase": 1.0,
@@ -252,7 +221,14 @@ func _run() -> void:
 		"lodario_jump_duration": 0.55, "lodario_lunge_active": true
 	}]
 	client_game.enemies.clear()
-	client_game._apply_remote_enemy_snapshot(host_game._pack_net_enemies(), Time.get_ticks_msec())
+	client_game._apply_remote_world_snapshot(
+		host_game._pack_net_enemies(),
+		host_game._pack_net_boss(),
+		host_game._pack_net_enemy_bullets()
+	)
+	_check(client_game.current_phase == 6, "authoritative phase did not switch the replica to phase 6")
+	var lodario_frames: Variant = client_game.textures.get("enemy_phase_6_lodario", [])
+	_check(lodario_frames is Array and lodario_frames.size() == 2 and lodario_frames[0] is Texture2D and lodario_frames[1] is Texture2D, "remote phase transition did not prepare Lodario textures")
 	var remote_lodario: Dictionary = client_game.enemies[0]
 	_check(float(remote_lodario.get("lodario_jump_progress", 0.0)) > 0.0, "Lodario airborne state was not synchronized")
 	_check(float(remote_lodario.get("lodario_hop_arc", 0.0)) > 0.0, "Lodario jump arc was not synchronized")
@@ -262,7 +238,7 @@ func _run() -> void:
 	client_game._update_network_interpolation(1.0 / 60.0)
 	var lodario_after: Vector2 = Vector2(remote_lodario["pos"])
 	_check(lodario_after.x > lodario_start.x and lodario_after.x < Vector2(remote_lodario["lodario_jump_to"]).x, "Lodario replica did not advance smoothly along the authoritative jump")
-	_check(client_game._enemy_texture(remote_lodario) == client_game._texture_frame("enemy_phase_6_lodario", 1), "Lodario replica did not switch to its airborne sprite")
+	_check(client_game._enemy_texture(remote_lodario) == lodario_frames[1], "Lodario replica did not switch to its airborne sprite")
 	host_game.current_phase = 2
 	client_game.current_phase = 2
 
@@ -280,6 +256,13 @@ func _run() -> void:
 	client_game._rpc_remote_player_state_light(42, Vector2(560, 300), 90, 100, false, 0, 2, client_game.NET_ANIM_FIRE, 1, true, 12, false, "MOBILE", "lacerante")
 	_check(String(client_game.net_players_by_peer[42].get("manifestation_key", "")) == "lacerante", "stable manifestation key was lost in mobile snapshot")
 	_check(client_game._net_player_texture_for_state(client_game.NET_ANIM_FIRE, 1, 0, "lacerante") == Array(client_game.textures.get("player_lacerante_attack_network", []))[1], "mobile replica used the wrong manifestation sprite")
+	client_game._rpc_remote_player_state_light(43, Vector2(650, 300), 110, 110, false, 0, 100, client_game.NET_ANIM_IDLE, 0, false, 12, false, "HENRY", "barometrico")
+	var remote_henry_state: Dictionary = client_game.net_players_by_peer[43]
+	_check(int(remote_henry_state.get("manifestation", -1)) == client_game.HENRY_SELECTION_INDEX, "Henry mutation key did not canonicalize the remote character identity")
+	_check(String(remote_henry_state.get("manifestation_key", "")) == "barometrico", "Henry mutation identity was not preserved for the host and third player")
+	client_game._rpc_remote_player_state_light(44, Vector2(720, 300), 100, 100, false, client_game.HENRY_SELECTION_INDEX, 100, client_game.NET_ANIM_IDLE, 0, false, 12, false, "HENRY LEGACY", "")
+	var legacy_henry_state: Dictionary = client_game.net_players_by_peer[44]
+	_check(int(legacy_henry_state.get("manifestation", -1)) == client_game.HENRY_SELECTION_INDEX and String(legacy_henry_state.get("manifestation_key", "")) == "incendiario", "legacy Henry identity did not receive the safe canonical mutation")
 	var visual_snapshot := VisualSyncContract.pack_player_visual(Vector2(-0.6, 0.8), Vector2(0.25, -0.75), client_game.NET_ABILITY_SKILL, 0.12, 1.0, 17, 3)
 	_check(visual_snapshot.size() == VisualSyncContract.PLAYER_VISUAL_STRIDE, "player visual snapshot changed its fixed stride")
 	client_game._rpc_remote_player_state_light(42, Vector2(565, 298), 90, 100, false, 0, 2, client_game.NET_ANIM_FIRE, 1, true, 12, false, "MOBILE", "lacerante", visual_snapshot)
@@ -302,6 +285,7 @@ func _run() -> void:
 	client_game.boss_active = false
 	client_game.boss_hp = 0.0
 	client_game.enemies = [{"uid": 9901, "type": client_game.ENEMY_COMMON, "pos": Vector2(820, 360), "hp": 100.0, "max_hp": 100.0, "phase": 0.0, "bit": 0, "last_move_dir": Vector2.ZERO}]
+	client_game.enemy_manager.rebuild_spatial_index()
 	client_game.remote_bullets = [{
 		"source": 42,
 		"uid": "42:1",
@@ -336,17 +320,6 @@ func _run() -> void:
 	}]
 	client_game._update_remote_bullets(0.01)
 	_check(not client_game.remote_bullets.is_empty() and int(client_game.remote_bullets[0].get("enemy_hits_count", 0)) == 1, "piercing remote projectile did not register its impact/ricochet")
-	client_game.remote_bullets = [{
-		"source": 42, "uid": "42:return", "pos": Vector2(560, 360), "dir": Vector2.RIGHT,
-		"speed": 300.0, "life": 6.0, "max_life": 6.0, "age": 0.0, "phase": 0.0,
-		"trail_cd": 0.0, "kind": "retornante", "motion_mode": "returning", "state": "ida",
-		"pierce": true, "hits": {}, "color": Color.MAGENTA
-	}]
-	client_game.net_player_render_pos = Vector2(560, 360)
-	client_game._update_remote_bullets(0.60)
-	_check(not client_game.remote_bullets.is_empty() and String(client_game.remote_bullets[0].get("state", "")) == "volta", "returning projectile did not reproduce ida/volta trajectory")
-	_check(not client_game.effects.is_empty(), "remote projectile did not emit its local visual trail")
-
 	client_game.net_player_peer_id = 42
 	client_game.net_player_render_pos = Vector2(560, 300)
 	client_game._rpc_ability_visual(42, 1, client_game.NET_ABILITY_SKILL, 1, Vector2(560, 300), Vector2(700, 300), 0.8, 0.0, {"seed": 11, "rotations": 3.0}, 4)
@@ -400,17 +373,11 @@ func _run() -> void:
 	_check(String(remote_prismatica_secondary.get("kind", "")) == "prismatica", "remote prismatica player lost the canonical dance state")
 	_check(client_game._prismatica_ultimate_frame_texture(remote_prismatica_secondary) != null, "remote prismatica player did not resolve a real local dance frame")
 
-	var saved_secondaries: Array = client_game.manifestation_secondaries
-	client_game.manifestation_secondaries = [{"kind": "eclipsada_sol", "life": 2.4, "max": 3.0, "center": Vector2(620, 340)}]
-	var eclipsada_sol_snapshot := ManifestationVisualSnapshot.capture(client_game, client_game.NET_ABILITY_SECONDARY, "eclipsada")
-	_check(String(Dictionary(eclipsada_sol_snapshot.get("secondary", {})).get("kind", "")) == "eclipsada_sol", "eclipsada solar form was omitted from the canonical visual snapshot")
-	client_game.manifestation_secondaries = [{"kind": "eclipsada_lua_eclipse", "life": 2.4, "max": 3.0, "center": Vector2(620, 340)}]
-	var eclipsada_lua_snapshot := ManifestationVisualSnapshot.capture(client_game, client_game.NET_ABILITY_SECONDARY, "eclipsada")
-	_check(String(Dictionary(eclipsada_lua_snapshot.get("secondary", {})).get("kind", "")) == "eclipsada_lua_eclipse", "eclipsada lunar form was omitted from the canonical visual snapshot")
-	client_game.manifestation_secondaries = saved_secondaries
-
 	client_game.net_ability_visuals.clear()
 	client_game.net_ability_seen.clear()
+	# This section validates packet reconstruction, not lifetime expiry. Keep the
+	# long gallery deterministic even when software rendering makes frames slow.
+	client_game.set_process(false)
 	var visual_sequence := 100
 	var expected_visuals := 0
 	var maximum_manifest_event_bytes := 0
@@ -431,11 +398,6 @@ func _run() -> void:
 			}
 			match manifest_key:
 				"gravitante": manifest_payload["marked_points"] = [Vector2(610, 270), Vector2(690, 335)]
-				"ancorada": manifest_payload["anchor_points"] = [Vector2(580, 380), Vector2(730, 350)]
-				"cartografica": manifest_payload["route_points"] = [Vector2(540, 330), Vector2(650, 265), Vector2(760, 350)]
-				"necronada":
-					manifest_payload["remnant_positions"] = [Vector2(620, 320), Vector2(705, 355)]
-					manifest_payload["remnant_types"] = [client_game.ENEMY_COMMON, client_game.ENEMY_STALKER]
 			var clean_manifest_payload := VisualSyncContract.sanitize_ability_payload(manifest_payload)
 			var manifest_event_bytes := VisualSyncContract.ability_event_bytes([42, visual_sequence, action, manifest_index, Vector2(560, 340), Vector2(730, 340), 1.2, 0.0, clean_manifest_payload, 8])
 			maximum_manifest_event_bytes = maxi(maximum_manifest_event_bytes, manifest_event_bytes)
@@ -456,6 +418,7 @@ func _run() -> void:
 	client_game._rpc_ability_visual(42, visual_sequence - 1, client_game.NET_ABILITY_SKILL, 0, Vector2(560, 340), Vector2(730, 340), 1.2, 0.0, {"schema": VisualSyncContract.ABILITY_VISUAL_SCHEMA, "event_id": "duplicate", "manifestation_key": duplicate_key}, 8)
 	_check(client_game.net_ability_visuals.size() == visuals_before_duplicate, "duplicate ability event was rendered twice")
 	_check(visuals_before_duplicate == client_game.MANIFESTATIONS.size() * 3, "not all manifestation Q/E/TP visuals were reconstructed")
+	client_game.set_process(true)
 
 	# Projectile attacks use the shared remote projectile stream; melee attacks
 	# use canonical ability events because their local animation is not a bullet.
@@ -467,11 +430,11 @@ func _run() -> void:
 			"pos": Vector2(520 + manifest_index * 8, 420), "dir": Vector2.RIGHT,
 			"speed": 0.0, "life": 1.0, "max_life": 1.0, "age": 0.18,
 			"phase": float(manifest_index), "kind": manifest_key,
-			"pierce": manifest_key in ["prismatica", "retornante"], "hits": {},
+			"pierce": manifest_key == "prismatica", "hits": {},
 			"color": Color.WHITE
 		})
 	_check(client_game.remote_bullets.size() == client_game.MANIFESTATIONS.size(), "not all manifestation projectile attacks reached the shared remote renderer")
-	for melee_key in ["lacerante", "acorrentada", "eclipsada"]:
+	for melee_key in ["lacerante"]:
 		var melee_index := -1
 		for index in range(client_game.MANIFESTATIONS.size()):
 			if String(client_game.MANIFESTATIONS[index].get("key", "")) == melee_key:
@@ -488,8 +451,6 @@ func _run() -> void:
 		client_game._rpc_ability_visual(42, visual_sequence, client_game.NET_ABILITY_ATTACK, melee_index, Vector2(560, 420), Vector2(760, 420), 0.7, 1.0, melee_payload, 8)
 		var melee_visual: Dictionary = client_game.net_ability_visuals[-1]
 		_check(int(melee_visual.get("action", -1)) == client_game.NET_ABILITY_ATTACK, melee_key + " attack did not reach the canonical renderer")
-		if melee_key == "acorrentada":
-			_check(not Array(Dictionary(melee_visual.get("canonical_state", {})).get("acorrentada_worn_chains", [])).is_empty(), "acorrentada attack lost its exact physical-chain snapshot")
 		visual_sequence += 1
 	client_game.queue_redraw()
 	await process_frame
@@ -507,7 +468,7 @@ func _run() -> void:
 	_check(core_payload_bytes < 1200, "compact one-entity core snapshot exceeded expected budget")
 	for visual_chunk in visual_wire_chunks:
 		_check(var_to_bytes([1, 0, visual_wire_chunks.size(), visual_chunk]).size() < 1392, "boss visual wire chunk exceeded ENet MTU budget")
-	print("MULTIPLAYER_NETWORK_SMOOTHING_SMOKE_OK core_bytes=%d visual_bytes=%d visual_chunks=%d ability_max_bytes=%d enemy_step=%.2f" % [core_payload_bytes, visual_payload_bytes, visual_wire_chunks.size(), maximum_manifest_event_bytes, enemy_after_one_frame - 100.0])
+	print("MULTIPLAYER_NETWORK_SMOOTHING_SMOKE_OK core_bytes=%d visual_bytes=%d visual_chunks=%d ability_max_bytes=%d enemy_step=%.2f player_identity=canonical" % [core_payload_bytes, visual_payload_bytes, visual_wire_chunks.size(), maximum_manifest_event_bytes, enemy_after_one_frame - 100.0])
 
 	for game in [host_game, client_game]:
 		game._cleanup_runtime_resources()

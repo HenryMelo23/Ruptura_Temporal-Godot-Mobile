@@ -1,0 +1,112 @@
+{
+	"delivery": {
+		"actual_client_payload_method": true,
+		"after_scores": {
+			"ATAQUE": -0.18228228234073,
+			"REBOBINAR": -0.563445888744914
+		},
+		"before_scores": {
+			"ATAQUE": -0.155136315315962,
+			"REBOBINAR": -0.615837166291475
+		},
+		"file_equal_to_payload": true,
+		"live_vps_verified": false,
+		"loaded_layers": [
+			"base",
+			"coletiva"
+		],
+		"synthetic": true
+	},
+	"kind": "synthetic_contract_probe_not_training",
+	"learning_improvement_proven": false,
+	"local_memory": {
+		"after_scores": {
+			"ATAQUE": -0.1,
+			"REBOBINAR": 0.1
+		},
+		"before_scores": {
+			"ATAQUE": 0.0,
+			"REBOBINAR": 0.0
+		},
+		"combat_sha256": "be14d585a24cbc25839544977071529737a2d871adc8bb4fe082a1bbd4d1357a",
+		"layer_sha256": "7af569a321fb44a9549ace8f87888254ee9ff226f293c31a12126a378f8ac47e",
+		"synthetic": true
+	},
+	"perception": {
+		"ATAQUE": {
+			"has_signal": true
+		},
+		"CAMINHO_ESPINHOS": {
+			"danger_peak": 673.217120473785,
+			"has_signal": true,
+			"spawned_kinds": [
+				"thorns"
+			]
+		},
+		"DESCARGA_ELETRICA": {
+			"danger_peak": 519.245042649526,
+			"has_signal": true,
+			"spawned_kinds": [
+				"discharge"
+			]
+		},
+		"ECO_PROFETICO": {
+			"has_signal": true
+		},
+		"LASER_SOBRECARGA": {
+			"danger_peak": 934.550230300504,
+			"has_signal": true,
+			"spawned_kinds": [
+				"umbra_overload_laser"
+			]
+		},
+		"MIASMA": {
+			"danger_peak": 433.443881750604,
+			"has_signal": true,
+			"spawned_kinds": [
+				"miasma"
+			]
+		},
+		"PRAGA_RATOS": {
+			"has_signal": true
+		},
+		"PRISAO": {
+			"danger_peak": 22491.5752210115,
+			"has_signal": true,
+			"neural_prison_feature": -1.0,
+			"spawned_kinds": [
+				"sopro_artico"
+			]
+		},
+		"REBOBINAR": {
+			"channel": "dedicated_escape_gate",
+			"has_signal": true
+		},
+		"SIFON": {
+			"danger_peak": 681.253973265645,
+			"has_signal": true,
+			"spawned_kinds": [
+				"siphon"
+			]
+		},
+		"VORTICE": {
+			"danger_peak": 578.834302581741,
+			"has_signal": true,
+			"spawned_kinds": [
+				"vortex"
+			]
+		},
+		"limitations": "Presence of oracle state only; reaction latency, safe routes, hidden information and damage-source attribution are not verified.",
+		"neural_contract_gaps": {
+			"base_dimension_feature": -1.0,
+			"eco_in_action_schema": false,
+			"rewind_in_action_schema": false,
+			"vortex_dimension_feature": -1.0
+		}
+	},
+	"rollout_boundary": {
+		"boss_only_moves_projectile": false,
+		"limitation": "Counterexample to full combat simulation in the existing PPO rollout; no PPO update was run.",
+		"normal_projectile_update_moves_projectile": true
+	}
+}

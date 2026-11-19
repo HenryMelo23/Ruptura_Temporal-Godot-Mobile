@@ -46,13 +46,13 @@ func _run() -> void:
 	root.content_scale_size = root.size
 	await process_frame
 	game.run_tutorial_enabled = false
-	game.score = 8000
-	game.card_cost = 650
+	game.score = 12000
+	game.card_cost = 8000
 	game._open_shop(false)
 	game.shop_cards = [
-		game._find_card_by_id("fragmentacao_reativa").duplicate(true),
-		game._find_card_by_id("bastiao_inercial").duplicate(true),
-		game._find_card_by_id("horizonte_ruptura").duplicate(true),
+		game._find_card_by_id("Roubo de Vida").duplicate(true),
+		game._find_card_by_id("moeda_estavel").duplicate(true),
+		game._find_card_by_id("pacto_possibilidades").duplicate(true),
 	]
 	game.shop_selected = 1
 	game.shop_select_pulse_index = 1
@@ -63,9 +63,9 @@ func _run() -> void:
 	root.content_scale_size = root.size
 	DisplayServer.window_set_size(root.size)
 	game.shop_cards = [
-		game._find_card_by_id("ressonancia_de_alternancia").duplicate(true),
-		game._find_card_by_id("Speed Boost").duplicate(true),
-		game._find_card_by_id("Trembo").duplicate(true),
+		game._find_card_by_id("tributo_da_dor").duplicate(true),
+		game._find_card_by_id("Tempestade").duplicate(true),
+		game._find_card_by_id("Mercenaria").duplicate(true),
 	]
 	game.shop_selected = 0
 	game.shop_select_pulse_index = 0
@@ -114,7 +114,7 @@ func _run() -> void:
 	]
 	await _capture("gameplay_uncommon_vfx_1280x720.png", Vector2i(1280, 720))
 
-	print("UNCOMMON_CARDS_VISUAL_OK cards=10 shop_desktop=true shop_mobile=true rarity_compare=true gameplay_vfx=true reactive_cards=true output=%s" % ProjectSettings.globalize_path(OUTPUT_DIR))
+	print("UNCOMMON_CARDS_VISUAL_OK promoted_economy=true lifesteal=true denomination=true shop_desktop=true shop_mobile=true rarity_compare=true gameplay_vfx=true reactive_cards=true output=%s" % ProjectSettings.globalize_path(OUTPUT_DIR))
 	game._cleanup_runtime_resources()
 	root.remove_child(game)
 	game.queue_free()

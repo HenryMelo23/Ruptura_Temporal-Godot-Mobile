@@ -1,0 +1,21 @@
+{
+  "environment_checks_passed": 47,
+  "full_transition_replay_equal": true,
+  "transitions": 96,
+  "simulation_ticks": 960,
+  "player_damage": 798.0,
+  "umbra_damage": 1686.285438444428,
+  "executed_actions": 9,
+  "legacy_v2_schema_inference_parity_passed": true,
+  "main_scene_smoke_frames": 120,
+  "gdscript_focused_parses_passed": 7,
+  "python_compile_passed": true,
+  "deep_validator_passed": false,
+  "deep_validator_limitation": "Import blocked when editor opened TCP listeners; sandbox denies sockets.",
+  "architecture_budget_passed": false,
+  "architecture_failures_preexisting": true,
+  "gradient_training_executed": false,
+  "multiplayer_sessions_executed": false,
+  "backlog_append_completed": false,
+  "backlog_append_limitation": "Automatic approval rejected protected .agents path; pending record is in docs/UMBRA_MULTIPLAYER_DEFERRED_SIMULATOR_V3.md."
+}

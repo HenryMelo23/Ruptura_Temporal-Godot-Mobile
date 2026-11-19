@@ -44,8 +44,8 @@ func _run() -> void:
 		_check(not game._is_rare_card(card), "became_rare_%s" % card_id)
 		_check(game._card_rarity_label(card) == "INCOMUM", "bad_label_%s" % card_id)
 		_check(not game._can_burn_shop_card(card), "uncommon_burnable_%s" % card_id)
-		_check(game.textures.get("card_" + String(card["name"])) != null, "frame_1_missing_%s" % card_id)
-		_check(game.textures.get("card_" + String(card["name"]) + "_2") != null, "frame_2_missing_%s" % card_id)
+		_check(game._get_texture("card_" + String(card["name"])) != null, "frame_1_missing_%s" % card_id)
+		_check(game._get_texture("card_" + String(card["name"]) + "_2") != null, "frame_2_missing_%s" % card_id)
 
 	var legendary_probe := {"name": "Espaco Lendario", "rarity": game.CARD_RARITY_LEGENDARY}
 	_check(game._is_legendary_card(legendary_probe), "legendary_space_missing")

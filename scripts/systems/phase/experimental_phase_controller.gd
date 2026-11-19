@@ -4,28 +4,94 @@ extends RefCounted
 const BASE_WORLD_SIZE := Vector2(1600.0, 900.0)
 const EXPERIMENTAL_WORLD_SIZE := Vector2(3200.0, 2250.0)
 const AREA_MULTIPLIER := 5.0
+const CHUNK_SIZE := 384.0
+const ATLAS_COLUMNS := 4
+const ALTAR_TILE := 5
+const TERRAIN_ATLAS_PATH := "res://assets/sprites/experimental/phase_ex_terrain_atlas.png"
+const PHASES := {
+	1: {"label": "FASE EX", "region": "RUINAS COSMICAS", "map_key": "map_phase_ex", "altar": "ALTAR DO CRONOGUEJO", "altar_uv": Vector2(0.5, 0.5)},
+	2: {"label": "FASE EX2", "region": "FENDA GLACIAL", "map_key": "map_phase_ex2", "altar": "ALTAR DA SENTINELA GLACIAL", "altar_uv": Vector2(0.49, 0.35)},
+	3: {"label": "FASE EX3", "region": "CATEDRAL DO ESGOTO", "map_key": "map_phase_ex3", "altar": "ALTAR DO PAI-RATO", "altar_uv": Vector2(0.5, 0.5)},
+	4: {"label": "FASE EX4", "region": "CORACAO DO NEXO", "map_key": "map_phase_ex4", "altar": "ALTAR DO NEXO ANFIBIO", "altar_uv": Vector2(0.5, 0.5)},
+	5: {"label": "FASE EX5", "region": "MENTE DA UMBRA", "map_key": "map_phase_ex5", "altar": "SELO DA UMBRA", "altar_uv": Vector2(0.5, 0.5)},
+	6: {"label": "FASE EX6", "region": "CHAGA DE AMBAR", "map_key": "map_phase_ex6", "altar": "NINHO DA MATRIARCA DA CHAGA", "altar_uv": Vector2(0.5, 0.5)},
+	7: {"label": "FASE EX7", "region": "CINZAS DA RUPTURA", "map_key": "map_phase_ex7", "altar": "CLAREIRA DA FENIX", "altar_uv": Vector2(0.5, 0.5)},
+	8: {"label": "FASE EX8", "region": "SERTAO DAS TARTARUGAS", "map_key": "map_phase_ex8", "altar": "RELOGIO DE SOL DO JABUTI", "altar_uv": Vector2(0.5, 0.5)},
+	9: {"label": "FASE EX9", "region": "CRIPTA DE SEDA", "map_key": "map_phase_ex9", "altar": "ALTAR DA MATRIARCA", "altar_uv": Vector2(0.5, 0.5)},
+	10: {"label": "FASE EX10", "region": "BAILAO DA DONA BOLETA", "map_key": "map_phase_ex10", "altar": "MICROFONE DA DONA BOLETA", "altar_uv": Vector2(0.5, 0.5)},
+}
 const ALTAR_INTERACTION_RADIUS := 118.0
 const ALTAR_HOLD_TIME := 1.15
+const ALTAR_DISCOVERY_RADIUS := 760.0
 const ALTAR_WORLD_MARGIN := Vector2(300.0, 250.0)
 const ALTAR_MIN_START_DISTANCE := 1180.0
 const ENEMY_SPAWN_MIN_DISTANCE := 620.0
 const ENEMY_SPAWN_MAX_DISTANCE := 860.0
 
 var core: Node
+var requested_phase: int = 1
+var active_phase: int = 1
 var landmarks: Array[Dictionary] = []
 var route_points: Array[Vector2] = []
+var altar_present_count: int = 0
+var altar_expected_count: int = 1
 
 
 func configure(p_core: Node) -> void:
 	core = p_core
 
 
+func arm_phase(phase: int) -> void:
+	assert(PHASES.has(phase))
+	core.experimental_phase_requested = not (core.experimental_phase_requested and requested_phase == phase)
+	requested_phase = phase if core.experimental_phase_requested else 1
+
+
+func phase_label(phase: int = -1) -> String:
+	return String(PHASES[active_phase if phase < 0 else phase]["label"])
+
+
+func uses_definitive_world() -> bool:
+	return not core.experimental_phase_active and PHASES.has(core.current_phase)
+
+
+func terrain_phase() -> int:
+	return int(core.current_phase) if uses_definitive_world() else active_phase
+
+
+func map_key() -> String:
+	var phase := terrain_phase()
+	if phase == 5:
+		return map_key_for_dimension(String(core.boss5_dimension))
+	return String(PHASES[phase]["map_key"])
+
+
+## Atlas de chao que a Mente da UMBRA usa em cada dimensao transmutada.
+func map_key_for_dimension(dimension: String) -> String:
+	var dimension_phase: int = {"vortice": 1, "gravidade": 2, "necrose": 3, "ressonancia": 4, "hemorragia": 6, "atrito": 7, "rastro": 3}.get(dimension, 5)
+	return String(PHASES[dimension_phase]["map_key"])
+
+
+func altar_source_center() -> Vector2:
+	return Vector2(PHASES[terrain_phase()]["altar_uv"])
+
+
+func altar_label() -> String:
+	return String(PHASES[terrain_phase()]["altar"])
+
+
 func prepare_new_run(clear_interrupted_save: bool) -> void:
 	var requested := clear_interrupted_save and bool(core.experimental_phase_requested)
 	core.experimental_phase_rejected_online = requested and (core.is_multiplayer or core.dedicated_server_mode or core.online_connected)
 	core.experimental_phase_active = requested and not core.experimental_phase_rejected_online
+	active_phase = requested_phase if core.experimental_phase_active and PHASES.has(requested_phase) else 1
+	requested_phase = 1
 	core.experimental_phase_requested = false
-	core.WORLD_SIZE = EXPERIMENTAL_WORLD_SIZE if core.experimental_phase_active else core.DEFAULT_WORLD_SIZE
+	core.WORLD_SIZE = core.DEFAULT_WORLD_SIZE if core.experimental_phase_active else EXPERIMENTAL_WORLD_SIZE
+	_reset_altar_state()
+
+
+func _reset_altar_state() -> void:
 	core.experimental_boss_altar_pos = Vector2.ZERO
 	core.experimental_boss_altar_hold = 0.0
 	core.experimental_boss_altar_near = false
@@ -34,75 +100,257 @@ func prepare_new_run(clear_interrupted_save: bool) -> void:
 	core.experimental_boss_altar_authorized = false
 	landmarks.clear()
 	route_points.clear()
+	altar_present_count = 0
+	altar_expected_count = 1
+
+
+func begin_definitive_phase(phase: int) -> void:
+	if core.experimental_phase_active or not PHASES.has(phase):
+		return
+	active_phase = phase
+	core.WORLD_SIZE = EXPERIMENTAL_WORLD_SIZE
+	_reset_altar_state()
+	core.experimental_boss_altar_pos = _roll_altar_position()
+	_build_layout()
+	core.boss_ready = true
+	core.boss_pos = core.experimental_boss_altar_pos + Vector2(-230.0, -40.0)
+	if phase == 4:
+		core.boss4_entry_target = core.experimental_boss_altar_pos
+
+
+func restore_after_snapshot() -> void:
 	if core.experimental_phase_active:
+		core.WORLD_SIZE = core.DEFAULT_WORLD_SIZE
+		return
+	active_phase = int(core.current_phase)
+	core.WORLD_SIZE = EXPERIMENTAL_WORLD_SIZE
+	if core.experimental_boss_altar_pos == Vector2.ZERO:
 		core.experimental_boss_altar_pos = _roll_altar_position()
-		_build_layout()
+	landmarks.clear()
+	route_points.clear()
+	_build_layout()
+	if core.current_phase == 4:
+		core.boss4_entry_target = core.experimental_boss_altar_pos
 
 
 func activate_after_phase_setup() -> void:
 	if core.experimental_phase_rejected_online:
 		core._add_text("FASE EX DISPONIVEL APENAS EM SOLO", core.player_pos + Vector2(0.0, -112.0), Color(1.0, 0.54, 0.24), 2.4, 22)
 		core.experimental_phase_rejected_online = false
+	if core.experimental_phase_active:
+		core.current_phase = active_phase
+		core.WORLD_SIZE = core.DEFAULT_WORLD_SIZE
+		core._add_text("%s: MAPA CLASSICO" % phase_label(), core.player_pos + Vector2(0.0, -112.0), Color(0.34, 0.94, 1.0), 2.8, 27)
 		return
-	if not core.experimental_phase_active:
-		return
-	core.current_phase = 1
-	core.boss_ready = true
-	core.boss_pos = core.experimental_boss_altar_pos + Vector2(-230.0, -40.0)
-	core._add_text("FASE EX: EXPLORE AS RUINAS", core.player_pos + Vector2(0.0, -112.0), Color(0.34, 0.94, 1.0), 2.8, 27)
-	core._add_text("MAPA EXPERIMENTAL 5X", core.player_pos + Vector2(0.0, -150.0), Color(1.0, 0.76, 0.28), 2.3, 20)
+	begin_definitive_phase(core.current_phase)
 
 
 func update(delta: float) -> void:
-	if not core.experimental_phase_active:
+	if not uses_definitive_world():
 		return
+	_repair_consumed_altar_without_boss_call()
 	if core.mode != "game" or core.boss_active or core.boss_dead or core.boss_call_timer >= 0.0 or core.experimental_boss_altar_used:
 		core.experimental_boss_altar_hold = 0.0
 		core.experimental_boss_altar_near = false
 		return
 	core.boss_ready = true
-	if not core.experimental_boss_altar_discovered and _altar_visible_on_screen():
-		core.experimental_boss_altar_discovered = true
-		core._add_text("ALTAR DESCOBERTO", core.experimental_boss_altar_pos + Vector2(0.0, -194.0), Color(1.0, 0.72, 0.22), 1.35, 22)
 	var distance: float = Vector2(core.player_pos).distance_to(Vector2(core.experimental_boss_altar_pos))
-	var was_near: bool = bool(core.experimental_boss_altar_near)
 	core.experimental_boss_altar_near = distance <= ALTAR_INTERACTION_RADIUS
-	if not core.experimental_boss_altar_near:
+	if core.is_multiplayer and core._is_world_replica():
+		return
+	if not core.experimental_boss_altar_discovered:
+		var discovered: bool = _any_living_player_within(ALTAR_DISCOVERY_RADIUS) if core.is_multiplayer else _altar_visible_on_screen()
+		if discovered:
+			core.experimental_boss_altar_discovered = true
+			core._add_text("ALTAR DESCOBERTO", core.experimental_boss_altar_pos + Vector2(0.0, -194.0), Color(1.0, 0.72, 0.22), 1.35, 22)
+	var all_present: bool = core.experimental_boss_altar_near
+	if core.is_multiplayer:
+		var presence: Vector2i = _living_presence(ALTAR_INTERACTION_RADIUS)
+		altar_present_count = presence.x
+		altar_expected_count = maxi(1, presence.y)
+		all_present = altar_present_count >= altar_expected_count
+	else:
+		altar_present_count = 1 if core.experimental_boss_altar_near else 0
+		altar_expected_count = 1
+	if not all_present:
 		core.experimental_boss_altar_hold = maxf(0.0, core.experimental_boss_altar_hold - delta * 2.5)
 		return
-	if core._arauto_active():
+	if altar_blocker_text() != "":
 		core.experimental_boss_altar_hold = 0.0
 		return
 	core.experimental_boss_altar_hold = minf(ALTAR_HOLD_TIME, core.experimental_boss_altar_hold + delta)
 	if core.experimental_boss_altar_hold < ALTAR_HOLD_TIME:
 		return
-	core.experimental_boss_altar_used = true
 	core.experimental_boss_altar_authorized = true
-	core._start_boss_call_local()
+	if core.is_multiplayer:
+		core._begin_boss_call_for_all()
+	else:
+		core._start_boss_call()
+	var started: bool = float(core.boss_call_timer) >= 0.0 or core.mode == "boss_call"
+	if not started:
+		core.experimental_boss_altar_authorized = false
+		core.experimental_boss_altar_hold = 0.0
+		return
+	core.experimental_boss_altar_used = true
+	if not core.is_multiplayer:
+		core.experimental_boss_altar_authorized = false
+
+
+func _repair_consumed_altar_without_boss_call() -> void:
+	if not bool(core.experimental_boss_altar_used):
+		return
+	if core.is_multiplayer and core._is_world_replica():
+		return
+	if core.mode != "game" or core.boss_active or core.boss_dead or float(core.boss_call_timer) >= 0.0:
+		return
+	core.experimental_boss_altar_used = false
 	core.experimental_boss_altar_authorized = false
+	core.experimental_boss_altar_hold = 0.0
+	core._add_text("ALTAR REATIVADO", Vector2(core.experimental_boss_altar_pos) + Vector2(0.0, -194.0), Color(0.34, 0.94, 1.0), 1.8, 22)
+
+
+func active_snapshot() -> Dictionary:
+	return {
+		"phase": int(core.current_phase),
+		"pos": Vector2(core.experimental_boss_altar_pos),
+		"discovered": bool(core.experimental_boss_altar_discovered),
+		"used": bool(core.experimental_boss_altar_used),
+		"hold": float(core.experimental_boss_altar_hold),
+		"present": altar_present_count,
+		"expected": altar_expected_count,
+	}
+
+
+func apply_remote_snapshot(snapshot: Dictionary) -> void:
+	if core == null or not core._is_world_replica() or snapshot.is_empty():
+		return
+	if int(snapshot.get("phase", core.current_phase)) != int(core.current_phase):
+		return
+	core.experimental_boss_altar_pos = Vector2(snapshot.get("pos", core.experimental_boss_altar_pos))
+	core.experimental_boss_altar_discovered = bool(snapshot.get("discovered", core.experimental_boss_altar_discovered))
+	core.experimental_boss_altar_used = bool(snapshot.get("used", core.experimental_boss_altar_used))
+	core.experimental_boss_altar_hold = clampf(float(snapshot.get("hold", 0.0)), 0.0, ALTAR_HOLD_TIME)
+	altar_present_count = maxi(0, int(snapshot.get("present", 0)))
+	altar_expected_count = maxi(1, int(snapshot.get("expected", 1)))
+
+
+func _living_presence(radius: float) -> Vector2i:
+	var living: Array[int] = core._living_run_player_peer_ids()
+	var present := 0
+	for peer_id in living:
+		var pos: Vector2 = Vector2(core.player_pos)
+		if peer_id != core._mp_unique_id():
+			pos = Vector2(Dictionary(core.net_players_by_peer.get(peer_id, {})).get("pos", Vector2.INF))
+		if pos.distance_to(Vector2(core.experimental_boss_altar_pos)) <= radius:
+			present += 1
+	return Vector2i(present, living.size())
+
+
+func _any_living_player_within(radius: float) -> bool:
+	var presence: Vector2i = _living_presence(radius)
+	return presence.x > 0
+
+
+func altar_waiting_for_team() -> bool:
+	return core != null and core.is_multiplayer and altar_present_count < altar_expected_count
+
+
+func altar_presence_text() -> String:
+	return "%d/%d VIVOS NO ALTAR" % [altar_present_count, altar_expected_count]
+
+
+func altar_blocker_text() -> String:
+	if core == null:
+		return ""
+	if core._arauto_active():
+		return "DERROTE O ARAUTO"
+	if int(core.current_phase) == 10 and core.baile_controller.miniboss_alive():
+		return "DERROTE A LAGARTONA DO PAREDAO"
+	if int(core.current_phase) == 9 and core.cripta_controller.miniboss_alive():
+		return "DERROTE A NOIVA DE SEDA"
+	if int(core.current_phase) == 8 and core.sertao_controller.miniboss_alive():
+		return "DERROTE O CAGADO CANGACEIRO"
+	if int(core.current_phase) == 6 and core.amber_suturer_controller != null and not core.amber_suturer_controller.active_enemy().is_empty():
+		return "DERROTE O SUTURADOR DE AMBAR"
+	return ""
 
 
 func boss_call_allowed() -> bool:
-	return not core.experimental_phase_active or core.experimental_boss_altar_authorized
+	var processing_remote_call: bool = bool(core.is_multiplayer) and int(core.multiplayer.get_remote_sender_id()) != 0
+	return not uses_definitive_world() or core.experimental_boss_altar_authorized or processing_remote_call
 
 
 func should_show_boss_button() -> bool:
-	return not core.experimental_phase_active
+	return not uses_definitive_world()
 
 
 func can_persist_run() -> bool:
 	return not core.experimental_phase_active
 
 
-func map_tile_rects(camera: Vector2) -> Array[Rect2]:
-	var rects: Array[Rect2] = []
-	if not core.experimental_phase_active:
-		return rects
-	var overscan: Vector2 = core._map_camera_overscan(core.get_viewport_rect().size)
-	# One world-anchored tiled surface keeps the pattern continuous across the
-	# whole experimental arena instead of restarting UVs at district borders.
-	rects.append(Rect2(-camera - overscan, core.WORLD_SIZE + overscan * 2.0))
-	return rects
+func boss_encounter_center() -> Vector2:
+	if uses_definitive_world():
+		return Vector2(core.experimental_boss_altar_pos)
+	return Vector2(core.WORLD_SIZE) * 0.5
+
+
+func boss7_entry_target() -> Vector2:
+	return boss_encounter_center() + (Vector2.ZERO if uses_definitive_world() and terrain_phase() == 7 else Vector2(0, -72))
+
+func boss2_wind_center() -> Vector2:
+	if uses_definitive_world() and terrain_phase() == 2:
+		return Vector2(core.boss2_ultimate_center) if core.boss2_ultimate_timer > 0.0 else boss_encounter_center()
+	return Vector2(core.WORLD_SIZE) * 0.5
+
+
+func boss_encounter_rect() -> Rect2:
+	var world_size := Vector2(core.WORLD_SIZE)
+	var encounter_size := Vector2(
+		minf(BASE_WORLD_SIZE.x, world_size.x),
+		minf(BASE_WORLD_SIZE.y, world_size.y)
+	)
+	if not uses_definitive_world():
+		return Rect2(Vector2.ZERO, world_size)
+	var max_origin := world_size - encounter_size
+	var origin := (boss_encounter_center() - encounter_size * 0.5).clamp(Vector2.ZERO, max_origin)
+	return Rect2(origin, encounter_size)
+
+
+func clamp_to_boss_encounter(position: Vector2, margin: Vector2 = Vector2.ZERO) -> Vector2:
+	var encounter := boss_encounter_rect()
+	var minimum := encounter.position + margin
+	var maximum := encounter.end - margin
+	return position.clamp(minimum, maximum)
+
+
+func terrain_chunks(camera: Vector2, viewport: Vector2) -> Array[Dictionary]:
+	var chunks: Array[Dictionary] = []
+	if not uses_definitive_world():
+		return chunks
+	# Integer world cells keep the artwork stable through camera movement/shake.
+	var first := Vector2i((camera / CHUNK_SIZE).floor())
+	var last := Vector2i(((camera + viewport) / CHUNK_SIZE).floor())
+	var altar_cell := Vector2i((Vector2(core.experimental_boss_altar_pos) / CHUNK_SIZE).floor())
+	for y in range(first.y, last.y + 1):
+		for x in range(first.x, last.x + 1):
+			var cell := Vector2i(x, y)
+			var tile := tile_at_cell(cell, altar_cell)
+			chunks.append({"rect": Rect2(Vector2(cell) * CHUNK_SIZE - camera, Vector2.ONE * CHUNK_SIZE), "tile": tile})
+	return chunks
+
+
+## Ladrilho do atlas usado numa celula do mundo (o mesmo que o chao desenha);
+## tambem usado pela fisica dos objetos do mapa (RTMapPropColliders).
+func tile_at_cell(cell: Vector2i, altar_cell: Vector2i = Vector2i(-99999, -99999)) -> int:
+	if altar_cell == Vector2i(-99999, -99999):
+		altar_cell = Vector2i((Vector2(core.experimental_boss_altar_pos) / CHUNK_SIZE).floor())
+	if cell == altar_cell:
+		return ALTAR_TILE
+	# Coprime strides avoid adjacent duplicates, excluding the unique altar.
+	var tile := posmod(cell.x * 7 + cell.y * 11 + floori(float(cell.y) / 3.0) * 4, 15)
+	if tile >= ALTAR_TILE:
+		tile += 1
+	return tile
 
 
 func altar_progress() -> float:
@@ -120,12 +368,19 @@ func _altar_visible_on_screen() -> bool:
 
 
 func _roll_altar_position() -> Vector2:
+	var roll_rng: RandomNumberGenerator = core.rng
+	if core.is_multiplayer or core.dedicated_server_mode or core.online_connected:
+		roll_rng = RandomNumberGenerator.new()
+		roll_rng.seed = 0xE6A2026 + int(active_phase) * 7919
 	var minimum := ALTAR_WORLD_MARGIN
 	var maximum := EXPERIMENTAL_WORLD_SIZE - ALTAR_WORLD_MARGIN
-	var best := maximum
-	var best_distance := 0.0
+	var first_cell := Vector2i(((minimum - Vector2.ONE * CHUNK_SIZE * 0.5) / CHUNK_SIZE).ceil())
+	var last_cell := Vector2i(((maximum - Vector2.ONE * CHUNK_SIZE * 0.5) / CHUNK_SIZE).floor())
+	var best := Vector2(last_cell) * CHUNK_SIZE + Vector2.ONE * CHUNK_SIZE * 0.5
+	var best_distance := best.distance_to(core.PLAYER_START)
 	for _attempt in range(18):
-		var candidate := Vector2(core.rng.randf_range(minimum.x, maximum.x), core.rng.randf_range(minimum.y, maximum.y))
+		var cell := Vector2(roll_rng.randi_range(first_cell.x, last_cell.x), roll_rng.randi_range(first_cell.y, last_cell.y))
+		var candidate := (cell + Vector2.ONE * 0.5) * CHUNK_SIZE
 		var distance := candidate.distance_to(core.PLAYER_START)
 		if distance > best_distance:
 			best = candidate

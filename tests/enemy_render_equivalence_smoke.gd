@@ -4,6 +4,7 @@ const Probe = preload("res://tests/runtime_render_profile_probe.gd")
 const Reference = preload("res://tests/fixtures/enemy_render_before_optimization.gd")
 const EntitiesPresentation = preload("res://scripts/presentation/entities_presentation.gd")
 const OUT := "res://.codex/render_optimization/"
+const MAX_LAYER_ORDER_MISMATCH := 0.03
 var game: Node2D
 var rows: Array = []
 var failed := false
@@ -67,6 +68,23 @@ func _run() -> void:
 		for count in [20, 120]:
 			_setup(phase, [game.ENEMY_COMMON], count, root.size)
 			await _compare("crowd_f%d_%d" % [phase, count], 40)
+	# Performance/mobile profiles batch plain full-health common enemies from 12
+	# visible actors onward. Compare that actual path against the legacy renderer.
+	for size in [Vector2i(1280, 720), Vector2i(960, 540)]:
+		root.size = size
+		root.content_scale_size = size
+		_setup(1, [game.ENEMY_COMMON], 12, size)
+		for enemy in game.enemies:
+			enemy["hp"] = enemy["max_hp"]
+			enemy["alpha"] = 1.0
+			enemy["sanguinaria_hunt"] = false
+			enemy["crepuscular_ocaso_mark"] = 0.0
+		await _compare_current_batch("performance_batch_12_%dx%d" % [size.x, size.y], 40)
+		for enemy_index in range(game.enemies.size()):
+			var enemy: Dictionary = game.enemies[enemy_index]
+			enemy["hp"] = float(enemy["max_hp"]) * (0.55 + float(enemy_index % 4) * 0.1)
+			enemy["tesla_shock"] = 0.0
+		await _compare_current_batch("performance_batch_damaged_12_%dx%d" % [size.x, size.y], 40)
 	var report := FileAccess.open(OUT + "results.json", FileAccess.WRITE)
 	report.store_string(JSON.stringify({"device": RenderingServer.get_video_adapter_name(), "renderer": RenderingServer.get_current_rendering_method(), "metric": "CPU enemy renderer submission only; identical frozen snapshots", "results": rows}, "\t"))
 	report.close()
@@ -128,9 +146,62 @@ func _compare(label: String, samples: int) -> void:
 			sum += value
 		times.sort()
 		timings.append({"mean_us": sum / times.size(), "p95_us": times[mini(times.size() - 1, int(times.size() * 0.95))]})
+	# The layered crowd renderer (shadows -> ground decor -> sprites -> overlays
+	# -> bars) intentionally changes overlap order between different enemies, so
+	# the oracle is "same art, same places": a small share of differing pixels.
+	var mismatch := _mismatch_ratio(captures[0], captures[1])
+	var equal_pixels := mismatch <= MAX_LAYER_ORDER_MISMATCH
+	if not equal_pixels:
+		failed = true
+		push_error("ENEMY_RENDER_PIXEL_MISMATCH %s ratio=%.4f" % [label, mismatch])
+	rows.append({"scenario": label, "pixel_equal": equal_pixels, "mismatch_ratio": mismatch, "before": timings[0], "after": timings[1]})
+	print("ENEMY_RENDER_COMPARE %s pixel_equal=%s mismatch=%.4f before_us=%.1f after_us=%.1f" % [label, equal_pixels, mismatch, timings[0].mean_us, timings[1].mean_us])
+
+
+func _mismatch_ratio(a: Image, b: Image) -> float:
+	if a.get_size() != b.get_size():
+		return 1.0
+	if a.get_data() == b.get_data():
+		return 0.0
+	var differing := 0
+	var total := 0
+	for y in range(0, a.get_height(), 2):
+		for x in range(0, a.get_width(), 2):
+			total += 1
+			var ca := a.get_pixel(x, y)
+			var cb := b.get_pixel(x, y)
+			if maxf(absf(ca.r - cb.r), maxf(absf(ca.g - cb.g), absf(ca.b - cb.b))) > 0.16:
+				differing += 1
+	return float(differing) / float(maxi(1, total))
+
+
+func _compare_current_batch(label: String, samples: int) -> void:
+	var captures: Array[Image] = []
+	var timings: Array = []
+	game.enemy_render_reference = null
+	game.gfx_shadows = false
+	for performance_profile in [false, true]:
+		game.gfx_low_resource = performance_profile
+		var times: Array[float] = []
+		for frame in range(samples + 4):
+			game.queue_redraw()
+			await RenderingServer.frame_post_draw
+			if frame >= 4:
+				times.append(float(game.render_profile_us.get("enemies", 0)))
+			await process_frame
+		var capture := root.get_texture().get_image()
+		captures.append(capture)
+		capture.save_png(OUT + label + ("_unbatched.png" if not performance_profile else "_batched.png"))
+		var sum := 0.0
+		for value in times:
+			sum += value
+		times.sort()
+		timings.append({"mean_us": sum / times.size(), "p95_us": times[mini(times.size() - 1, int(times.size() * 0.95))]})
 	var equal_pixels := captures[0].get_size() == captures[1].get_size() and captures[0].get_data() == captures[1].get_data()
 	if not equal_pixels:
 		failed = true
 		push_error("ENEMY_RENDER_PIXEL_MISMATCH " + label)
 	rows.append({"scenario": label, "pixel_equal": equal_pixels, "before": timings[0], "after": timings[1]})
 	print("ENEMY_RENDER_COMPARE %s pixel_equal=%s before_us=%.1f after_us=%.1f" % [label, equal_pixels, timings[0].mean_us, timings[1].mean_us])
+	game.gfx_low_resource = false
+	game.gfx_shadows = true

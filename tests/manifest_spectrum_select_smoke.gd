@@ -17,6 +17,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	await process_frame
+	game.startup_thanks_done = true
 	game.selected_manifestation = 1
 	game.selected_aura = 4
 	game.unlocked_manifestation_ids[String(game.MANIFESTATIONS[1].get("key", ""))] = true
@@ -29,27 +30,32 @@ func _run() -> void:
 	_check(game.manifest_select_stage == game.MANIFEST_STAGE_MANIFESTATION, "selector did not start on manifestation stage")
 	_check(game._manifest_select_item_texture(game.MANIFESTATIONS[1], false) != null, "manifestation icon was not loaded")
 	_check(game._manifest_select_item_texture(game.AURAS[4], true) != null, "aura icon was not loaded")
-	for key in ["ui_manifest_switch", "ui_spectrum_switch", "shop_countdown_tick", "player_shot", "eletrica_travel", "eletrica_hit", "atk_lacerante_1", "atk_lacerante_2", "atk_lacerante_3", "prismatica_glass_hit", "prismatica_shatter", "retornante_reverse", "retornante_wave", "parasitica_wet_hit", "gravitante_attach", "gravitante_orbit_loop"]:
+	for key in ["ui_manifest_switch", "ui_spectrum_switch", "shop_countdown_tick", "player_shot", "eletrica_travel", "eletrica_hit", "atk_lacerante_1", "atk_lacerante_2", "atk_lacerante_3", "prismatica_glass_hit", "prismatica_shatter", "parasitica_wet_hit", "gravitante_attach", "gravitante_orbit_loop"]:
 		_check(game.audio_streams.has(key), "missing current sfx: " + key)
-	for old_key in ["atk_eletrica", "atk_eletrica_charged", "atk_prismatica", "atk_retornante", "atk_parasitica", "atk_gravitante", "atk_ancorada", "ult_eletrica", "ult_gravitante", "Disparo_Geo.wav", "Disparo.MP3"]:
+	for old_key in ["atk_eletrica", "atk_eletrica_charged", "atk_prismatica", "atk_parasitica", "atk_gravitante", "ult_eletrica", "ult_gravitante", "Disparo_Geo.wav", "Disparo.MP3"]:
 		_check(not game.audio_streams.has(old_key), "legacy weapon sfx was loaded: " + old_key)
 	game._set_selected_manifestation(2, true)
 	_check(game.selected_manifestation == 2, "manifestation sfx selection changed behavior")
 	game._set_selected_aura(5, true)
 	_check(game.selected_aura == 5, "spectrum sfx selection changed behavior")
-	game.queue_redraw()
-	await process_frame
+	for _settle_open in range(30):
+		game.queue_redraw()
+		await process_frame
 	_check(game.buttons.has("manifest_preview"), "manifest preview button was not drawn")
-	_check(game.buttons.has("manifest_details"), "manifest details button was not drawn")
-	game._handle_manifest_touch(game.buttons["manifest_details"].get_center(), Vector2(1280, 720))
-	_check(game.manifest_details_open, "manifest details popup did not open")
+	# Tela unificada: o relatorio ja traz os detalhes; troca por toque na carta e por seta.
+	for _settle in range(30):
+		game.queue_redraw()
+		await process_frame
+	_check(not game.buttons.has("manifest_details"), "legacy details button still drawn")
+	var pick_key := "build_pick_%d" % int(game._manifest_selection_index_for_slot(game._manifest_selection_slot_for_index(2, false) + 1, false))
+	_check(game.buttons.has(pick_key), "neighbor card pick rect missing: " + pick_key)
+	var before_pick: int = game.selected_manifestation
+	game._handle_manifest_touch(game.buttons[pick_key].get_center(), Vector2(1280, 720))
+	_check(game.selected_manifestation != before_pick, "tapping neighbor card did not select it")
+	game._handle_manifest_touch(game.buttons["build_prev"].get_center(), Vector2(1280, 720))
+	_check(game.selected_manifestation == before_pick, "prev arrow did not step back")
 	game.queue_redraw()
 	await process_frame
-	_check(game.buttons.has("manifest_details_popup"), "manifest details popup rect was not stored")
-	game._handle_manifest_touch(game.buttons["manifest_details_popup"].get_center(), Vector2(1280, 720))
-	_check(game.manifest_details_open, "manifest details inner touch closed popup")
-	game._handle_manifest_touch(Vector2(24, 24), Vector2(1280, 720))
-	_check(not game.manifest_details_open, "manifest details outside touch did not close")
 	game._handle_manifest_touch(game.buttons["manifest_preview"].get_center(), Vector2(1280, 720))
 	_check(game.manifest_preview_open, "manifest preview popup did not open")
 	game.queue_redraw()

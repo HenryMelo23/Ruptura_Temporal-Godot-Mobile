@@ -5,12 +5,13 @@ extends CanvasLayer
 @onready var label_title: Label = $LabelTitle if has_node("LabelTitle") else null
 
 var phase_names: = {
-	1: "RUÍNAS CÓSMICAS", 
-	2: "ÁRTICO IMPERIAL", 
-	3: "CATEDRAL DOS VERMES", 
-	4: "CHARCO DOS SAPOS", 
-	5: "COLISÃO DE MUNDOS", 
-	6: "ABISMO FINAL"
+	1: "RUÍNAS CÓSMICAS",
+	2: "FENDA GLACIAL",
+	3: "CATEDRAL DO ESGOTO",
+	4: "CORAÇÃO DO NEXO",
+	5: "MENTE DA UMBRA",
+	6: "CHAGA DE ÂMBAR",
+	7: "CINZAS DA RUPTURA"
 }
 
 var phase_shaders: = {
@@ -43,7 +44,7 @@ func _ready() -> void :
 
 
 func change_phase(phase_number: int, next_scene_path: String) -> void :
-	label_title.text = phase_names.get(phase_number, "FASE %d" % phase_number)
+	label_title.text = phase_names.get(phase_number, "REGIÃO DESCONHECIDA")
 	label_title.visible = true
 	color_rect.color = Color.BLACK
 	color_rect.material = null

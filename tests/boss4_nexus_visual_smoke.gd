@@ -19,8 +19,7 @@ func _run() -> void:
 	game._spawn_boss4_comet()
 	game._start_boss4_secondary()
 	game.boss4_meteor_event_started = false
-	game.boss4_meteor_event_timer = 0.0
-	game._update_boss4_meteorites(0.01)
+	game._start_boss4_meteor_event()
 	game._update_boss4_meteorites(game.BOSS4_METEOR_WARNING + 0.04)
 	game._update_boss4_meteorites(game.BOSS4_METEOR_ARM_TIME + 0.04)
 	game._start_boss4_ultimate()

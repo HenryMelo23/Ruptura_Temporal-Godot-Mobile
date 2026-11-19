@@ -16,30 +16,30 @@ func _run() -> void:
 	game.player_start_down_landing_timer = 0.0
 	game.run_tutorial_enabled = false
 	game.is_multiplayer = true
-	game.shop_auto_enabled = false
+	game.is_host = true
+	game.online_room_owner = true
+	game.shop_auto_enabled = true
 	game.mode = "game"
 	game.score = 1200
 	game.card_cost = 120
 	game.time_alive = 40.0
 
-	game.shop_manual_cooldown_until = game.time_alive + 12.0
-	var score_before_cooldown_try: int = game.score
+	# Manual shop is retired for production runs. Multiplayer enters the shop
+	# through the authority-owned automatic countdown/Rift path.
+	game.qa_data_unlocked = false
+	game.forced_initial_phase = 0
+	var score_before_manual_try: int = game.score
 	game._try_open_manual_shop()
 	assert(game.mode == "game")
 	assert(not game.shop_mp_request_outgoing)
-	assert(game.score == score_before_cooldown_try)
-	game.shop_manual_cooldown_until = -999.0
-
-	game._try_open_manual_shop()
-	assert(game.mode == "game")
-	assert(game.shop_mp_request_outgoing)
-	assert(not game.shop_mp_request_incoming)
-	assert(abs(game.shop_mp_request_timer - game.SHOP_MP_REQUEST_TIME) < 0.01)
-
-	game._update_shop_mp_request(game.SHOP_MP_REQUEST_TIME + 0.5)
-	assert(game.mode == "game")
-	assert(not game.shop_mp_request_outgoing)
-	assert(not game.shop_mp_request_incoming)
+	assert(game.score == score_before_manual_try)
+	game._start_forced_shop_countdown()
+	assert(game.mode == "shop_countdown")
+	assert(game.forced_shop_triggered)
+	assert(abs(game.forced_shop_timer - game.FORCED_SHOP_WARNING) < 0.01)
+	game.mode = "game"
+	game.forced_shop_triggered = false
+	game.forced_shop_timer = -1.0
 
 	game._start_shop_mp_request_overlay(true)
 	assert(game._shop_mp_request_visible())
@@ -121,7 +121,8 @@ func _run() -> void:
 	game.is_dead = true
 	game._draw_player(Vector2.ZERO)
 
-	print("MULTIPLAYER_SHOP_FLOW_SMOKE_OK request_overlay=true synced_exit=true dead_draw_guard=true")
+	print("MULTIPLAYER_SHOP_FLOW_SMOKE_OK manual_retired=true auto_countdown=true request_overlay=true synced_exit=true dead_draw_guard=true")
+	root.remove_child(game)
 	game._cleanup_runtime_resources()
 	game.queue_free()
 	await process_frame

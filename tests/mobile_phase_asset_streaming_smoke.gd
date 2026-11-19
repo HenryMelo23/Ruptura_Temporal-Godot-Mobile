@@ -26,10 +26,10 @@ func _initialize() -> void:
 func _run() -> void:
 	_check(RuntimeAssetController.should_stream_phase_assets(true, false), "mobile full-quality profile must stream phase assets")
 	_check(RuntimeAssetController.should_stream_phase_assets(false, true), "memory saver must stream phase assets")
-	_check(not RuntimeAssetController.should_stream_phase_assets(false, false), "desktop full-quality profile should retain eager preload")
+	_check(RuntimeAssetController.should_stream_phase_assets(false, false), "desktop full-quality profile must stream inactive phases")
 	_check(RuntimeAssetController.should_lazy_gallery_assets(true, false), "mobile full-quality profile must lazy-load gallery art")
 	_check(RuntimeAssetController.should_lazy_gallery_assets(false, true), "memory saver must lazy-load gallery art")
-	_check(not RuntimeAssetController.should_lazy_gallery_assets(false, false), "desktop full-quality gallery should retain eager preload")
+	_check(RuntimeAssetController.should_lazy_gallery_assets(false, false), "desktop full-quality gallery must lazy-load art")
 
 	var full_quality_mobile := FakeGame.new()
 	root.add_child(full_quality_mobile)
@@ -61,5 +61,5 @@ func _run() -> void:
 	full_quality_mobile.free()
 	memory_saver.free()
 	gallery.free()
-	print("MOBILE_PHASE_ASSET_STREAMING_OK mobile=phase_only gallery=lazy quality=full memory_saver=compact")
+	print("MOBILE_PHASE_ASSET_STREAMING_OK all_platforms=phase_only gallery=lazy quality=full memory_saver=compact")
 	quit(1 if failed else 0)

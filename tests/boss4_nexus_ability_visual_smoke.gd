@@ -60,8 +60,7 @@ func _run() -> void:
 
 	_prepare_boss4_scene()
 	game.boss4_meteor_event_started = false
-	game.boss4_meteor_event_timer = 0.0
-	game._update_boss4_meteorites(0.01)
+	game._start_boss4_meteor_event()
 	_check(game.boss4_meteorites.size() == game.BOSS4_METEOR_COUNT, "meteor event did not create three meteorites")
 	var meteor_targets := [Vector2(360, 360), Vector2(660, 500), Vector2(960, 350)]
 	for index in range(game.boss4_meteorites.size()):

@@ -4,6 +4,11 @@ const Lightning = preload("res://scripts/presentation/lightning_presentation.gd"
 
 const CYAN := Color(0.18, 0.85, 1.0)
 const INK := Color(0.015, 0.035, 0.09)
+const MAGENTA := Color(1.0, 0.24, 0.62)
+const GOLD := Color(1.0, 0.78, 0.32)
+const FOAM := Color(0.9, 0.99, 1.0)
+const DEEP := Color(0.03, 0.2, 0.42)
+const SAND := Color(0.93, 0.68, 0.34)
 
 
 static func arc(canvas: CanvasItem, center: Vector2, radius: float, start: float, end: float, color: Color, width: float, low: bool = false) -> void:
@@ -85,24 +90,62 @@ static func clock_shell(canvas: CanvasItem, center: Vector2, radius: float, elap
 		streak(canvas, center + radial * (radius + 28.0), center + radial * (radius + 13.0), Color(color, 0.74), 4.0)
 
 
-static func tide(canvas: CanvasItem, start: Vector2, end: Vector2, time: float, low: bool) -> void:
+static func tide(canvas: CanvasItem, start: Vector2, end: Vector2, time: float, low: bool, advance: Vector2 = Vector2.ZERO) -> void:
+	# Parede de agua: rastro molhado atras, corpo fundo, crista de espuma ondulada na
+	# frente e respingos adiante, sempre no sentido em que a mare avanca.
 	var tangent := (end - start).normalized()
-	var normal := tangent.orthogonal()
-	canvas.draw_line(start, end, Color(INK, 0.56), 64.0)
-	canvas.draw_line(start, end, Color(0.06, 0.48, 0.78, 0.58), 56.0)
-	canvas.draw_line(start, end, Color(CYAN, 0.2), 76.0)
-	var points := PackedVector2Array()
-	var count := 50 if low else 100
+	var normal := advance.normalized() if advance.length() > 0.01 else tangent.orthogonal()
+	# Recorta a linha (que cruza o mapa todo) para a parte visivel da tela.
+	var view := canvas.get_viewport_rect().size
+	var proj_min := INF
+	var proj_max := -INF
+	for corner in [Vector2.ZERO, Vector2(view.x, 0.0), Vector2(0.0, view.y), view]:
+		var d: float = (corner - start).dot(tangent)
+		proj_min = minf(proj_min, d)
+		proj_max = maxf(proj_max, d)
+	var total := (end - start).length()
+	var lo := clampf(proj_min - 120.0, 0.0, total)
+	var hi := clampf(proj_max + 120.0, 0.0, total)
+	if hi - lo < 4.0:
+		return
+	var a := start + tangent * lo
+	var b := start + tangent * hi
+	# Rastro molhado (atras da frente).
+	for band in range(3):
+		var back0 := -normal * (36.0 + float(band) * 46.0)
+		var back1 := -normal * (36.0 + float(band + 1) * 46.0)
+		canvas.draw_colored_polygon(PackedVector2Array([a + back0, b + back0, b + back1, a + back1]), Color(DEEP, 0.34 - float(band) * 0.1))
+	# Corpo da onda.
+	canvas.draw_colored_polygon(PackedVector2Array([a - normal * 40.0, b - normal * 40.0, b + normal * 8.0, a + normal * 8.0]), Color(0.06, 0.42, 0.74, 0.78))
+	canvas.draw_colored_polygon(PackedVector2Array([a - normal * 18.0, b - normal * 18.0, b + normal * 8.0, a + normal * 8.0]), Color(CYAN, 0.35))
+	# Crista com espuma.
+	var length := hi - lo
+	var count := clampi(int(length / (22.0 if low else 12.0)), 12, 160)
+	var crest := PackedVector2Array()
 	for i in range(count + 1):
-		var p := float(i) / count
-		var ripple := sin(p * 70.0 - time * 6.0) * 4.0 + sin(p * 137.0 + time * 3.0) * 2.0
-		points.append(start.lerp(end, p) + normal * ripple)
-	canvas.draw_polyline(points, Color(0.25, 0.88, 1.0, 0.66), 12.0, true)
-	canvas.draw_polyline(points, Color(0.9, 1.0, 1.0, 0.95), 3.0, true)
-	for i in range(12 if low else 28):
-		var phase := fposmod(i * 0.618 + time * 0.15, 1.0)
-		var pos := start.lerp(end, phase) + normal * sin(phase * 80.0 + time) * 20.0
-		streak(canvas, pos - tangent * 12.0, pos, Color(0.72, 0.97, 1.0, 0.75), 3.0)
+		var t := float(i) / float(count)
+		var along := lo + t * length
+		var ripple := sin(along * 0.045 - time * 6.0) * 7.0 + sin(along * 0.11 + time * 3.4) * 3.5
+		crest.append(start + tangent * along + normal * (10.0 + ripple))
+	canvas.draw_polyline(crest, Color(INK, 0.55), 14.0, true)
+	canvas.draw_polyline(crest, Color(0.32, 0.9, 1.0, 0.85), 9.0, true)
+	canvas.draw_polyline(crest, Color(FOAM, 0.95), 3.5, true)
+	# Bolhas de espuma na crista e respingos adiante.
+	var foam_count := 10 if low else 26
+	for i in range(foam_count):
+		var t := fposmod(float(i) * 0.618 + time * 0.05, 1.0)
+		var along := lo + t * length
+		var base := start + tangent * along + normal * (8.0 + sin(along * 0.045 - time * 6.0) * 7.0)
+		canvas.draw_circle(base, 3.0 + float(i % 3) * 1.5, Color(FOAM, 0.8))
+		var life := fposmod(time * 1.4 + float(i) * 0.37, 1.0)
+		var spray := base + normal * (10.0 + life * 46.0) + tangent * sin(float(i) * 3.1) * 10.0
+		streak(canvas, spray - normal * 12.0, spray, Color(0.75, 0.97, 1.0, (1.0 - life) * 0.8), 3.0)
+	# Divisas no corpo mostram o sentido.
+	var chevron_count := 4 if low else 8
+	for i in range(chevron_count):
+		var t := fposmod(float(i) / float(chevron_count) + time * 0.04, 1.0)
+		var mid := start + tangent * (lo + t * length) - normal * 16.0
+		canvas.draw_polyline(PackedVector2Array([mid - normal * 12.0 + tangent * 14.0, mid, mid - normal * 12.0 - tangent * 14.0]), Color(FOAM, 0.45), 3.0, true)
 
 
 static func pincer_tenaz(canvas: CanvasItem, data: Dictionary, center: Vector2, time: float, low: bool) -> void:
@@ -135,7 +178,19 @@ static func pincer_tenaz(canvas: CanvasItem, data: Dictionary, center: Vector2, 
 			tip - side * corridor_half_width,
 			lane_start - side * corridor_half_width
 		])
-		canvas.draw_polygon(lane_points, PackedColorArray([Color(accent, 0.08 + pulse * 0.04)]))
+		canvas.draw_polygon(lane_points, PackedColorArray([Color(accent, 0.12 + pulse * 0.06)]))
+		# Marcas de relogio ao longo do corredor acendem ate o bote.
+		var tick_count: int = 6 if low else 10
+		var tenaz_p: float = clampf(state_age / warning, 0.0, 1.0)
+		for tick in range(tick_count):
+			var tick_t: float = (float(tick) + 0.5) / float(tick_count)
+			var tick_c: Vector2 = lane_start.lerp(tip, tick_t)
+			var tick_lit: bool = tenaz_p >= tick_t
+			canvas.draw_line(tick_c + side * (corridor_half_width - 4.0), tick_c + side * (corridor_half_width - 16.0), Color(INK, 0.7), 6.0)
+			canvas.draw_line(tick_c - side * (corridor_half_width - 4.0), tick_c - side * (corridor_half_width - 16.0), Color(INK, 0.7), 6.0)
+			var tick_col: Color = Color(GOLD, 0.95) if tick_lit else Color(accent, 0.3)
+			canvas.draw_line(tick_c + side * (corridor_half_width - 4.0), tick_c + side * (corridor_half_width - 16.0), tick_col, 3.0)
+			canvas.draw_line(tick_c - side * (corridor_half_width - 4.0), tick_c - side * (corridor_half_width - 16.0), tick_col, 3.0)
 		canvas.draw_line(lane_start + side * corridor_half_width, tip + side * corridor_half_width, Color(INK, 0.68), 5.0, true)
 		canvas.draw_line(lane_start - side * corridor_half_width, tip - side * corridor_half_width, Color(INK, 0.68), 5.0, true)
 		canvas.draw_line(lane_start + side * corridor_half_width, tip + side * corridor_half_width, Color(accent, 0.42 + pulse * 0.18), 2.0, true)
@@ -161,8 +216,7 @@ static func pincer_tenaz(canvas: CanvasItem, data: Dictionary, center: Vector2, 
 		return
 
 	if state == "dash_first" or state == "dash_second":
-		var back: Vector2 = center - direction * 250.0
-		streak(canvas, back, center + direction * 54.0, accent, 16.0 if not low else 11.0)
+		speed_lines(canvas, center, direction, 70.0, time + state_age, accent.lerp(FOAM, 0.15), low)
 		canvas.draw_line(center - side * 28.0, center + side * 34.0, Color(1.0, 0.88, 0.5, 0.74), line_width, true)
 		canvas.draw_line(center + side * 28.0, center - side * 34.0, Color(1.0, 0.88, 0.5, 0.74), line_width, true)
 		for particle in range(4 if low else 8):
@@ -175,6 +229,37 @@ static func pincer_tenaz(canvas: CanvasItem, data: Dictionary, center: Vector2, 
 		var fade: float = 1.0 - clampf(state_age / 0.42, 0.0, 1.0)
 		canvas.draw_circle(center, 42.0, Color(0.28, 0.08, 0.02, 0.18 * fade))
 		arc(canvas, center, 52.0 + (1.0 - fade) * 48.0, 0.0, TAU, Color(1.0, 0.68, 0.22, 0.76 * fade), 5.0, low)
+
+
+const RUSH_LANE_LENGTH := 520.0
+const RUSH_HALF_WIDTH := 84.0
+
+
+static func rush(canvas: CanvasItem, data: Dictionary, center: Vector2, time: float, age: float, low: bool) -> void:
+	var dir := Vector2(data.get("dir", Vector2.LEFT)).normalized()
+	if dir.length() <= 0.01:
+		dir = Vector2.LEFT
+	var state := String(data.get("state", "telegraph"))
+	var warn := maxf(0.01, float(data.get("warn", 0.62)))
+	match state:
+		"telegraph":
+			var p := clampf(age / warn, 0.0, 1.0)
+			charge_lane(canvas, center + dir * 60.0, dir, RUSH_LANE_LENGTH, RUSH_HALF_WIDTH, p, time, MAGENTA, low)
+			claw_snap(canvas, center + dir * 40.0, dir, 72.0, p, Color(MAGENTA, 0.9), low)
+		"dash":
+			speed_lines(canvas, center, dir, RUSH_HALF_WIDTH, time, MAGENTA.lerp(FOAM, 0.2), low)
+			# Onda de choque na frente do corpo.
+			var bow := center + dir * 70.0
+			arc(canvas, bow, 96.0, dir.angle() - 0.95, dir.angle() + 0.95, Color(FOAM, 0.75), 4.0, low)
+			arc(canvas, bow - dir * 18.0, 118.0, dir.angle() - 0.7, dir.angle() + 0.7, Color(MAGENTA, 0.45), 3.0, true)
+		"grab":
+			var player_screen: Vector2 = Vector2(canvas.get("player_pos")) - (Vector2(canvas.get("boss_pos")) - center)
+			var g := clampf(float(data.get("grab_age", 0.0)) / 0.44, 0.0, 1.0)
+			claw_snap(canvas, player_screen, dir, 46.0 - g * 10.0, 0.4 + g * 0.6, Color(MAGENTA, 0.95), low)
+			claw_snap(canvas, player_screen, -dir, 46.0 - g * 10.0, 0.4 + g * 0.6, Color(MAGENTA, 0.95), low)
+		"throw":
+			var player_screen2: Vector2 = Vector2(canvas.get("player_pos")) - (Vector2(canvas.get("boss_pos")) - center)
+			speed_lines(canvas, player_screen2, dir, 26.0, time, GOLD, true)
 
 
 static func whirlpool(canvas: CanvasItem, data: Dictionary, center: Vector2, time: float, low: bool) -> void:
@@ -318,15 +403,33 @@ static func attack(canvas: CanvasItem, data: Dictionary, center: Vector2, target
 				bubble(canvas, target, radius + sin(time * 8.0) * 2.0, time, color, low)
 			return true
 		"sand":
-			var fade := clampf((float(data.get("duration", 4.2)) - age) / 0.4, 0.0, 1.0)
-			canvas.draw_circle(target, 48.0, Color(0.1, 0.055, 0.02, 0.62 * fade))
-			for i in range(4):
-				var a := time * (0.8 + i * 0.16) + i * 1.8
-				arc(canvas, target, 18.0 + i * 9.0, a, a + PI * 1.25, Color(0.93, 0.65, 0.28, (0.3 + i * 0.16) * fade), 3.0, low)
-			for i in range(10 if low else 24):
-				var p := fposmod(time * 0.45 + i * 0.618, 1.0)
-				var pos := target + Vector2.from_angle(i * 2.4 + time * 2.0 + p) * lerpf(10.0, 46.0, p)
-				canvas.draw_rect(Rect2(pos, Vector2(2, 3)), Color(1.0, 0.9, 0.62, sin(p * PI) * fade))
+			# Areia movedica: poco escuro, braços em espiral de graos escorrendo para o
+			# centro (ampulheta) e borda de areia pulsando.
+			var fade := clampf((float(data.get("duration", 4.2)) - age) / 0.4, 0.0, 1.0) * clampf(age / 0.25, 0.0, 1.0)
+			var r := 52.0
+			canvas.draw_circle(target, r + 6.0, Color(0.16, 0.09, 0.03, 0.4 * fade))
+			canvas.draw_circle(target, r, Color(0.08, 0.04, 0.015, 0.62 * fade))
+			canvas.draw_circle(target, r * 0.45, Color(0.02, 0.01, 0.0, 0.7 * fade))
+			var arms := 3 if low else 5
+			for arm in range(arms):
+				var pts := PackedVector2Array()
+				for k in range(13):
+					var u := float(k) / 12.0
+					var ang := float(arm) * TAU / float(arms) + time * 1.6 + u * 2.6
+					pts.append(target + Vector2.from_angle(ang) * lerpf(r * 0.98, r * 0.18, u))
+				canvas.draw_polyline(pts, Color(SAND, 0.55 * fade), 4.0, true)
+				canvas.draw_polyline(pts, Color(1.0, 0.9, 0.62, 0.65 * fade), 1.4, true)
+			for i in range(10 if low else 26):
+				var life := fposmod(time * 0.55 + float(i) * 0.618, 1.0)
+				var ang := float(i) * 2.39996 + time * 1.6 + life * 2.6
+				var pos := target + Vector2.from_angle(ang) * lerpf(r * 1.05, r * 0.12, life)
+				canvas.draw_rect(Rect2(pos - Vector2(1.5, 1.5), Vector2(3, 3)), Color(1.0, 0.88, 0.58, sin(life * PI) * 0.9 * fade))
+			var rim_pulse := 0.5 + 0.5 * sin(time * 5.0)
+			canvas.draw_arc(target, r + 2.0 + rim_pulse * 3.0, 0.0, TAU, 40, Color(INK, 0.6 * fade), 6.0, true)
+			canvas.draw_arc(target, r + 2.0 + rim_pulse * 3.0, 0.0, TAU, 40, Color(SAND, 0.75 * fade), 2.5, true)
+			return true
+		"rush":
+			rush(canvas, data, center, time, age, low)
 			return true
 		"pressure_bubbles":
 			var dir := Vector2(data.get("dir", Vector2.LEFT)).normalized()
@@ -338,3 +441,110 @@ static func attack(canvas: CanvasItem, data: Dictionary, center: Vector2, target
 			pincer_tenaz(canvas, data, center, time, low)
 			return true
 	return false
+
+
+## Linhas de velocidade atras de quem corre (investida / tenaz).
+static func speed_lines(canvas: CanvasItem, center: Vector2, direction: Vector2, half_width: float, time: float, color: Color, low: bool) -> void:
+	var side := direction.orthogonal()
+	var count := 7 if low else 14
+	for i in range(count):
+		var lane := (float(i) / float(count - 1)) * 2.0 - 1.0
+		var phase := fposmod(time * 3.1 + float(i) * 0.37, 1.0)
+		var length := lerpf(110.0, 260.0, fposmod(float(i) * 0.618, 1.0))
+		var start := center - direction * (40.0 + phase * 70.0) + side * lane * half_width
+		var alpha := (1.0 - absf(lane) * 0.55) * (0.35 + (1.0 - phase) * 0.5)
+		streak(canvas, start - direction * length, start, Color(color, alpha), 5.0 if absf(lane) < 0.4 else 3.0)
+
+
+## Corredor tracejado com divisas varrendo e barra de progresso ate o golpe.
+static func charge_lane(canvas: CanvasItem, origin: Vector2, direction: Vector2, length: float, half_width: float, progress: float, time: float, color: Color, low: bool) -> void:
+	var side := direction.orthogonal()
+	var tip := origin + direction * length
+	var pulse := 0.5 + 0.5 * sin(time * (10.0 + progress * 14.0))
+	canvas.draw_colored_polygon(PackedVector2Array([origin + side * half_width, tip + side * half_width, tip - side * half_width, origin - side * half_width]), Color(color, 0.06 + progress * 0.12 + pulse * 0.04))
+	var dash_count := 9 if low else 16
+	for edge: float in [-1.0, 1.0]:
+		for d in range(dash_count):
+			var a := float(d) / float(dash_count)
+			var b := a + 0.6 / float(dash_count)
+			var e0 := origin.lerp(tip, a) + side * half_width * edge
+			var e1 := origin.lerp(tip, b) + side * half_width * edge
+			canvas.draw_line(e0, e1, Color(INK, 0.7), 6.0)
+			canvas.draw_line(e0, e1, Color(color, 0.55 + pulse * 0.3), 2.5)
+	# Progresso ate o disparo: preenche o eixo do corredor.
+	var fill_to := origin.lerp(tip, clampf(progress, 0.0, 1.0))
+	canvas.draw_line(origin, tip, Color(INK, 0.55), 9.0)
+	canvas.draw_line(origin, fill_to, Color(GOLD, 0.85), 4.0)
+	var chevrons := 3 if low else 5
+	for c in range(chevrons):
+		var t := fposmod(time * 0.9 + float(c) / float(chevrons), 1.0)
+		var mid := origin.lerp(tip, t)
+		var wing := mid - direction * 22.0
+		var alpha := sin(t * PI) * (0.5 + progress * 0.5)
+		canvas.draw_polyline(PackedVector2Array([wing + side * 26.0, mid, wing - side * 26.0]), Color(INK, alpha * 0.8), 8.0)
+		canvas.draw_polyline(PackedVector2Array([wing + side * 26.0, mid, wing - side * 26.0]), Color(color.lerp(FOAM, 0.35), alpha), 4.0)
+
+
+## Pinca fechando (dois arcos que se aproximam) — leitura de "vai agarrar".
+static func claw_snap(canvas: CanvasItem, center: Vector2, direction: Vector2, radius: float, closing: float, color: Color, low: bool) -> void:
+	var base := direction.angle()
+	var gap := lerpf(0.9, 0.12, clampf(closing, 0.0, 1.0))
+	arc(canvas, center, radius, base - gap - 1.0, base - gap, color, 5.0, low)
+	arc(canvas, center, radius, base + gap, base + gap + 1.0, color, 5.0, low)
+
+
+## Aviso do intervalo antes de bolha, pressao e chuva (o ataque nasce com idade
+## negativa: BOSS1_BUBBLE_WARNING_LEAD). Antes nao havia nada na tela nesse tempo.
+static func lead_warning(canvas: CanvasItem, data: Dictionary, center: Vector2, target: Vector2, remaining: float, lead: float, time: float, low: bool) -> void:
+	var kind := String(data.get("kind", ""))
+	var p := clampf(1.0 - remaining / maxf(0.01, lead), 0.0, 1.0)
+	var urgent := remaining <= 1.0
+	var pulse := 0.5 + 0.5 * sin(time * (18.0 if urgent else 7.0))
+	var tint := CYAN.lerp(MAGENTA, smoothstep(0.55, 1.0, p))
+	# Relogio de alarme em volta do boss: um segmento por segundo de aviso.
+	var segments := maxi(1, int(round(lead)))
+	var ring_r := 132.0
+	for i in range(segments):
+		var a0 := -PI * 0.5 + float(i) * TAU / float(segments) + 0.06
+		var a1 := -PI * 0.5 + float(i + 1) * TAU / float(segments) - 0.06
+		var lit := p * float(segments) >= float(i + 1)
+		var partial := clampf(p * float(segments) - float(i), 0.0, 1.0)
+		canvas.draw_arc(center, ring_r, a0, a1, 18, Color(INK, 0.6), 9.0, true)
+		if lit:
+			arc(canvas, center, ring_r, a0, a1, Color(tint, 0.78 + pulse * 0.2), 4.0, true)
+		elif partial > 0.0:
+			arc(canvas, center, ring_r, a0, lerpf(a0, a1, partial), Color(tint, 0.6), 3.0, true)
+	var hand := Vector2.from_angle(-PI * 0.5 + p * TAU)
+	streak(canvas, center + hand * (ring_r - 26.0), center + hand * (ring_r + 14.0), Color(GOLD, 0.95), 6.0)
+	# Bolhas subindo do corpo enquanto ele "enche".
+	var count := 5 if low else 11
+	for i in range(count):
+		var life := fposmod(time * 0.7 + float(i) * 0.618, 1.0)
+		var x := sin(float(i) * 2.3) * 70.0 + sin(time * 2.0 + i) * 6.0
+		var pos := center + Vector2(x, 30.0 - life * (90.0 if kind != "boiling_bubbles" else 200.0))
+		var r := 4.0 + float(i % 3) * 2.5 + life * 3.0
+		canvas.draw_circle(pos, r, Color(INK, 0.3 * (1.0 - life)))
+		canvas.draw_arc(pos, r, 0.0, TAU, 14, Color(FOAM, 0.75 * sin(life * PI) * (0.4 + p * 0.6)), 1.6, true)
+	match kind:
+		"bubble":
+			# O alvo ja esta definido: marca crescente onde a bolha vai nascer.
+			var r := lerpf(20.0, 60.0, p)
+			canvas.draw_circle(target, r, Color(CYAN, 0.05 + p * 0.07))
+			canvas.draw_arc(target, r, time * 1.5, time * 1.5 + TAU * p, 40, Color(tint, 0.35 + p * 0.45), 2.5, true)
+			if urgent:
+				canvas.draw_arc(target, r + 8.0 + pulse * 4.0, 0.0, TAU, 40, Color(MAGENTA, 0.5 * pulse), 2.0, true)
+		"pressure_bubbles":
+			var dir := Vector2(data.get("dir", Vector2.LEFT)).normalized()
+			var spread := float(data.get("spread", 0.42))
+			for edge: float in [-1.0, 1.0]:
+				var e := dir.rotated(spread * edge)
+				canvas.draw_line(center + e * 70.0, center + e * (150.0 + p * 170.0), Color(tint, 0.18 + p * 0.4), 2.0, true)
+			for i in range(3):
+				var d := center + dir * (90.0 + float(i) * 55.0) * (0.5 + p * 0.5)
+				canvas.draw_arc(d, 10.0 + float(i) * 3.0, 0.0, TAU, 16, Color(FOAM, (0.2 + p * 0.5) * (1.0 - float(i) * 0.2)), 2.0, true)
+		"boiling_bubbles":
+			# Vapor fervendo sobe para o ceu: a chuva vem de cima.
+			for i in range(3 if low else 6):
+				var life := fposmod(time * 1.1 + float(i) * 0.31, 1.0)
+				var pos := center + Vector2(sin(float(i) * 1.7) * 40.0, -60.0 - life * 260.0)
+				streak(canvas, pos + Vector2(0, 22), pos, Color(CYAN, sin(life * PI) * (0.3 + p * 0.5)), 4.0)

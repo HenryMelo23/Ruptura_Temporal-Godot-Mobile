@@ -18,7 +18,7 @@ func update_enemy(enemy: Dictionary, delta: float) -> void:
 	enemy["phase3_fervor_timer"] = maxf(0.0, float(enemy.get("phase3_fervor_timer", 0.0)) - delta)
 	enemy["phase3_relic_pulse"] = maxf(0.0, float(enemy.get("phase3_relic_pulse", 0.0)) - delta)
 	var kind := String(enemy.get("type", game.ENEMY_COMMON))
-	if kind == game.ENEMY_DEVOTO and game.phase3_ritual_pulse_controller.update_devotee(enemy, delta):
+	if bool(enemy.get("phase3_ritual_marked", false)) and game.phase3_ritual_pulse_controller.update_devotee(enemy, delta):
 		return
 	var target_pos: Vector2 = game._get_enemy_target_pos(enemy)
 	match kind:

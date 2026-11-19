@@ -41,8 +41,9 @@ func _prepare_phase2() -> void:
 
 func _test_spawn_and_combat() -> void:
 	var controller = game.sineiro_boreal_controller
-	_check(is_equal_approx(controller.SPAWN_TIME_ONBOARDING, 120.0), "onboarding spawn timing drifted from two minutes")
-	_check(is_equal_approx(controller.SPAWN_TIME_EXPERIENCED, 120.0), "experienced spawn timing drifted from two minutes")
+	# 70 s: antes de o jogador chamar o boss da fase 2 (com 120 s ele raramente aparecia).
+	_check(is_equal_approx(controller.SPAWN_TIME_ONBOARDING, 70.0), "onboarding spawn timing drifted from 70s")
+	_check(is_equal_approx(controller.SPAWN_TIME_EXPERIENCED, 70.0), "experienced spawn timing drifted from 70s")
 	_check(is_equal_approx(float(controller.PARTY_HP_MULTIPLIERS[1]), 1.0), "solo HP multiplier drifted")
 	_check(is_equal_approx(float(controller.PARTY_HP_MULTIPLIERS[2]), 1.70), "duo HP multiplier drifted")
 	_check(is_equal_approx(float(controller.PARTY_HP_MULTIPLIERS[3]), 2.35), "trio HP multiplier drifted")
@@ -78,7 +79,7 @@ func _test_spawn_and_combat() -> void:
 	_check(String(enemy.get("sineiro_state", "")) == controller.STATE_ATTACK, "telegraph did not enter the attack commit state")
 	controller.update_enemy(enemy, controller.ATTACK_COMMIT_TIME + 0.01)
 	var shards: Array = game.enemy_bullets.filter(func(value): return String(Dictionary(value).get("type", "")) == "sineiro_shard")
-	_check(shards.size() == 3, "secondary attack did not create three shards")
+	_check(shards.size() == controller.SHARD_SPREADS.size(), "secondary attack did not create the five-shard fan")
 	var initial_dirs: Array = shards.map(func(value): return Vector2(Dictionary(value).get("dir", Vector2.ZERO)))
 	game.player_pos = Vector2(120, 140)
 	_check(initial_dirs == shards.map(func(value): return Vector2(Dictionary(value).get("dir", Vector2.ZERO))), "shards gained homing after firing")
@@ -98,7 +99,7 @@ func _test_spawn_timing() -> void:
 	_check(controller.active_enemy().is_empty(), "onboarding encounter spawned early")
 	game.time_alive = game.phase_started_at + controller.SPAWN_TIME_ONBOARDING + 0.1
 	controller.update(0.0)
-	_check(not controller.active_enemy().is_empty(), "onboarding encounter did not spawn two minutes after phase 2 began")
+	_check(not controller.active_enemy().is_empty(), "onboarding encounter did not spawn on time")
 	controller.cleanup("timing_fixture")
 	controller.reset_for_new_run()
 	game.run_pacing_profile = game.PACING_PROFILE_EXPERIENCED
@@ -108,7 +109,7 @@ func _test_spawn_timing() -> void:
 	_check(controller.active_enemy().is_empty(), "experienced encounter spawned early")
 	game.time_alive = game.phase_started_at + controller.SPAWN_TIME_EXPERIENCED + 0.1
 	controller.update(0.0)
-	_check(not controller.active_enemy().is_empty(), "experienced encounter did not spawn two minutes after phase 2 began")
+	_check(not controller.active_enemy().is_empty(), "experienced encounter did not spawn on time")
 	controller.cleanup("timing_fixture")
 	controller.reset_for_new_run()
 	game.run_pacing_profile = game.PACING_PROFILE_ONBOARDING
@@ -165,7 +166,10 @@ func _test_multiplayer_targets_and_rewards() -> void:
 	controller.on_enemy_defeated(enemy)
 	var expected_points := int(round(float(game.card_cost) * controller.REWARD_POINT_RATIO))
 	_check(game.score - score_before == expected_points, "reward points were missing or duplicated")
-	_check(game.arauto_card_drops.size() - drops_before == 2, "solo reward was not exactly two cards")
+	_check(controller.REWARD_CARD_COUNT == 1, "Sineiro card reward was not reduced")
+	# +1: inimigo supremo sempre deixa uma Cinzas da Escolha (se a arte estiver registrada).
+	var cinzas_extra: int = 1 if game._card_drop_texture_registered(game._find_card_by_id(game.CARD_CINZAS_ID)) else 0
+	_check(game.arauto_card_drops.size() - drops_before == controller.REWARD_CARD_COUNT + cinzas_extra, "solo reward did not match the configured card count")
 	_check(game.manifest_evolution_fragment_claim_count == fragments_before, "Sineiro granted manifestation evolution progress")
 	_check(bool(game.sineiro_boreal_state.get("reward_processed", false)), "reward idempotency state was not recorded")
 	game.enemies.erase(enemy)
@@ -193,7 +197,7 @@ func _test_cleanup_and_persistence_contract() -> void:
 	var timeout_drops: int = game.arauto_card_drops.size()
 	game.sineiro_boreal_state["battle_elapsed"] = controller.ACTIVE_LIFETIME
 	controller.update(0.0)
-	_check(String(timeout_enemy.get("sineiro_state", "")) == controller.STATE_DESPAWN, "110s timeout did not begin retreat")
+	_check(String(timeout_enemy.get("sineiro_state", "")) == controller.STATE_DESPAWN, "lifetime timeout did not begin retreat")
 	controller.update_enemy(timeout_enemy, controller.RETREAT_TIME + 0.01)
 	_check(controller.active_enemy().is_empty(), "timeout retreat did not remove the Sineiro")
 	_check(int(game.score) == timeout_score and game.arauto_card_drops.size() == timeout_drops, "timeout incorrectly granted the kill reward")

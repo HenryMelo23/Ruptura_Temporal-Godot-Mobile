@@ -51,31 +51,47 @@ func _run() -> void:
 		_check(game._consume_next_phase_after_boss(game.DIMENSION_FINAL_PHASE) == 0, "final phase consumed a farming route")
 		_check(game.dimension_route_queue == before, "final phase mutated queue before victory was confirmed")
 
-	game.run_initial_phase = 1
-	game.run_phase6_completed = false
-	_check(game._next_phase_after_boss(1) == 2, "phase 1 start did not continue to phase 2")
-	_check(game._next_phase_after_boss(2) == 3, "phase 2 did not continue to phase 3")
-	_check(game._next_phase_after_boss(3) == 6, "phase 1 start did not insert phase 6 after phase 3")
-	_check(game._consume_next_phase_after_boss(6) == 4, "phase 6 did not return the phase 1 route to phase 4")
-	game.run_initial_phase = 6
-	game.run_phase6_completed = false
-	_check(game._consume_next_phase_after_boss(6) == 1, "phase 6 start did not continue to phase 1")
-	_check(game._next_phase_after_boss(1) == 2, "phase 6 start did not continue from phase 1 to phase 2")
-	_check(game._next_phase_after_boss(2) == 3, "phase 6 start did not continue from phase 2 to phase 3")
-	_check(game._next_phase_after_boss(3) == 4, "phase 6 start did not continue from phase 3 to phase 4")
+	game.rng.seed = 4519
+	game._begin_initial_phase_tracking(1)
+	var first_cycle: Array[int] = [1]
+	for queued_phase in game.dimension_route_queue:
+		first_cycle.append(int(queued_phase))
+	var unique_first_cycle: Dictionary = {}
+	for phase_value in first_cycle:
+		unique_first_cycle[phase_value] = true
+	_check(first_cycle == [1, 2, 6, 3, 4], "run starting at 1 did not follow 1-2-6-3-4: %s" % [first_cycle])
+	_check(game.initial_phase_bias_target == 6 and is_equal_approx(game.initial_phase_bias_strength, 1.0), "next run is not set to start at 6")
+	game._begin_initial_phase_tracking(6)
+	var second_cycle: Array[int] = [6]
+	for queued_phase in game.dimension_route_queue:
+		second_cycle.append(int(queued_phase))
+	_check(second_cycle == [6, 1, 2, 3, 4], "run starting at 6 did not follow 6-1-2-3-4: %s" % [second_cycle])
+	_check(game.initial_phase_bias_target == 1, "next run is not set to start at 1")
+	game._begin_initial_phase_tracking(1)
+	for index in range(4):
+		_check(game._consume_next_phase_after_boss(first_cycle[index]) == first_cycle[index + 1], "initial route queue was consumed out of order")
 	game.dimension_route_queue.clear()
 	game.dimension_route_farm_cycles = 0
-	_check(game._begin_farm_dimension_cycle() == 7, "farm cycle did not start at phase 7")
-	_check(game.dimension_route_queue.size() == 3 and int(game.dimension_route_queue[-1]) == 4, "farm cycle did not end at phase 4 after two random phases")
-	for random_index in range(2):
-		_check(int(game.dimension_route_queue[random_index]) in game.DIMENSION_ROUTE_POOL, "farm cycle selected a reserved phase as random content")
+	game.dimension_route_last_phase = first_cycle.back()
+	var farm_entry: int = int(game._begin_farm_dimension_cycle())
+	var farm_cycle: Array[int] = [farm_entry]
+	for queued_phase in game.dimension_route_queue:
+		farm_cycle.append(int(queued_phase))
+	var unique_farm_cycle: Dictionary = {}
+	for phase_value in farm_cycle:
+		unique_farm_cycle[phase_value] = true
+	_check(farm_cycle.size() == 4 and unique_farm_cycle.size() == 4, "farm cycle was not four unique maps")
+	_check(farm_entry == 7, "farm cycle did not start at Cinzas da Ruptura (7)")
+	_check(farm_cycle.all(func(value): return (int(value) == 7 or int(value) in game.DIMENSION_FARM_POOL) and int(value) != game.DIMENSION_FINAL_PHASE), "farm cycle selected a reserved phase")
 	game.dimension_route_queue.clear()
-	_check(game._begin_farm_dimension_cycle() == 7, "repeated farm cycle did not restart at phase 7")
-	_check(game.dimension_route_queue.size() == 3 and int(game.dimension_route_queue[-1]) == 4, "repeated farm cycle did not return to phase 4")
+	var repeated_entry: int = int(game._begin_farm_dimension_cycle())
+	_check(repeated_entry == 7 and game.dimension_route_queue.size() == 3 and not game.dimension_route_queue.has(7), "repeated farm cycle was not 7 + 3 maps")
 	game.dimension_route_queue = [4, 6]
 	_check(game._consume_next_phase_after_boss(7) == 4, "boss 7 did not consume the farming queue")
 	_check(game.dimension_route_queue == [6], "boss 7 consumed more than one route entry")
-	_check(game._should_offer_dimension_choice_after_boss(4), "boss 4 stopped offering route choice")
+	game.dimension_route_completed_count = 4
+	game.dimension_route_queue.clear()
+	_check(game._should_offer_dimension_choice_after_boss(3), "fourth completed map stopped offering route choice")
 
 	game._start_game()
 	game.current_phase = 4
@@ -136,7 +152,7 @@ func _run() -> void:
 	if failed:
 		await _finish(1)
 		return
-	print("UMBRA_FINAL_VICTORY_ROUTE_SMOKE_OK canonical_routes=true farm=7+2random+4 retries=3 final=true idempotent=true extraction=true replica=true")
+	print("UMBRA_FINAL_VICTORY_ROUTE_SMOKE_OK route_cycles=4_unique retries=3 final=true idempotent=true extraction_api=true replica=true")
 	await _finish(0)
 
 

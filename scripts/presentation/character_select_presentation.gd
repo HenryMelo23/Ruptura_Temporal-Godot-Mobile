@@ -1,32 +1,75 @@
 class_name RTCharacterSelectPresentation
 extends RefCounted
 
+const MenusPresentation = preload("res://scripts/presentation/menus_presentation.gd")
 const CYAN := Color(0.12, 0.94, 1.0)
 const ORANGE := Color(1.0, 0.42, 0.08)
 const HENRY_AMBER := Color(1.0, 0.76, 0.22)
 const HENRY_BONE := Color(0.95, 0.9, 0.76)
-const HENRY_CHOICE_ICON_TEXTURES := {
-	"incendiario": preload("res://assets/ui/henry_choices/mutacao_incendiario.png"),
-	"barometrico": preload("res://assets/ui/henry_choices/mutacao_barometrico.png"),
-	"colosso": preload("res://assets/ui/henry_choices/mutacao_colosso_d37.png"),
-	"incandescencia": preload("res://assets/ui/henry_choices/efeito_incandescencia.png"),
-	"nimbo": preload("res://assets/ui/henry_choices/efeito_nimbo.png"),
-	"lastro": preload("res://assets/ui/henry_choices/efeito_lastro.png"),
+const HENRY_CHOICE_ICON_PATHS := {
+	"incendiario": "res://assets/ui/henry_choices/mutacao_incendiario.png",
+	"barometrico": "res://assets/ui/henry_choices/mutacao_barometrico.png",
+	"colosso": "res://assets/ui/henry_choices/mutacao_colosso_d37.png",
+	"incandescencia": "res://assets/ui/henry_choices/efeito_incandescencia.png",
+	"nimbo": "res://assets/ui/henry_choices/efeito_nimbo.png",
+	"lastro": "res://assets/ui/henry_choices/efeito_lastro.png",
 }
 
 static var _henry_stage_by_game: Dictionary = {}
 static var _henry_stage_change_ms_by_game: Dictionary = {}
 static var _henry_choice_by_game: Dictionary = {}
 static var _henry_choice_change_ms_by_game: Dictionary = {}
+static var _henry_choice_icon_textures: Dictionary = {}
 
 
 static func draw(game: Node2D, viewport: Vector2) -> void:
 	if game.mode == "character_select":
 		game._draw_holo_background(viewport, game.textures.get("choice_bg"), CYAN)
 		_draw_character_cards(game, viewport)
+	elif game.mode in ["mutation_select_mp", "effect_select_mp"]:
+		# Multiplayer uses the same full team surface as Geovana so Henry keeps
+		# the shared roster, ready/cancel, host-start and peer-highlight features.
+		game._draw_manifest_mp(viewport)
 	else:
-		game._draw_holo_background(viewport, null, ORANGE)
-		_draw_henry_build_step(game, viewport)
+		RTBuildSelectPresentation.draw(game, viewport, _henry_build_model(game))
+
+
+## Monta o model da tela unificada para o Henry (mesma tela da Geovana, tema elegante).
+static func _henry_build_model(game: Node2D) -> Dictionary:
+	var mutation_step: bool = game.mode == "mutation_select"
+	var source: Array = game.HENRY_MUTATIONS if mutation_step else game.HENRY_EFFECTS
+	var selected: int = clampi(game.selected_mutation if mutation_step else game.selected_effect, 0, source.size() - 1)
+	var items: Array = []
+	for i in range(source.size()):
+		var entry: Dictionary = source[i]
+		var key: String = String(entry.get("key", ""))
+		items.append({"index": i, "key": key, "name": String(entry.get("name", "")), "color": entry.get("accent", HENRY_AMBER), "texture": _henry_choice_icon_texture(key), "unlocked": true, "unread": false})
+	var key_selected: String = String(source[selected].get("key", ""))
+	# Slot "ALEATORIA" no fim: sorteio oculto, o jogador descobre na partida.
+	var random_selected: bool = game._build_random_shown("mutation" if mutation_step else "effect")
+	items.append(MenusPresentation.random_build_item(not mutation_step, true))
+	var selected_slot: int = items.size() - 1 if random_selected else selected
+	var dossier: Dictionary = RTBuildChoiceDossier.mutation(key_selected) if mutation_step else RTBuildChoiceDossier.effect(key_selected)
+	if random_selected:
+		dossier = MenusPresentation.random_build_dossier(not mutation_step, true)
+	var mutation_name: String = "???" if bool(game.build_random_hidden.get("mutation", false)) else String(game.HENRY_MUTATIONS[clampi(game.selected_mutation, 0, game.HENRY_MUTATIONS.size() - 1)].get("name", "")).to_upper()
+	var primary_label: String = "CONTINUAR" if mutation_step else "INICIAR"
+	if random_selected:
+		primary_label = "SORTEAR E SEGUIR" if mutation_step else "SORTEAR E INICIAR"
+	return {
+		"theme": "henry",
+		"step": 0 if mutation_step else 1,
+		"items": items,
+		"selected_slot": selected_slot,
+		"target_scroll": float(selected_slot),
+		"dossier": dossier,
+		"summary": "" if mutation_step else "MUTAÇÃO: " + mutation_name,
+		"primary_label": primary_label,
+		"primary_enabled": true,
+		"preview_enabled": false,
+		"hint": "A / D OU TOQUE NUMA PLACA",
+		"keys": {"primary": "henry_continue", "back": "henry_back", "pick_prefix": "henry_choice_"},
+	}
 
 
 static func _draw_character_cards(game: Node2D, viewport: Vector2) -> void:
@@ -124,7 +167,10 @@ static func _draw_henry_build_step(game: Node2D, viewport: Vector2) -> void:
 	var action_label := "CONTINUAR" if mutation_step else "INICIAR"
 	if game.mode.ends_with("_mp") and not mutation_step:
 		action_label = "INICIAR" if game._manifest_mp_start_available() else ("CANCELAR PRONTO" if game.mp_local_ready else "PRONTO")
-	_draw_button(game, continue_rect, action_label, true, accent)
+	if action_label == "INICIAR" or action_label == "CONTINUAR":
+		RTBuildSelectPresentation.draw_go_button(game, continue_rect, action_label)
+	else:
+		_draw_button(game, continue_rect, action_label, true, accent)
 	_draw_button(game, back_rect, "VOLTAR", false, Color(0.63, 0.65, 0.58))
 	game._draw_centered("A / D  OU  ◀ / ▶  ALTERA A ESCOLHA", Vector2(viewport.x * 0.5, continue_rect.get_center().y + 4.0), 9 if compact else 11, Color(0.74, 0.76, 0.69, 0.84))
 
@@ -258,8 +304,17 @@ static func _draw_henry_preview_reserve(game: Node2D, rect: Rect2, mutation_step
 	game._draw_centered("MÓDULO VISUAL RESERVADO PARA UMA ATUALIZAÇÃO FUTURA", rect.get_center() + Vector2(0.0, 13.0), 7 if compact else 8, Color(0.58, 0.6, 0.56, 0.78))
 
 
+static func _henry_choice_icon_texture(key: String) -> Texture2D:
+	if _henry_choice_icon_textures.has(key):
+		return _henry_choice_icon_textures[key] as Texture2D
+	var path := String(HENRY_CHOICE_ICON_PATHS.get(key, ""))
+	var texture := load(path) as Texture2D if path != "" else null
+	_henry_choice_icon_textures[key] = texture
+	return texture
+
+
 static func _draw_henry_choice_icon(game: Node2D, key: String, center: Vector2, radius: float, accent: Color, opacity: float) -> void:
-	var icon_texture: Texture2D = HENRY_CHOICE_ICON_TEXTURES.get(key)
+	var icon_texture: Texture2D = _henry_choice_icon_texture(key)
 	if icon_texture != null:
 		var icon_size := Vector2.ONE * radius * 2.3
 		game.draw_texture_rect(icon_texture, Rect2(center - icon_size * 0.5, icon_size), false, Color(1.0, 1.0, 1.0, opacity))

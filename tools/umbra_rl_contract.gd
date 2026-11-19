@@ -11,15 +11,17 @@ func _init() -> void:
 		quit(2)
 		return
 	var payload := {
-		"protocol": "ruptura_umbra_rl", "protocol_version": 1,
-		"observation_schema_version": ObservationSchema.SCHEMA_VERSION,
-		"feature_schema": ObservationSchema.feature_names(),
-		"action_schema": ObservationSchema.ACTIONS,
+		"protocol": "ruptura_umbra_rl", "protocol_version": 2,
+		"observation_schema_version": ObservationSchema.TRAINING_SCHEMA_VERSION,
+		"feature_schema": ObservationSchema.training_feature_names(),
+		"action_schema": ObservationSchema.TRAINING_ACTIONS,
 		"target_schema": MultiheadPolicy.TARGET_SCHEMA,
 		"spatial_schema": MultiheadPolicy.SPATIAL_SCHEMA,
 		"model_format": MultiheadPolicy.FORMAT,
-		"model_version": MultiheadPolicy.MODEL_VERSION,
-		"action_schema_version": MultiheadPolicy.ACTION_SCHEMA_VERSION
+		"model_version": MultiheadPolicy.TRAINING_MODEL_VERSION,
+		"action_schema_version": 3,
+		"fixed_tick_seconds": 1.0 / 60.0,
+		"information_mode": "oracle_state_solo_research"
 	}
 	var file := FileAccess.open(output_path, FileAccess.WRITE)
 	if file == null:
@@ -28,7 +30,7 @@ func _init() -> void:
 		return
 	file.store_string(JSON.stringify(payload, "\t"))
 	file.close()
-	print("UMBRA_RL_CONTRACT_OK features=%d actions=%d" % [ObservationSchema.feature_names().size(), ObservationSchema.ACTIONS.size()])
+	print("UMBRA_RL_CONTRACT_OK features=%d actions=%d" % [ObservationSchema.training_feature_names().size(), ObservationSchema.TRAINING_ACTIONS.size()])
 	quit(0)
 
 

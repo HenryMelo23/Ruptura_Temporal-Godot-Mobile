@@ -13,8 +13,6 @@ const CombatTextPresentation = preload("res://scripts/presentation/combat_text_p
 const GravitanteVfx = preload("res://scripts/presentation/gravitante_vfx_presentation.gd")
 const LaceranteVfx = preload("res://scripts/presentation/lacerante_vfx_presentation.gd")
 const RangedAttackRange = preload("res://scripts/systems/ranged_attack_range.gd")
-const BombasticaSceneVfx = preload("res://scripts/vfx/bombastica_scene_vfx.gd")
-const ChainVisualPhysics = preload("res://scripts/vfx/chain_visual_physics.gd")
 const EntityVisualProfiles = preload("res://scripts/vfx/entity_visual_profiles.gd")
 const MenusPresentation = preload("res://scripts/presentation/menus_presentation.gd")
 const CharacterSelectPresentation = preload("res://scripts/presentation/character_select_presentation.gd")
@@ -25,7 +23,8 @@ const AmberSuturerPresentation = preload("res://scripts/presentation/phase6_ambe
 const WorldEnvironmentPresentation = preload("res://scripts/presentation/world_environment_presentation.gd")
 const PhaseMapPresentation = preload("res://scripts/presentation/phase_map_presentation.gd")
 const ExperimentalPhasePresentation = preload("res://scripts/presentation/experimental_phase_presentation.gd")
-const GeovanaBarkControllerScript = preload("res://scripts/presentation/geovana_bark_controller.gd")
+const SpeechBubblesScript = preload("res://scripts/presentation/speech_bubble_controller.gd")
+const GeovanaFirstRunMonologueScript = preload("res://scripts/systems/tutorial/geovana_first_run_monologue.gd")
 var phase_map_layer: Node2D
 const EntitiesPresentation = preload("res://scripts/presentation/entities_presentation.gd")
 const SettingsController = preload("res://scripts/ui/settings_controller.gd")
@@ -34,6 +33,7 @@ const MENU_PRESENTATION = preload("res://scripts/ui/menu_presentation.gd")
 
 const AuraSystem = preload("res://scripts/aura_system.gd")
 const CatalogInterface = preload("res://scripts/catalog/catalog_interface.gd")
+# Catalog entries consume the same five-item manifestation roster declared here.
 const CatalogRepository = preload("res://scripts/catalog/catalog_repository.gd")
 const CatalogDetails = preload("res://scripts/catalog/catalog_details.gd")
 const RTIntegrityCoreScript = preload("res://scripts/rt_integrity_core.gd")
@@ -57,18 +57,22 @@ const ExperimentalPhaseControllerScript = preload("res://scripts/systems/phase/e
 const RuntimeProgressionControllerScript = preload("res://scripts/systems/progression/runtime_progression_controller.gd")
 const RuntimeDropModeControllerScript = preload("res://scripts/systems/progression/runtime_drop_mode_controller.gd")
 const EnemyManagerScript = preload("res://scripts/systems/enemy_manager.gd")
+const RuntimeTargetingControllerScript = preload("res://scripts/systems/combat/runtime_targeting_controller.gd")
+const RegularEnemyBalance = preload("res://scripts/systems/enemies/regular_enemy_balance.gd")
 const Phase2SineiroBorealControllerScript = preload("res://scripts/systems/enemies/phase2_sineiro_boreal_controller.gd")
 const Phase3EnemyControllerScript = preload("res://scripts/systems/enemies/phase3_enemy_controller.gd")
 const Phase6AmberSuturerControllerScript = preload("res://scripts/systems/enemies/phase6_amber_suturer_controller.gd")
 const EarlyBossControllerScript = preload("res://scripts/systems/early_boss_controller.gd")
 const ModernBossControllerScript = preload("res://scripts/systems/modern_boss_controller.gd")
 const PlayerControlControllerScript = preload("res://scripts/systems/player/player_control_controller.gd")
-const NecronadaAbilityControllerScript = preload("res://scripts/systems/abilities/necronada_ability_controller.gd")
-const AncoradaAbilityControllerScript = preload("res://scripts/systems/abilities/ancorada_ability_controller.gd")
 const HenryIncendiaryAbilityControllerScript = preload("res://scripts/systems/abilities/henry_incendiary_ability_controller.gd")
 const HenryBarometricAbilityControllerScript = preload("res://scripts/systems/abilities/henry_barometric_ability_controller.gd")
 const HenryColossusAbilityControllerScript = preload("res://scripts/systems/abilities/henry_colossus_ability_controller.gd")
 const ReactiveSurvivalCardControllerScript = preload("res://scripts/systems/cards/reactive_survival_card_controller.gd")
+const RoguelikePointCardControllerScript = preload("res://scripts/systems/cards/roguelike_point_card_controller.gd")
+const CardPowerFeedbackControllerScript = preload("res://scripts/systems/cards/card_power_feedback_controller.gd")
+const PointBoostPickupControllerScript = preload("res://scripts/systems/progression/point_boost_pickup_controller.gd")
+const MerchantRiftControllerScript = preload("res://scripts/systems/shop/merchant_rift_controller.gd")
 const RuntimeEventDirectorScript = preload("res://scripts/systems/events/runtime_event_director.gd")
 const Phase3RitualPulseControllerScript = preload("res://scripts/systems/events/phase3_ritual_pulse_controller.gd")
 const Phase4InstabilityPulseControllerScript = preload("res://scripts/systems/events/phase4_instability_pulse_controller.gd")
@@ -79,13 +83,18 @@ const UmbraNeuralRuntime = preload("res://scripts/systems/umbra_neural_runtime.g
 const RTBossPartyScaling = preload("res://scripts/systems/boss_party_scaling.gd")
 const RTSharedBossAttackContractScript = preload("res://scripts/systems/bosses/shared_boss_attack_contract.gd")
 const RTBoss4InstabilityFissureControllerScript = preload("res://scripts/systems/bosses/boss4_instability_fissure_controller.gd")
+const RTBoss4ControllerScript = preload("res://scripts/systems/bosses/boss4_controller.gd")
 const RuntimeAssetController = preload("res://scripts/systems/assets/runtime_asset_controller.gd")
 const RuntimeCollectionUtils = preload("res://scripts/systems/runtime_collection_utils.gd")
+const RuntimePerformanceControllerScript = preload("res://scripts/systems/performance/runtime_performance_controller.gd")
+const RuntimeWorkSchedulerScript = preload("res://scripts/systems/performance/runtime_work_scheduler.gd")
+const RuntimeProjectileBatchRendererScript = preload("res://scripts/presentation/runtime_projectile_batch_renderer.gd")
+const RuntimeSpriteBatchRendererScript = preload("res://scripts/presentation/runtime_sprite_batch_renderer.gd")
 
 const DEFAULT_WORLD_SIZE := Vector2(1600, 900)
 var WORLD_SIZE := DEFAULT_WORLD_SIZE
-const GAME_VERSION: = "2.0.53"
-const GAME_VERSION_CODE: = 25300
+const GAME_VERSION: = "2.1.4"
+const GAME_VERSION_CODE: = 27400
 const RUN_MODE_SHOP := "shop"
 const RUN_MODE_DROP := "drop"
 const ContentPackState = preload("res://scripts/systems/content_pack_state.gd")
@@ -179,8 +188,8 @@ const HENRY_MUTATIONS := [
 	{
 		"key": "incendiario",
 		"name": "Incendiário",
-		"desc": "Fagulhas, cone de chamas e uma onda de calor que intensifica a Incandescência.",
-		"details": "ATK: fagulhas que renovam a queimação\nHAB1: cone de chamas; mais perto, mais dano\nULT: onda de calor de 280 px e Incandescência",
+		"desc": "Estalos de fogo acumulam até 5 Queimaduras; o 3º golpe é uma bola de fogo que explode. Habilidades consomem as cargas em dano verdadeiro.",
+		"details": "ATK: Estalo Ígneo, 3º golpe explode e queima em área\nHAB1: cone mais 3 explosões defensivas com empurrão\nULT: 3 ondas de calor; DASH: Rastro de Brasa, investida que deixa o chão em chamas",
 		"color": Color(1.0, 0.28, 0.06),
 		"accent": Color(1.0, 0.78, 0.18),
 	},
@@ -204,9 +213,9 @@ const HENRY_MUTATIONS := [
 const HENRY_EFFECTS := [
 	{
 		"key": "incandescencia",
-		"name": "Incandescência",
-		"desc": "Dano sofrido acumula Atrito. Periodicamente, Henry o libera em uma aura de fogo; inimigos próximos queimam mais quanto mais tempo permanecem nela.",
-		"details": "Queimação causa ticks proporcionais ao dano por 1,5 s. A ULT Incendiária renova o efeito e, em alvos já queimando, aumenta dano e cadência por 3 s.",
+		"name": "Combustão em Cadeia",
+		"desc": "Inimigos que morrem queimando explodem e passam as cargas de Queimadura para quem estiver perto, em reação em cadeia.",
+		"details": "Mais cargas = explosão maior e mais forte. Com outras Mutações, cada 3º golpe no mesmo alvo acende 1 Queimadura.",
 		"color": Color(1.0, 0.42, 0.08),
 		"accent": Color(1.0, 0.9, 0.36),
 	},
@@ -227,12 +236,16 @@ const HENRY_EFFECTS := [
 		"accent": Color(0.94, 0.84, 0.58),
 	}
 ]
-const HENRY_BURN_DURATION := 1.5
+const HENRY_BURN_DURATION := 6.0
 const HENRY_BURN_TICK_INTERVAL := 0.30
 const HENRY_BURN_DAMAGE_RATIO := 0.12
 const HENRY_BURN_OVERDRIVE_DURATION := 3.0
 const HENRY_BURN_OVERDRIVE_DAMAGE_MULT := 1.55
 const HENRY_BURN_OVERDRIVE_TICK_MULT := 0.58
+const HENRY_BURN_STACK_MAX := 5
+const HENRY_BURN_WEAKNESS_PER_STACK := 0.025
+const HENRY_TRUE_DAMAGE_RATE_PER_STACK := 0.006
+const HENRY_TRUE_DAMAGE_BOSS_RATE_PER_STACK := 0.003
 const HENRY_FRICTION_MAX := 100.0
 const HENRY_FRICTION_RELEASE_INTERVAL := 5.0
 const HENRY_FRICTION_MIN_RELEASE := 8.0
@@ -246,10 +259,16 @@ const HENRY_SKILL_CAST_DURATION := 1.0
 const HENRY_SKILL_IMPACT_TIME := 0.46
 const HENRY_SKILL_RANGE := 360.0
 const HENRY_SKILL_HALF_ANGLE := 0.52
+const HENRY_SKILL_GUARD_RADIUS := 118.0
 const HENRY_ULTIMATE_RADIUS := 280.0
 const HENRY_ULTIMATE_CAST_DURATION := 0.8
 const HENRY_ULTIMATE_WAVE_DURATION := 0.72
+const HENRY_ULTIMATE_PULSE_COUNT := 3
 const HENRY_ULTIMATE_FRAME_COUNT := 8
+const HENRY_SPIN_DURATION := 0.32
+const HENRY_SPIN_DASH_DURATION := 0.2
+const HENRY_SPIN_EXPLOSION_RADIUS := 110.0
+const HENRY_SPIN_FRAME_COUNT := 8
 const HENRY_ENTRY_DURATION := 3.15
 const HENRY_ENTRY_FRAME_COUNT := 12
 const HENRY_SHOP_ENTRY_FRAME_COUNT := 8
@@ -323,7 +342,7 @@ const TUTORIAL_STEP_TEXTS: = {
 	},
 	TUTORIAL_STATE_SHOP: {
 		"title": "LOJA TEMPORAL",
-		"body": "A loja pausa a run e oferece cartas para mudar sua build. Se fechar sem querer, voce pode reabrir uma vez por alguns segundos; depois a loja manual espera 30s, sem tirar pontos.",
+		"body": "A loja pausa a run e oferece cartas para mudar sua build. Ela so abre pela Fenda do Mercador: siga a nevoa ate a fenda quando ela surgir.",
 		"hint": "Compras e rerolls pagos ainda gastam pontos normalmente."
 	},
 	TUTORIAL_STATE_BOSS_CALL: {
@@ -354,7 +373,12 @@ const DISCORD_WEBHOOK_CONFIG_PATHS: = ["user://run_reporter.cfg", "res://discord
 const DEFAULT_DISCORD_WEBHOOK_URL: = "https://discord.com/api/webhooks/1526689695688298518/gqeI6uzw0yC6LLAVe4v1PqICJIMHos1tgq9g288HQQ31Y2CaBNd_oc0NdZG3Tf-hY7IU"
 const INTERRUPTED_RUN_SAVE_PATH: = "user://interrupted_run.save"
 const INTERRUPTED_RUN_AUTOSAVE_INTERVAL: = 12.0
-const ONLINE_RELAY_BASE_URL: = "http://72.61.217.238:8090"
+## Endereco do relay publico. Deixou de ser const para o ambiente isolado de
+## staging poder apontar para outra instancia durante a auditoria do tunel.
+## O padrao continua sendo producao e nenhum caminho do jogo altera o valor
+## sozinho: so um argumento explicito de linha de comando em teste muda isso.
+const ONLINE_RELAY_BASE_URL_DEFAULT: String = "http://72.61.217.238:8090"
+var ONLINE_RELAY_BASE_URL: String = ONLINE_RELAY_BASE_URL_DEFAULT
 const APP_UPDATE_ANDROID_LATEST_PATH: = "/updates/android/latest"
 const APP_UPDATE_ANDROID_DOWNLOAD_PREFIX: = "/updates/android/download/"
 const APP_UPDATE_WINDOWS_LATEST_PATH: = "/updates/windows/latest"
@@ -365,6 +389,7 @@ const APP_UPDATE_VETERAN_UNLOCKS_PATH: = "/updates/unlocks/veteran"
 const APP_UPDATE_LATEST_PATH: = APP_UPDATE_ANDROID_LATEST_PATH
 const APP_UPDATE_DOWNLOAD_PREFIX: = APP_UPDATE_ANDROID_DOWNLOAD_PREFIX
 const APP_UPDATE_CHECK_DELAY: = 1.0
+const APP_UPDATE_CHECK_RETRY_DELAYS: = [2.0, 5.0, 15.0, 30.0]
 const CONTENT_UPDATE_LATEST_PATH: = "/updates/content/latest"
 const CONTENT_UPDATE_DOWNLOAD_PREFIX: = "/updates/content/download/"
 const CONTENT_UPDATE_CHECK_DELAY: = 1.45
@@ -375,7 +400,7 @@ const APP_UPDATE_DOWNLOAD_TIMEOUT: = 1800.0
 const APP_UPDATE_HASH_CHUNK_BYTES: = 1024 * 1024
 const APP_UPDATE_PLUGIN_NAME: = "RupturaStreamer"
 const APP_UPDATE_STORAGE_DIR: = "user://updates"
-var APP_UPDATE_CACHED_EXTENSIONS: = ["apk", "idsig", "exe", "x86_64", "tmp", "part"]
+var APP_UPDATE_CACHED_EXTENSIONS: = ["apk", "idsig", "exe", "x86_64", "tmp", "part", "resume"]
 const INPUT_BIND_NONE: = ""
 const INPUT_BIND_KEY_PREFIX: = "KEY:"
 const INPUT_BIND_MOUSE_PREFIX: = "MOUSE:"
@@ -390,7 +415,8 @@ const RUN_LEADERBOARD_VIEW_PATH: = "/leaderboard"
 const UMBRA_MIND_LATEST_PATH: = "/umbra/mind/latest"
 const UMBRA_MIND_STORAGE_DIR: = "user://umbra_mind"
 const UMBRA_MIND_STATE_PATH: = "user://umbra_mind/state.json"
-const UMBRA_MIND_CHECK_INTERVAL_SECONDS: int = 7 * 24 * 60 * 60
+## A mente coletiva muda a cada partida: consulta no menu, no maximo a cada 10 min.
+const UMBRA_MIND_CHECK_INTERVAL_SECONDS: int = 10 * 60
 const RUN_REPORT_INTEGRITY_VERSION: = 1
 const RUN_REPORT_INTEGRITY_SALT: = "ruptura-temporal-run-integrity-v1-2.0.30c"
 const RUN_SECURITY_CHECKPOINT_INTERVAL: = 120.0
@@ -459,18 +485,21 @@ const LONG_RUN_ENEMY_LIMIT_BROKEN_BONUS: = 3
 const LONG_RUN_ENEMY_LIMIT_ENDLESS_BONUS: = 5
 const INITIAL_PHASE_ROLL_POOL: = [1, 6]
 const INITIAL_PHASE_ALTERNATE_BIAS: = 0.68
-const INITIAL_PHASE_QUICK_EXIT_BIAS: = 0.82
+const INITIAL_PHASE_QUICK_EXIT_BIAS: = 1.0
 const INITIAL_PHASE_QUICK_EXIT_TIME: = 45.0
 const PHASE1_STALKER_UNLOCK_TIME: = 300.0
 const PHASE1_PROJECTOR_UNLOCK_TIME: = 420.0
 const PHASE1_SHIELD_CRYSTAL_UNLOCK_TIME: = 540.0
 const PHASE1_CURATER_UNLOCK_TIME: = 720.0
 const PHASE1_REVIVATOR_UNLOCK_TIME: = 900.0
-const PHASE1_LIMIT_BREAK_TIME: = 960.0
+const PHASE1_LIMIT_BREAK_TIME: = 600.0
 const PHASE1_LIMIT_KILLS_PER_EXTRA: = 30
 const PHASE1_SECONDARY_LARAPIO_SPAWN_TIME: = 240.0
-const PHASE1_SECONDARY_LARAPIO_HP_MULT: = 1.28
+const PHASE1_SECONDARY_LARAPIO_HP_MULT: = 1.34
 const PHASE1_SECONDARY_LARAPIO_DAMAGE_MULT: = 1.18
+const LARAPIO_BASE_HP_MULT: = 1.35
+const LARAPIO_HP_TIME_SCALE: = 0.0065
+const LARAPIO_HP_KILL_SCALE: = 0.0025
 const ANOMALIA_ESPREITADOR_TIME: = PHASE1_STALKER_UNLOCK_TIME
 const ANOMALIA_PROJETADOR_TIME: = PHASE1_PROJECTOR_UNLOCK_TIME
 const ANOMALIA_CRISTALIZADOR_TIME: = PHASE1_SHIELD_CRYSTAL_UNLOCK_TIME
@@ -580,21 +609,41 @@ const AGUILHAO_PULSE_SLOW_DURATION: = 1.15
 const CURATER_HEAL_INTERVAL: = 1.0
 const CURATER_HEAL_LOST_PERCENT: = 0.2
 const CURATER_MITIGATION: = 0.42
+## Movimento de suporte do Curater (ver _curater_move_dir).
+const CURATER_BEHIND_DISTANCE: float = 72.0
+const CURATER_ARRIVE_DISTANCE: float = 14.0
+const CURATER_PANIC_DISTANCE: float = 170.0
+const CURATER_ALONE_MIN_DISTANCE: float = 280.0
+const CURATER_ALONE_MAX_DISTANCE: float = 420.0
+const CURATER_ESCORT_SEARCH_RADIUS: float = 620.0
+const CURATER_ESCORT_RETHINK_TIME: float = 0.8
 const FUSION_CHECK_INTERVAL: = 1.0
-const FUSION_RADIUS: = 90.0
+const FUSION_RADIUS: = 110.0
 const FUSION_REQUIRED: = 3
-const FUSION_TIME: = 120.0
+## Segundos SEGUIDOS que o bolo de Errantes precisa ficar junto. Eram 120 s
+## acumulados: na pratica nenhum Errante vivia tanto e o Aglomerador so
+## aparecia pelos ecos do Arauto.
+const FUSION_TIME: = 5.0
+## A partir daqui o bolo comeca a pulsar, avisando que vai fundir.
+const FUSION_WARN_TIME: = 2.0
+## Teto de Aglomeradores vivos e respiro entre duas fusoes.
+const FUSION_MAX_ALIVE: = 2
+const FUSION_COOLDOWN: = 28.0
 const CARD_COST_BASE: = 500
 const PHASE_POINT_CRYSTAL_KIND: = "phase_point_crystal"
 const ENEMY_POINT_ORB_KIND: = "enemy_point"
+const POINT_BOOST_PICKUP_KIND: = "point_boost"
 const ENEMY_POINT_DROP_LIFE: = 180.0
 const ENEMY_POINT_PICKUP_RADIUS: = 72.0
 const ENEMY_POINT_ABSORB_RADIUS: = 18.0
 const ENEMY_POINT_MAGNET_START_SPEED: = 155.0
 const ENEMY_POINT_MAGNET_ACCELERATION: = 420.0
 const ENEMY_POINT_MAGNET_MAX_SPEED: = 1350.0
-const ENEMY_POINT_MERGE_RADIUS: = 20.0
-const ENEMY_POINT_MAX_ACTIVE: = 256
+# Point value is conserved when nearby shards merge or the safety cap is hit.
+# Keeping a small number of richer shards prevents an uncollected trail from
+# turning into hundreds of animated CanvasItem commands during long runs.
+const ENEMY_POINT_MERGE_RADIUS: = 72.0
+const ENEMY_POINT_MAX_ACTIVE: = 24
 const PHASE_POINT_CRYSTAL_MIN_COUNT: = 4
 const PHASE_POINT_CRYSTAL_MAX_COUNT: = 6
 const PHASE_POINT_CRYSTAL_CARD_COST_RATIO: = 0.25
@@ -615,24 +664,24 @@ const BARGAIN_CAPSULE_FIRST_CHECK_TIME: = 105.0
 const BARGAIN_CAPSULE_CHECK_INTERVAL_MIN: = 115.0
 const BARGAIN_CAPSULE_CHECK_INTERVAL_MAX: = 170.0
 const BARGAIN_CAPSULE_SPAWN_CHANCE: = 0.18
+## Enquanto a missao "estabilizar a fenda" (salvar capsulas) esta aberta.
+const BARGAIN_CAPSULE_MISSION_SPAWN_CHANCE: = 0.45
 const BARGAIN_CAPSULE_PREPARE_TIME: = 1.05
 const BARGAIN_CAPSULE_FALL_TIME: = 0.9
-const BARGAIN_CAPSULE_ACTIVE_TIME: = 13.0
+const BARGAIN_CAPSULE_ACTIVE_TIME: = 15.0
 const BARGAIN_CAPSULE_CLEANUP_TIME: = 1.2
 const BARGAIN_CAPSULE_SHOP_CLAIM_TIME: = 45.0
 const BARGAIN_CAPSULE_SHOP_MIN_AVAILABLE_TIME: = 15.0
 const BARGAIN_CAPSULE_BASE_HP: = 170.0
 const BARGAIN_CAPSULE_RADIUS: = 46.0
 const BARGAIN_CAPSULE_SAFE_MARGIN: = Vector2(150.0, 120.0)
-const BARGAIN_CAPSULE_FAIL_ENEMY_COUNT_SOLO: = 4
-const BARGAIN_CAPSULE_FAIL_ENEMY_COUNT_DUO: = 6
-const BARGAIN_CAPSULE_FAIL_ENEMY_COUNT_TRIO: = 8
+const BARGAIN_CAPSULE_COUNT: = 3
+const BARGAIN_CAPSULE_MIN_SEPARATION: = 300.0
+const BARGAIN_CAPSULE_FAIL_ENEMY_COUNT: = 3
 const BARGAIN_CAPSULE_DISCOUNT_RANGES: = [
-	{"id": "pequeno", "min": 0.05, "max": 0.15, "weight": 10.0},
-	{"id": "bom", "min": 0.15, "max": 0.25, "weight": 28.0},
-	{"id": "otimo", "min": 0.25, "max": 0.40, "weight": 34.0},
-	{"id": "grande", "min": 0.40, "max": 0.50, "weight": 18.0},
-	{"id": "absurdo", "min": 0.50, "max": 0.65, "weight": 10.0}
+	{"id": "uma_capsula", "min": 0.10, "max": 0.20},
+	{"id": "duas_capsulas", "min": 0.25, "max": 0.40},
+	{"id": "tres_capsulas", "min": 0.45, "max": 0.65}
 ]
 const FORCED_SHOP_CARDS: = 6
 const FORCED_SHOP_WARNING: = 15.0
@@ -724,10 +773,14 @@ const ELETRICA_WAVE_RECOIL_MIN_SPEED: = 4.8
 const SECONDARY_LACERANTE_DURATION: = 3.0
 const LACERANTE_ATTACK_REACH_BONUS: = 15.0
 const LACERANTE_REACH_PER_20_COAGULA: = 5.0
+## ATK Reforcado: lamina um pouco mais longa (alcance leve, nao um novo ataque).
+const LACERANTE_EMPOWER_REACH_BONUS: = 22.0
+## Distancia lateral que o corte ainda pega em volta da polilinha da lamina.
+const LACERANTE_BLADE_WIDTH: = 52.0
 const LACERANTE_ULT_EXTRA_CUTS_PER_20_COAGULA: = 2
 const LACERANTE_COAGULUM_DAMAGE_RATE: = 0.003
 const LACERANTE_COAGULUM_ATTACK_SPEED_RATE: = 0.0025
-const LACERANTE_EMPOWER_COOLDOWN: = 3.0
+const LACERANTE_EMPOWER_COOLDOWN: = 10.0
 const LACERANTE_EMPOWER_DAMAGE_MULT: = 1.45
 const LACERANTE_UNCOMMON_POINTS_MULT: = 1.5
 const LACERANTE_Q_DURATION: = 1.5
@@ -767,66 +820,40 @@ const SECONDARY_PRISMATICA_ZAP_RADIUS: = 430.0
 const SECONDARY_PRISMATICA_ZAP_INTERVAL: = 0.24
 const SECONDARY_PRISMATICA_ZAP_LIFE: = 0.18
 const SECONDARY_PRISMATICA_ZAP_MAX_PER_TICK: = 4
-const SECONDARY_RETORNANTE_DURATION: = 8.0
 const SECONDARY_PARASITICA_DURATION: = 8.0
-const PARASITE_MARK_DURATION: = 6.0
+const PARASITE_MARK_DURATION: = 8.0
 const PARASITE_FEAST_DURATION: = 8.0
 const PARASITE_ULTIMATE_MAX_DURATION: = 11.5
 const PARASITE_SPIT_RADIUS: = 155.0
 const PARASITE_SPIT_DURATION: = 4.8
 const PARASITE_SPIT_TRAVEL: = 0.46
 const SECONDARY_GRAVITANTE_DURATION: = 8.0
-const SECONDARY_ANCORADA_DURATION: = 10.0
-const SECONDARY_ANCORADA_COOLDOWN: = 65.0
-const ANCORADA_ULTIMATE_RADIUS: = 350.0
-const ANCORADA_ULTIMATE_DROP_INTERVAL: = 1.5
-const ANCORADA_ULTIMATE_FALL_TIME: = 0.62
-const ANCORADA_ULTIMATE_IMPACT_RADIUS: = 78.0
-const ANCORADA_ULTIMATE_DAMAGE_MULT: = 1.85
-const ANCORADA_ULTIMATE_BOSS_DAMAGE_MULT: = 1.15
-const ANCORADA_ULTIMATE_SLOW_DURATION: = 2.2
-const ANCORADA_ULTIMATE_SLOW_MULT: = 0.35
-const ANCORADA_ULTIMATE_MOMENTUM_DISTANCE: float = 520.0
-const ANCORADA_ULTIMATE_MOMENTUM_DECAY: float = 0.06
-const ANCORADA_ULTIMATE_ATTACK_SPEED_BONUS: float = 0.18
-const ANCORADA_ULTIMATE_DROP_INTERVAL_BONUS: float = 0.42
-const ANCORADA_ULTIMATE_TRAIL_INTERVAL: float = 0.12
-const ANCORADA_ULTIMATE_TRAIL_POINTS: int = 9
 
-const ANCORADA_LASTRO_MAX_STACKS: int = 5
-const ANCORADA_LASTRO_POINTS_PER_STACK: int = 4
-const ANCORADA_LASTRO_BASIC_MAX_POINTS_PER_PROJECTILE: int = 2
-const ANCORADA_LASTRO_E_MAX_POINTS_PER_DROP_CYCLE: int = 4
-const ANCORADA_LASTRO_DECAY_DELAY: float = 8.0
-const ANCORADA_LASTRO_DECAY_INTERVAL: float = 2.0
-const ANCORADA_LASTRO_KNOCKBACK_RESIST_PER_STACK: float = 0.04
-const ANCORADA_LASTRO_DAMAGE_PER_STACK: float = 0.04
-const ANCORADA_LASTRO_ATTACK_SPEED_PER_STACK: float = 0.02
 
-const ANCORADA_ANCHOR_LIFE: float = 7.0
-const ANCORADA_ANCHOR_MAX_ACTIVE: int = 5
-const ANCORADA_ANCHOR_CLAIM_RADIUS: float = 74.0
-const ANCORADA_ANCHOR_CLAIM_LASTRO_POINTS: int = 2
-const ANCORADA_TETHER_WIDTH: float = 34.0
-const ANCORADA_TETHER_SCAN_INTERVAL: float = 0.12
-const ANCORADA_TETHER_DAMAGE_MULT: float = 0.22
-const ANCORADA_TETHER_BOSS_DAMAGE_MULT: float = 0.12
-const ANCORADA_TETHER_SLOW_DURATION: float = 0.7
-const ANCORADA_TETHER_SLOW_MULT: float = 0.78
 
-const ANCORADA_HAB1_COOLDOWN: float = 11.0
-const ANCORADA_HAB1_TELEGRAPH_TIME: float = 0.10
-const ANCORADA_HAB1_FALL_TIME: float = 0.28
-const ANCORADA_HAB1_IMPACT_TIME: float = 0.38
-const ANCORADA_HAB1_CRACK_DURATION: float = 2.4
-const ANCORADA_HAB1_PULL_BASE: float = 0.22
-const ANCORADA_HAB1_PULL_PER_LASTRO: float = 0.055
 
-const ANCORADA_BASIC_PROJECTILE_SPEED: float = 720.0
-const ANCORADA_BASIC_PROJECTILE_RANGE: float = 760.0
 const BOSS_READY_TIME: = 0.0
 const BOSS_CALL_COUNTDOWN: = 1.2
 const BOSS_BASE_HP: = 4860.0
+# A loja atual permite builds muito mais fortes. Esta camada e exclusiva dos
+# chefes e garante tempo para que cada encontro atravesse suas mecanicas.
+const BOSS_HP_DURABILITY_MODEL: String = "boss_hp_durability_v3_time_only"
+# v3 (2026-11-11): pedido de durabilidade ainda maior — dobro da tabela v2.
+const BOSS_HP_DURABILITY_BY_PHASE: Dictionary = {
+	1: 6.0,
+	2: 6.5,
+	3: 7.0,
+	4: 7.5,
+	5: 8.0,
+	6: 7.5,
+	7: 9.0,
+	8: 9.5,
+	9: 10.0
+}
+# 2026-11-18: curva super-linear (expoente > 1) — cada minuto a mais pesa mais
+# que o anterior. 10 min ~x1.9, 25 min ~x3.4, 60 min ~x7.3 (antes x1.4/x1.9/x2.9).
+const BOSS_TIME_HP_GROWTH_RATE: = 0.07
+const BOSS_TIME_HP_GROWTH_EXPONENT: = 1.1
 const BOSS_ARMOR: = 0.528
 const BOSS_ARMOR_TIME_PER_MIN: = 0.00055
 const BOSS_ARMOR_KILL_RATE: = 0.000025
@@ -965,11 +992,22 @@ const CARD_RARITY_COMMON: = "common"
 const CARD_RARITY_UNCOMMON: = "uncommon"
 const CARD_RARITY_RARE: = "rare"
 const CARD_RARITY_LEGENDARY: = "legendary"
-const RARE_CARD_NAMES: = ["Trembo", "Petro", "Poison", "Coletora", "Mercenaria", "Devorador de Destinos", "Mandamento da Ruptura", "Carta Zero", "Necrocronismo", "CoraÃ§Ã£o de AntimatÃ©ria", "Cofre do Excesso", "Egide Hemofaga"]
+const RARE_CARD_NAMES: = ["Trembo", "Petro", "Poison", "Coletora", "Mercenaria", "Devorador de Destinos", "Trégua Regenerativa", "Mandamento da Ruptura", "Carta Zero", "Necrocronismo", "Coração de Antimatéria", "Cofre do Excesso", "Egide Hemofaga"]
 const CARD_RARITY_COMMON_COLOR: = Color(0.96, 0.97, 1.0)
 const CARD_RARITY_UNCOMMON_COLOR: = Color(0.18, 0.62, 1.0)
 const CARD_RARITY_RARE_COLOR: = Color(1.0, 0.76, 0.12)
 const CARD_RARITY_LEGENDARY_COLOR: = Color(1.0, 0.36, 0.12)
+const COMMON_DISPARO_DAMAGE_GROWTH: = 1.20
+const COMMON_TEMPESTADE_FLAT_DAMAGE: = 8.0
+const COMMON_TEMPESTADE_CRIT_CHANCE: = 0.12
+const COMMON_DEFENSE_PER_COPY: = 5.0
+const COMMON_DEFENSE_CAP: = 50.0
+const MERCENARY_KILL_POINTS_PER_COPY: = 20
+const MERCENARY_CONTRACT_BASE_POINTS: = 35
+const MERCENARY_CONTRACT_POINTS_PER_COPY: = 50
+const MERCENARY_BONUS_CAP: = 750
+const LARAPIO_BASE_POINTS: = 240
+const ARAUTO_POINT_REWARD_CARD_COST_RATIO: = 1.0
 const BOSS_ATTACK_BASE_COOLDOWN: = 3.8
 const BOSS1_STAGE_APPROACH_SPEED: = 260.0
 const BOSS2_ENTRY_TIME: = 2.5
@@ -1052,7 +1090,7 @@ const BOSS1_WALK_AUDIO_VOLUME: = 0.13
 const PHASE_TRANSITION_HOLD_TIME: = 1.7
 const PHASE_TRANSITION_WIPE_TIME: = 2.0
 const PHASE_TRANSITION_TIME: = 3.7
-const DEATH_SCREEN_SLOW_TIME: = 0.85
+const DEATH_SCREEN_SLOW_TIME: = 1.65
 const RETRY_RETURN_ANIM_TIME: = 1.05
 const BOSS_FRAGMENT_PICKUP_RADIUS: = 42.0
 const MUSIC_PAUSE_FADE_TIME: = 3.0
@@ -1066,17 +1104,17 @@ const LARAPIO_STEAL_RATIO: = 0.6
 const LARAPIO_LOOT_RETURN_RATIO: = 0.9
 const LARAPIO_LOOT_BONUS_RATIO: = 0.15
 const LARAPIO_STUN_TIME: = 1.4
-const LARAPIO_THROW_INTERVAL: = 4.0
+const LARAPIO_THROW_INTERVAL: = 3.0
 const LARAPIO_DAMAGE_TAKEN_MULT: = 0.34
-const LARAPIO_AGGRESSIVE_AFTER: = 120.0
-const LARAPIO_AGGRESSIVE_THROW_INTERVAL: = 3.0
+const LARAPIO_AGGRESSIVE_AFTER: = 45.0
+const LARAPIO_AGGRESSIVE_THROW_INTERVAL: = 2.3
 const LARAPIO_AGGRESSIVE_STONE_SPEED_MULT: = 1.4
-const LARAPIO_DESPERATE_AFTER: = 90.0
-const LARAPIO_DESPERATE_HP_RATIO: = 0.38
-const LARAPIO_DESPERATE_THROW_INTERVAL: = 1.35
+const LARAPIO_DESPERATE_HP_RATIO: = 0.45
+const LARAPIO_DESPERATE_THROW_INTERVAL: = 2.15
+const LARAPIO_DESPERATE_MIN_THROW_INTERVAL: = 1.8
 const LARAPIO_DESPERATE_STONE_SPEED_MULT: = 1.45
 const LARAPIO_DESPERATE_STONE_DAMAGE_MULT: = 1.45
-const LARAPIO_DESPERATE_KEEP_DISTANCE: = 720.0
+const LARAPIO_DESPERATE_KEEP_DISTANCE: = 250.0
 const LARAPIO_IRRITATED_RADIUS: = 280.0
 const LARAPIO_IRRITATED_COIN_INTERVAL: = 2.55
 const LARAPIO_ULTIMATE_HP_RATIO: = 0.7
@@ -1096,62 +1134,14 @@ const LARAPIO_MONEY_LAUGH_INTERVAL: = 5.0
 const LARAPIO_COOLDOWN_STEP_TIME: = 180.0
 const LARAPIO_COOLDOWN_STEP_BONUS: = 18.0
 const LARAPIO_COOLDOWN_MAX_BONUS: = 150.0
-const LARAPIO_CARD_DROP_BASE: = 4
-const LARAPIO_CARD_DROP_CLEAN: = 5
+const LARAPIO_CARD_DROP_BASE: = 2
+const LARAPIO_CARD_DROP_CLEAN: = 3
 const LARAPIO_CARD_RARE_CHANCE: = 0.3
 const VORAZ_BITE_RADIUS: = 100.0
 const VORAZ_BOSS_BITE_RADIUS: = 152.0
 const VORAZ_BITE_INTERVAL: = 0.95
 const RATIONAL_TRAIL_SAMPLE_TIME: = 0.035
 const RATIONAL_TRAIL_LIFE: = 0.46
-const ECLIPSADA_ATTACK_HIT_INTERVAL: = 0.3
-const ECLIPSADA_ATTACK_CHAIN_COOLDOWN: = 1.2
-const ECLIPSADA_ATTACK_REACH: = 20.0
-const ECLIPSADA_ATTACK_AREA_RADIUS: = 80.0
-const ECLIPSADA_ATTACK_AREA_REACH: = 80.0
-const ECLIPSADA_ATTACK_SLASH_RADIUS: = 80.0
-const ECLIPSADA_LUA_BLADE_REACH: = 180.0
-const ECLIPSADA_LUA_BLADE_WIDTH: = 34.0
-const ECLIPSADA_LUA_BLADE_DAMAGE_MULT: = 0.78
-const ECLIPSADA_LUA_BLADE_CRIT_MULT: = 1.85
-const ECLIPSADA_FORM_LUA: = "lua"
-const ECLIPSADA_FORM_SOL: = "sol"
-const ECLIPSADA_SHURIKEN_RANGE: = 280.0
-const ECLIPSADA_SHURIKEN_FALL_RANGE: = 285.0
-const ECLIPSADA_LUA_SHURIKEN_SPEED: = 520.0
-const ECLIPSADA_SOL_SHURIKEN_SPEED: = 600.0
-const ECLIPSADA_LUA_SHURIKEN_DAMAGE_MULT: = 0.64
-const ECLIPSADA_SOL_SHURIKEN_DAMAGE_MULT: = 0.78
-const ECLIPSADA_SOL_SPLASH_RADIUS: = 54.0
-const ECLIPSADA_SOL_Q_RANGE: = 340.0
-const ECLIPSADA_SOL_E_RANGE: = 260.0
-const ECLIPSADA_SOL_E_RADIUS: = 170.0
-const ECLIPSADA_SOL_E_DURATION: = 3.2
-const ECLIPSADA_SOL_E_TICK: = 0.34
-const ECLIPSADA_Q_DASH_DISTANCE: = 20.0
-const ECLIPSADA_Q_SPEED_MULT: = 1.2
-const ECLIPSADA_Q_SPEED_TIME: = 6.0
-const ECLIPSADA_Q_STEALTH_TIME: = 5.0
-const ECLIPSADA_LUA_STEALTH_COOLDOWN: = 10.0
-const ECLIPSADA_LUA_STEALTH_SAFE_TIME: = 3.0
-const ECLIPSADA_LUA_STEALTH_DRAIN_BASE: = 0.0005
-const ECLIPSADA_LUA_STEALTH_DRAIN_STEP: = 0.0001
-const ECLIPSADA_Q_WEAKPOINT_TIME: = 5.0
-const ECLIPSADA_WEAKPOINT_RADIUS: = 18.0
-const ECLIPSADA_WEAKPOINT_DAMAGE_MULT: = 1.75
-const ECLIPSADA_E_AIM_RANGE: = 150.0
-const ECLIPSADA_E_CHAIN_RADIUS: = 90.0
-const ECLIPSADA_E_BASE_CUTS: = 6
-const ECLIPSADA_E_CUT_INTERVAL_BASE: = 0.18
-const ECLIPSADA_E_DAMAGE_SCALE: = 1.15
-const ECLIPSADA_E_MAX_TARGET_TIME: = 2.35
-const ECLIPSADA_LUA_E_DURATION: = 5.2
-const ECLIPSADA_LUA_E_RADIUS: = 172.0
-const ECLIPSADA_LUA_E_TICK: = 0.22
-const ECLIPSADA_LUA_E_MAX_TARGETS: = 3
-const ECLIPSADA_E_COOLDOWN: = 50.0
-const ECLIPSADA_PASSIVE_READY_TIME: = 80.0
-const ECLIPSADA_TRAIT_DURATION: = 60.0
 
 const ENEMY_COMMON: = "comum"
 const ENEMY_ATIRADOR: = "atirador"
@@ -1160,6 +1150,20 @@ const ENEMY_AGGLOMERATOR: = "aglomerador"
 const ENEMY_STALKER: = "espreitador"
 const ENEMY_PROJECTOR: = "projetador"
 const ENEMY_CRYSTAL: = "cristalizador"
+const STALKER_OPACITY_MULT: = 0.75
+## Camuflagem do Espreitador: distancia em que se revela, recarga apos se
+## revelar e transparencia (antes 0.32..0.72 de alfa base; agora mais sumido).
+const STALKER_CAMO_REVEAL_DISTANCE: float = 300.0
+const STALKER_CAMO_COOLDOWN: float = 5.0
+const STALKER_CAMO_ALPHA_MIN: float = 0.14
+const STALKER_CAMO_ALPHA_PULSE: float = 0.22
+const PROJECTOR_ATTACK_RANGE: = 420.0
+## Cadencia e velocidade do disparo do Projetador (antes 2.5 s e 210 u/s).
+const PROJECTOR_SHOOT_INTERVAL: float = 1.6
+const PROJECTOR_BULLET_SPEED_MULT: float = 1.5
+## Mantem o alcance do projetil (~670 u) com a velocidade maior.
+const PROJECTOR_BULLET_LIFE: float = 3.2 / PROJECTOR_BULLET_SPEED_MULT
+const CRYSTAL_DAMAGE_TAKEN_MULT: = 0.50
 const ENEMY_CURATER: = "curater"
 const ENEMY_LARAPIO: = "larapio"
 const ENEMY_COUT_ATTACK_SPEED: = "cout_attack_speed"
@@ -1264,6 +1268,9 @@ const BOSS7_ENTRY_TIME: = 1.65
 const BOSS7_VISUAL_SIZE: = Vector2(367.2, 334.8)
 const BOSS7_HIT_RADIUS: = 164.0
 const BOSS7_HP_SCALE: = 1.75
+const BOSS8_HP_SCALE: = 1.9
+const BOSS9_HP_SCALE: = 2.0
+const BOSS10_HP_SCALE: = 2.1
 const BOSS7_STATE_INTRO: = "intro"
 const BOSS7_STATE_FLY: = "fly"
 const BOSS7_STATE_FEATHER: = "feather_volley"
@@ -1320,13 +1327,20 @@ const PUSTULE_SPIT_SLOW_TIME: = 0.8
 const PUSTULE_SPIT_SLOW_MULT: = 0.1
 const PUSTULE_SPIT_SLOW_GRACE: = 2.0
 const PUSTULE_POOL_DURATION: = 5.0
-const PUSTULE_POOL_RADIUS: = 112.0
+const PUSTULE_POOL_RADIUS: = 192.0
 const PUSTULE_POOL_DAMAGE_RATE: = 0.018
 const PUSTULE_POOL_TICK: = 0.55
 const PUSTULE_FRAGMENT_COUNT: = 30
 const PUSTULE_FRAGMENT_MAX_DISTANCE: = 96.0
 const BOSS6_ENTRY_TIME: = 2.8
 const BOSS6_ENTRY_PARTICLES: = 420
+const BOSS6_HP_SCALE: = 4.5
+const BOSS6_STAGE_TWO_PCT: = 2.0 / 3.0
+const BOSS6_STAGE_THREE_PCT: = 1.0 / 3.0
+const BOSS6_STAGE_TRANSITION_TIME: = 1.45
+const BOSS6_STAGE_1_MOVE_SPEED: = 46.0
+const BOSS6_STAGE_2_MOVE_SPEED: = 78.0
+const BOSS6_STAGE_3_MOVE_SPEED: = 124.0
 const BOSS6_STATE_IDLE: = "idle"
 const BOSS6_STATE_TELEGRAPH: = "telegraph"
 const BOSS6_STATE_EXECUTING: = "executing"
@@ -1346,6 +1360,29 @@ const BOSS6_ABILITY_REFLUX: = "boss6_organic_reflux"
 const BOSS6_ABILITY_MIASMA_ULTIMATE: = "boss6_miasma_spiral"
 const BOSS6_ABILITY_FOSSIL_ECHO: = "boss6_fossil_echo"
 const BOSS6_ABILITY_NECRO_EROSION: = "boss6_necro_erosion"
+## Necro-Erosao encurtada (era 10 s): a janela de calcificacao pesa menos.
+const BOSS6_NECRO_EROSION_TIME: = 6.0
+## ----------------------------------------------------------- GEADA (fase 2)
+## O Sineiro Boreal nao congela de primeira: ele empilha geada. Cada carga
+## deixa o jogador mais lento e, ao encher, o corpo trava de vez.
+const FROST_MAX_STACKS: int = 4
+const FROST_SLOW_PER_STACK: = 0.10
+const FROST_DECAY_TIME: = 3.2
+const FROST_FREEZE_TIME: = 1.15
+## Chao congelado: o corpo demora a virar e continua escorregando.
+const ICE_SLIP_RESPONSE: = 3.2
+const ICE_SLIP_DECAY: = 1.25
+const ICE_SLIP_MIN: = 0.07
+## Corte de cura da fase 6: varias habilidades passam a aplicar. Diferente da
+## calcificacao (que zera a cura), este e parcial e dura pouco.
+const BOSS6_HEAL_CUT_TIME: = 4.0
+const BOSS6_HEAL_CUT_MULT: = 0.35
+## Fontes de dano do chefe 6 que carregam necrose suficiente para cortar cura.
+const BOSS6_HEAL_CUT_SOURCES: Array[String] = [
+	"boss6_necro_erosion_burn", "boss6_carnage_slime", "boss6_carnage_pool",
+	"boss6_reflux_wave", "boss6_cracked_heart_wave", "boss6_acid_pool",
+	"boss6_miasma_spiral", "boss6_fossil_echo_link", "boss6_chasing_crack",
+]
 const BOSS6_LEECH_MAX: = 6
 const BOSS6_PUSTULE_MAX: = 7
 const BOSS6_POOL_MAX: = 12
@@ -1407,6 +1444,8 @@ const SANGUESSUGA_DETECTION_RADIUS: = 200.0
 const SANGUESSUGA_ATTACK_ARM_TIME: = 2.0
 const SANGUESSUGA_CONTACT_GRACE_TIME: = 0.5
 const SANGUESSUGA_SOLITARY_RADIUS: = 220.0
+const SANGUESSUGA_SPAWN_MIN_DISTANCE: = 520.0
+const SANGUESSUGA_HIT_RADIUS: = 13.0
 const SANGUESSUGA_TRIGGER_TIME: = 0.28
 const SANGUESSUGA_LEAP_TIME_MIN: = 0.4
 const SANGUESSUGA_LEAP_TIME_MAX: = 0.55
@@ -1561,8 +1600,13 @@ const BOSS5_MIASMA_DURATION: = 4.5
 const BOSS5_DISCHARGE_WARNING: = 0.85
 const BOSS5_DISCHARGE_DURATION: = 1.25
 const BOSS5_THORNS_DURATION: = 3.4
-const BOSS5_OVERLOAD_LASER_ROTATION_FAST: = PI * 0.25
-const BOSS5_OVERLOAD_LASER_ROTATION_SLOW: = PI * 0.10
+# 2026-11-18: giro mais rapido (antes PI*0.25 / PI*0.10).
+const BOSS5_OVERLOAD_LASER_ROTATION_FAST: = PI * 0.40
+const BOSS5_OVERLOAD_LASER_ROTATION_SLOW: = PI * 0.17
+## Arrancada da UMBRA ate o centro ao iniciar a Rajada/Overdrive (antes 240 u/s).
+const BOSS5_OVERLOAD_LASER_DASH_SPEED: float = 680.0
+## Margem extra para o feixe desenhado passar da borda do mapa em qualquer angulo.
+const BOSS5_OVERLOAD_LASER_LENGTH_MARGIN: float = 400.0
 const BOSS5_RAT_DURATION: = 8.0
 const BOSS5_RAT_SPEED: = 212.0
 const BOSS5_RAT_DAMAGE: = 24
@@ -1583,19 +1627,9 @@ const APOLO_PHASE5_MANIFEST_PROFILES: = {
 	"eletrica": {"speed": 10.0, "lead": 0.70, "ideal": 330.0},
 	"lacerante": {"speed": 18.0, "lead": 0.34, "ideal": 230.0},
 	"prismatica": {"speed": 24.0, "lead": 0.95, "ideal": 390.0},
-	"retornante": {"speed": 12.0, "lead": 0.55, "ideal": 310.0},
 	"parasitica": {"speed": 10.0, "lead": 0.62, "ideal": 360.0},
 	"condutora": {"speed": 14.0, "lead": 0.78, "ideal": 340.0},
 	"gravitante": {"speed": 8.0, "lead": 0.45, "ideal": 300.0},
-	"ancorada": {"speed": 11.0, "lead": 0.38, "ideal": 260.0},
-	"cartografica": {"speed": 16.0, "lead": 0.72, "ideal": 350.0},
-	"mnesica": {"speed": 13.0, "lead": 0.66, "ideal": 320.0},
-	"ressonante": {"speed": 15.0, "lead": 0.58, "ideal": 315.0},
-	"contratual": {"speed": 12.0, "lead": 0.50, "ideal": 300.0},
-	"acorrentada": {"speed": 13.0, "lead": 0.42, "ideal": 250.0},
-	"eclipsada": {"speed": 17.0, "lead": 0.46, "ideal": 270.0},
-	"bombastica": {"speed": 11.0, "lead": 0.52, "ideal": 285.0},
-	"necronada": {"speed": 12.0, "lead": 0.48, "ideal": 300.0}
 }
 const PHASE4_RIFT_WARNING: = 0.85
 const PHASE4_RIFT_ACTIVE_TIME: = 2.8
@@ -1617,23 +1651,6 @@ const CARTO_TRACE_TIME: = 5.0
 const CARTO_POINT_TIME: = 3.8
 const CARTO_COMPLETE_MAP_TIME: = 5.2
 const CARTO_BOSS_DISPLACEMENT_REQUIRED: = 3
-const MNESIC_MEMORY_MAX: = 3
-const MNESIC_REENACT_RADIUS: = 380.0
-const MNESIC_TRICK_TIME: = 2.1
-const RESONANT_BEAT_INTERVAL: = 0.58
-const RESONANT_PERFECT_WINDOW: = 0.125
-const RESONANT_NOISE_LIMIT: = 3
-const CONTRACT_TRAP_LIFE: = 5.2
-const CONTRACT_MAX_INFRACTIONS: = 3
-const CONTRACT_ORDER_DURATION: = 30.0
-const CONTRACT_ORDER_SLOW_IN_TIME: = 3.0
-const CONTRACT_ORDER_REVEAL_TIME: = 1.5
-const CONTRACT_ORDER_SLOW_OUT_TIME: = 3.0
-const CONTRACT_ORDER_READ_END_TIME: = CONTRACT_ORDER_SLOW_IN_TIME + CONTRACT_ORDER_REVEAL_TIME
-const CONTRACT_ORDER_EXECUTION_START_TIME: = CONTRACT_ORDER_READ_END_TIME + CONTRACT_ORDER_SLOW_OUT_TIME
-const CONTRACT_ORDER_COOLDOWN: = 180.0
-const CONTRACT_ORDER_REWARD_TIME: = 60.0
-const CONTRACT_ORDER_PENALTY_TIME: = 120.0
 const COUT_AS_SPAWN_TIME: = PHASE1_REVIVATOR_UNLOCK_TIME
 const COUT_AS_AURA_RADIUS: = 215.0
 const COUT_AS_RECONSTITUTE_HP_RATIO: = 0.25
@@ -1650,6 +1667,10 @@ const SHIELD_REFLECTOR_BACK_DOT: = -0.42
 const SHIELD_REFLECTOR_DAMAGE_REDUCTION: = 0.22
 const SHIELD_REFLECTOR_BACK_DAMAGE_MULT: = 1.18
 const SHIELD_REFLECTOR_REFLECT_DAMAGE_MULT: = 0.7
+## Velocidade base de todo projetil inimigo (speed_mult = 1.0).
+const ENEMY_BULLET_BASE_SPEED: float = 210.0
+## Distancia que o tiro refletido percorre (era 210 * 1.42 * 2.7 s).
+const SHIELD_REFLECTOR_REFLECT_RANGE: float = 805.0
 const SHIELD_REFLECTOR_ACTIVE_TIME: = 15.0
 const SHIELD_REFLECTOR_DOWN_TIME: = 20.0
 const SHIELD_REFLECTOR_UNBURDENED_SPEED_MULT: = 2.4
@@ -1659,112 +1680,6 @@ const HUD_CONTROL_SCALE_MAX: = 2.5
 const HUD_ATTACK_SCALE_MAX: = 3.0
 const HUD_PANEL_SCALE_MIN: = 0.6
 const HUD_PANEL_SCALE_MAX: = 2.5
-const ACORRENTADA_MAX_ELOS: = 3
-const ACORRENTADA_ELO_TIME: = 6.0
-const ACORRENTADA_COMBO_RESET_TIME: = 2.8
-const ACORRENTADA_TENSION_DECAY_DELAY: = 3.0
-const ACORRENTADA_Q_DURATION: = 3.5
-const ACORRENTADA_Q_OVERCHARGE_DURATION: = 4.4
-const ACORRENTADA_Q_LINK_DISTANCE: = 180.0
-const ACORRENTADA_Q_LINE_CD: = 0.45
-const ACORRENTADA_E_RADIUS: = 420.0
-const ACORRENTADA_E_OVERCHARGE_RADIUS: = 500.0
-const ACORRENTADA_E_DURATION: = 5.0
-const ACORRENTADA_E_TICK_INTERVAL: = 0.45
-const ACORRENTADA_E_PULL_SPEED: = 105.0
-const ACORRENTADA_E_TICK_DAMAGE_SCALE: = 0.11
-const ACORRENTADA_WALK_FADE_TIME: = 0.8
-const ACORRENTADA_WALK_VOLUME: = 0.42
-const ACORRENTADA_TP_LINE_TIME: = 1.2
-const ACORRENTADA_TP_OVERHEAT_LINE_BONUS: = 0.25
-const ACORRENTADA_ATTACK_WINDUP_TIMES: = [0.09, 0.11, 0.12]
-const ACORRENTADA_ATTACK_OUT_TIMES: = [0.26, 0.32, 0.36]
-const ACORRENTADA_ATTACK_HOLD_TIME: = 0.045
-const ACORRENTADA_ATTACK_RETURN_TIMES: = [0.22, 0.25, 0.28]
-const ACORRENTADA_ATTACK_WINDUP_BACK_DISTANCES: = [52.0, 72.0, 64.0]
-const ACORRENTADA_CHAINED_DAMAGE_BONUS: = 0.16
-const BOMBASTICA_Q_CHARGES: = 3
-const BOMBASTICA_Q_RECHARGE: = 7.0
-const BOMBASTICA_Q_FUSE_MIN: = 3.0
-const BOMBASTICA_Q_FUSE_MAX: = 6.0
-const BOMBASTICA_Q_DAMAGE_MULT: = 1.9375
-const BOMBASTICA_Q_RADIUS: = 105.0
-const BOMBASTICA_Q_PLACE_DISTANCE: = 70.0
-const BOMBASTICA_Q_THROW_RANGE: = 430.0
-const BOMBASTICA_E_COOLDOWN: = 13.5
-const BOMBASTICA_E_DURATION: = 10.0
-const BOMBASTICA_E_MINE_COUNT: = 5
-const BOMBASTICA_E_MINE_DAMAGE_MULT: = 0.60
-const BOMBASTICA_E_MINE_RADIUS: = 65.0
-const BOMBASTICA_E_ARM_TIME: = 0.26
-const BOMBASTICA_POWDER_DURATION: = 5.0
-const BOMBASTICA_POWDER_MAX_STACKS: = 3
-const BOMBASTICA_POWDER_DAMAGE_BONUS: = 0.06
-const BOMBASTICA_IGNITION_DAMAGE_MULT: = 0.38
-const BOMBASTICA_IGNITION_RADIUS: = 55.0
-const BOMBASTICA_CHAIN_DEPTH_MAX: = 5
-const BOMBASTICA_CHAIN_TOUCH_MARGIN: = 8.0
-const BOMBASTICA_MANUAL_DAMAGE_MULT: = 0.86
-const BOMBASTICA_ULT_TRAIL_DURATION: float = 5.0
-const BOMBASTICA_ULT_BLAST_SPACING: float = 64.0
-const BOMBASTICA_ULT_MAX_BLASTS: int = 24
-const BOMBASTICA_ULT_BLAST_INTERVAL: float = 0.085
-const BOMBASTICA_ULT_BLAST_RADIUS: float = 110.0
-const BOMBASTICA_ULT_BLAST_DAMAGE_MULT: float = 1.30
-const BOMBASTICA_ULT_FINALE_RADIUS: float = 155.0
-const BOMBASTICA_ULT_FINALE_DAMAGE_MULT: float = 2.80
-const BOMBASTICA_ULT_FINALE_REPEAT_FLOOR: float = 0.75
-const BOMBASTICA_ULTIMATE_RADIUS: float = 280.0
-const BOMBASTICA_ULTIMATE_DURATION: float = 10.0
-const BOMBASTICA_ULTIMATE_SPEED: float = 85.0
-const BOMBASTICA_ULTIMATE_BOUNCE_PERIOD: float = 1.5
-const BOMBASTICA_ULTIMATE_DAMAGE_MULT: float = 3.65
-const BOMBASTICA_ULTIMATE_SHOT_DAMAGE_MULT: float = 0.82
-const BOMBASTICA_ULTIMATE_GROUNDED_WINDOW: float = 0.22
-const NECRONADA_EPITAPH_DURATION: = 8.0
-const NECRONADA_EPITAPH_MAX_DEPTH: = 5
-const NECRONADA_VESTIGE_DURATION: = 12.0
-const NECRONADA_ROSE_MAX: = 7
-const NECRONADA_ROSE_SUMMON_RADIUS: = 350.0
-const NECRONADA_PASSIVE_ATTACKS: = 4
-const NECRONADA_PASSIVE_HEAL_RATE: = 0.025
-const NECRONADA_OSSUARY_SLOTS: = 4
-const NECRONADA_MAX_ACTIVE_REMNANTS: = 7
-const NECRONADA_REMNANT_HEALTH_MULT: = 0.8
-const NECRONADA_REMNANT_BASE_DURATION: = 18.0
-const NECRONADA_REMNANT_SUMMON_TIME: = 1.2
-const NECRONADA_REMNANT_TARGET_INTERVAL: = 0.22
-const NECRONADA_REMNANT_ATTACK_INTERVAL: = 0.62
-const NECRONADA_REMNANT_MELEE_RANGE_MIN: = 128.0
-const NECRONADA_REMNANT_SUPPORT_RANGE_MIN: = 230.0
-const NECRONADA_REMNANT_RANGED_RANGE_MIN: = 340.0
-const NECRONADA_REQUIEM_DURATION: = 15.0
-const NECRONADA_REQUIEM_TICK: = 0.38
-const NECRONADA_REQUIEM_MAX_ECHOES: = 10
-const NECRONADA_SUPREME_HORDE_COUNT: = 4
-const NECRONADA_TOTAL_TAUNT_DURATION: = 15.0
-const NECRONADA_EMPOWER_DURATION: = 3.0
-const NECRONADA_EMPOWER_COOLDOWN: = 3.0
-const NECRONADA_EMPOWER_RANGE: = 300.0
-const NECRONADA_EMPOWER_DAMAGE_MULT: = 0.22
-const NECRONADA_EMPOWER_ALLY_BUFF_DURATION: = 3.0
-const NECRONADA_EMPOWER_ALLY_DAMAGE_MULT: = 1.35
-const NECRONADA_EMPOWER_ALLY_SPEED_MULT: = 1.38
-const NECRONADA_ULTIMATE_REQUIRED_REVIVES: = 30
-const NECRONADA_ULTIMATE_RADIUS: = 420.0
-const NECRONADA_ULTIMATE_FULL_RADIUS: = 180.0
-const NECRONADA_ULTIMATE_DAMAGE_MAX: = 1.2
-const NECRONADA_ULTIMATE_DAMAGE_MIN: = 0.6
-const NECRONADA_ULTIMATE_SLOW_MULT: = 0.55
-const NECRONADA_ULTIMATE_CRIT_CHANCE: = 0.45
-const NECRONADA_ULTIMATE_MARK_DURATION: = 4.0
-const NECRONADA_ULTIMATE_COOLDOWN: = 10.0
-const NECRONADA_EMPOWER_ROSE_WINDOW: = 6.0
-const NECRONADA_EMPOWER_ROSE_REQUIRED_HITS: = 4
-const NECRONADA_TP_DUST_RADIUS: = 210.0
-const NECRONADA_TP_DUST_HALF_ANGLE: = 0.62
-const NECRONADA_TP_DUST_DAMAGE_MULT: = 0.3
-const NECRONADA_TP_DUST_PUSH: = 115.0
 
 const MANIFESTATIONS: = [
 	{
@@ -1778,7 +1693,7 @@ const MANIFESTATIONS: = [
 	{
 		"key": "lacerante",
 		"name": "Lacerante",
-		"desc": "Cacadora de risco: tres cortes laceram, presas incomuns valem +50% e execucoes reforcadas criam Coagulos que aumentam dano e cadencia.",
+		"desc": "Cacadora de risco: cortes acumulam Laceracao, a barra de vida mostra quem pode ser executado e o Reforco executa o alvo (reservado, invulneravel) gerando um Coagulo garantido.",
 		"icon": "manifestacao_lacerante.png",
 		"color": Color(1.0, 0.12, 0.18),
 		"accent": Color(1.0, 0.58, 0.64)
@@ -1786,23 +1701,15 @@ const MANIFESTATIONS: = [
 	{
 		"key": "prismatica",
 		"name": "Prismatica",
-		"desc": "Mira e angulo: o feixe nao tem limite fixo de alcance, mas a mira automatica so ataca dentro de 300 px. Todo alcance adicional vira chance de critico nos ricochetes. Q divide tiros em prismas e E deixa Geovana invulneravel com linhas de luz.",
+		"desc": "Mira e angulo: o feixe nao tem limite fixo de alcance, mas a mira automatica so ataca dentro de 420 px. Todo alcance adicional vira chance de critico nos ricochetes. Q divide tiros em prismas e E deixa Geovana invulneravel com linhas de luz.",
 		"icon": "manifestacao_prismatica.png",
 		"color": Color(0.32, 1.0, 0.96),
 		"accent": Color(1.0, 0.42, 0.72)
 	},
 	{
-		"key": "retornante",
-		"name": "Retornante",
-		"desc": "Dano no retorno: o tiro vai fraco, volta forte, Q fortalece um pulso e E cria paradoxos de retorno.",
-		"icon": "manifestacao_retornante.png",
-		"color": Color(0.58, 0.38, 1.0),
-		"accent": Color(1.0, 0.35, 0.68)
-	},
-	{
 		"key": "parasitica",
 		"name": "Parasitica",
-		"desc": "Larvas vivas: tiros marcam por 6s, Q cospe um viveiro contaminante e E chama vermes subterraneos que devoram os marcados.",
+		"desc": "Larvas vivas: tiros implantam larvas (8s), Q prende a Simbiose Predatoria em Geovana e E consome larvas para criar o Verme-Rei, que devora hospedeiros.",
 		"icon": "manifestacao_parasitica.png",
 		"color": Color(0.38, 1.0, 0.5),
 		"accent": Color(0.86, 1.0, 0.28)
@@ -1810,83 +1717,20 @@ const MANIFESTATIONS: = [
 	{
 		"key": "gravitante",
 		"name": "Gravitante",
-		"desc": "Controle gravitacional: ATKs marcam, Q colide os marcados e E prende inimigos e chefes no nucleo.",
+		"desc": "Controle gravitacional: ATKs prendem ate 3 orbitas (3 = Estrela que agrupa a horda), Q colide os marcados, E prende tudo no nucleo e o TP deixa um poco.",
 		"icon": "manifestacao_gravitante.png",
 		"color": Color(0.46, 0.78, 1.0),
 		"accent": Color(0.86, 0.96, 1.0)
-	},
-	{
-		"key": "ancorada",
-		"name": "Ancorada",
-		"desc": "Defesa de territorio: tiros plantam ancoras, Q solta uma onda e E fortalece a area escolhida.",
-		"icon": "manifestacao_ancorada.png",
-		"color": Color(0.3, 0.88, 1.0),
-		"accent": Color(1.0, 0.78, 0.26)
-	},
-	{
-		"key": "cartografica",
-		"name": "Cartografica",
-		"desc": "Mapa de combate: ATK cria coordenadas, Q liga rotas perigosas e E rasga o mapa para tiros reposicionados.",
-		"icon": "manifestacao_cartografica.png",
-		"color": Color(0.15, 0.95, 0.78),
-		"accent": Color(1.0, 0.82, 0.26)
-	},
-	{
-		"key": "mnesica",
-		"name": "Mnesica",
-		"desc": "Memoria punitiva: ATK grava lembrancas, Q detona padroes e E acelera arquivos para punir grupos.",
-		"icon": "manifestacao_mnesica.png",
-		"color": Color(0.78, 0.52, 1.0),
-		"accent": Color(1.0, 0.56, 0.86)
-	},
-	{
-		"key": "ressonante",
-		"name": "Ressonante",
-		"desc": "Ritmo e timing: ATK no compasso aplica notas, Q detona acordes e E garante janelas perfeitas.",
-		"icon": "manifestacao_ressonante.png",
-		"color": Color(1.0, 0.74, 0.2),
-		"accent": Color(0.38, 0.92, 1.0)
-	},
-	{
-		"key": "contratual",
-		"name": "Contratual",
-		"desc": "Regras e sentencas: ATK aplica clausulas, Q executa infracoes e E transforma a arena em audiencia.",
-		"icon": "manifestacao_contratual.png",
-		"color": Color(1.0, 0.54, 0.22),
-		"accent": Color(0.96, 0.96, 0.86)
-	},
-	{
-		"key": "acorrentada",
-		"name": "Acorrentada",
-		"desc": "Correntes e Elos: ATK marca e rompe, Q prende alvos ligados e E puxa tudo para uma sentenca.",
-		"icon": "manifestacao_acorrentada.png",
-		"color": Color(0.88, 0.16, 0.18),
-		"accent": Color(0.16, 0.86, 1.0)
-	},
-	{
-		"key": "eclipsada",
-		"name": "Eclipsada",
-		"desc": "Duelista Sol/Lua: REFORCO troca forma, ATK arremessa shurikens curtos e Q/E mudam de estilo.",
-		"icon": "res://assets/sprites/manifestacao-eclipsada.png",
-		"color": Color(0.58, 0.42, 1.0),
-		"accent": Color(1.0, 0.86, 0.32)
-	},
-	{
-		"key": "bombastica",
-		"name": "Bombastica",
-		"desc": "Prepare explosivos, controle seus fuseis e provoque reacoes em cadeia devastadoras.",
-		"icon": "res://assets/sprites/manifestacao_bombastica.png",
-		"color": Color(1.0, 0.48, 0.12),
-		"accent": Color(0.18, 0.88, 1.0)
-	},
-	{
-		"key": "necronada",
-		"name": "Necronada",
-		"desc": "Marca epitafios, captura vestigios no Ossuario Temporal e ergue Remanescentes por tempo limitado.",
-		"icon": "res://assets/sprites/manifestacao-necronada.png",
-		"color": Color(0.64, 0.3, 1.0),
-		"accent": Color(0.38, 1.0, 0.86)
 	}
+]
+
+const HIDDEN_UNPOLISHED_MANIFESTATION_KEYS: = []
+
+const HIDDEN_UNPOLISHED_SPECTRUM_KEYS: = [
+	"nula",
+	"abissal",
+	"crepuscular",
+	"equilibrista"
 ]
 
 const MANIFEST_EVOLUTION_FAMILIES: = [
@@ -1900,75 +1744,55 @@ const MANIFEST_EVOLUTION_FAMILIES: = [
 	{"key": "campo", "title": "Campo", "verb": "marca", "summary": "A habilidade Q deixa uma zona persistente com identidade da manifestacao."},
 	{"key": "passo", "title": "Passo", "verb": "rasga", "summary": "O teleporte libera pressao temporal na origem e no destino."}
 ]
+const MANIFEST_EVOLUTIONS_ENABLED: = false
 
 const MANIFEST_EVOLUTION_NAMES: = {
 	"eletrica": ["Arco Bifasico", "Fio Condutor", "Raio Teleguiado", "Rede Ionica", "Estouro Galvanico", "Polo Magnetico", "Selo de Voltagem", "Campo Tesla", "Passo Fulminante"],
 	"lacerante": ["Cicatriz Ecoante", "Corte Vazado", "Faro de Sangue", "Costura Cruel", "Ruptura Hematica", "Vortice de Laminas", "Selo de Hemorragia", "Zona de Talho", "Passo Serrilhado"],
 	"prismatica": ["Reflexo Menor", "Raio Lapidado", "Mira Refratada", "Elo Cromatico", "Estouro Espectral", "Foco Convergente", "Selo de Cor", "Campo de Cristal", "Passo Arco-Iris"],
-	"retornante": ["Eco Reverso", "Ida Vazante", "Memoria de Alvo", "Laco Temporal", "Pulso de Retorno", "Vortice Retrogrado", "Selo de Volta", "Campo de Reprise", "Passo Paradoxal"],
 	"parasitica": ["Ninhada Ecoante", "Espinho Larval", "Hospedeiro Guiado", "Rede Micelial", "Espasmo Coletivo", "Vortice de Larvas", "Selo de Infestacao", "Viveiro Persistente", "Passo de Ovos"],
 	"gravitante": ["Satelite Menor", "Orbita Perfurante", "Atrator Balistico", "Elo Orbital", "Pulso de Massa", "Singularidade Curta", "Selo de Peso", "Campo Gravitico", "Passo de Mare"],
-	"ancorada": ["Replica Fixa", "Prego Profundo", "Trava de Mira", "Elo de Territorio", "Onda de Contencao", "Nucleo de Amarra", "Selo de Solo", "Campo Ancorado", "Passo Estacado"],
-	"cartografica": ["Rota Duplicada", "Linha Meridiana", "Bussola Agressiva", "Mapa Vinculado", "Marco de Repulsao", "Dobra de Coordenada", "Selo de Latitude", "Campo de Rota", "Passo Cartografado"],
-	"mnesica": ["Lembranca Ecoada", "Agulha de Engrama", "Recordacao Predatoria", "Elo de Memoria", "Surto Mnemonico", "Arquivo Convergente", "Selo de Trauma", "Campo Mnemonico", "Passo Esquecido"],
-	"ressonante": ["Oitava Ecoante", "Nota Perfurante", "Tom Perseguidor", "Acorde Ligado", "Pulso Percussivo", "Caixa de Ressonancia", "Selo de Compasso", "Campo Harmonico", "Passo Sincopado"],
-	"contratual": ["Clausula Duplicada", "Artigo Perfurante", "Mandado de Busca", "Elo Jurado", "Quebra de Termo", "Audiencia Forcada", "Selo de Sentenca", "Campo de Clausula", "Passo Notificado"],
-	"acorrentada": ["Elo Ecoante", "Corrente Vazante", "Gancho Teleguiado", "Grilhao Compartilhado", "Tranco de Elo", "Arrasto de Correntes", "Selo de Prisao", "Campo Algemado", "Passo Acorrentado"],
-	"eclipsada": ["Umbra Ecoante", "Raio Penumbral", "Sombra Guiada", "Elo de Eclipse", "Pulso do Crepusculo", "Vortice de Penumbra", "Selo do Ocaso", "Campo Eclipsado", "Passo Sem Luz"],
-	"bombastica": ["Estopim Gemeo", "Furo de Granada", "Fagulha Guiada", "Elo de Detonacao", "Pulso de Estouro", "Vortice de Estilhacos", "Selo de Polvora", "Campo Minado", "Passo de Retaguarda"],
-	"necronada": ["Epitafio Ecoante", "Agulha Funeraria", "Vestigio Guiado", "Elo Ossuario", "Pulso Mortuario", "Vortice de Remanescentes", "Selo do Ossuario", "Campo Sepulcral", "Passo Funebre"]
 }
 
 const MANIFEST_EVOLUTION_PROFILES: = {
 	"eletrica": {"eco": {"every": 4, "scale": 0.44, "spread": 0.26}, "perfuracao": {"pierces": 2}, "caca": {"turn": 0.18, "range": 360.0}, "elo": {"radius": 148.0, "slow": 0.74}, "pulso": {"every": 4, "radius": 138.0, "force": 92.0, "damage": 0.18}, "vortice": {"every": 5, "radius": 150.0, "force": 88.0, "damage": 0.1}, "selo": {"hits": 3, "duration": 0.72}, "campo": {"radius": 150.0, "duration": 3.2, "slow": 0.7, "damage": 0.055}, "passo": {"radius": 145.0, "force": 122.0, "damage": 0.12}},
 	"lacerante": {"eco": {"every": 3, "scale": 0.36, "spread": 0.18}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.12, "range": 280.0}, "elo": {"radius": 118.0, "slow": 0.82}, "pulso": {"every": 3, "radius": 112.0, "force": 72.0, "damage": 0.16}, "vortice": {"every": 4, "radius": 122.0, "force": 68.0, "damage": 0.18}, "selo": {"hits": 2, "duration": 0.48}, "campo": {"radius": 126.0, "duration": 2.6, "slow": 0.76, "damage": 0.09}, "passo": {"radius": 118.0, "force": 78.0, "damage": 0.18}},
 	"prismatica": {"eco": {"every": 5, "scale": 0.34, "spread": 0.36}, "perfuracao": {"pierces": 2}, "caca": {"turn": 0.14, "range": 330.0}, "elo": {"radius": 170.0, "slow": 0.8}, "pulso": {"every": 5, "radius": 150.0, "force": 78.0, "damage": 0.14}, "vortice": {"every": 5, "radius": 180.0, "force": 76.0, "damage": 0.12}, "selo": {"hits": 3, "duration": 0.58}, "campo": {"radius": 180.0, "duration": 3.0, "slow": 0.76, "damage": 0.05}, "passo": {"radius": 150.0, "force": 82.0, "damage": 0.11}},
-	"retornante": {"eco": {"every": 3, "scale": 0.3, "spread": 0.22}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.16, "range": 340.0}, "elo": {"radius": 136.0, "slow": 0.78}, "pulso": {"every": 4, "radius": 130.0, "force": 86.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 150.0, "force": 84.0, "damage": 0.12}, "selo": {"hits": 3, "duration": 0.66}, "campo": {"radius": 148.0, "duration": 3.4, "slow": 0.74, "damage": 0.05}, "passo": {"radius": 156.0, "force": 94.0, "damage": 0.12}},
 	"parasitica": {"eco": {"every": 4, "scale": 0.32, "spread": 0.3}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.13, "range": 310.0}, "elo": {"radius": 150.0, "slow": 0.7}, "pulso": {"every": 4, "radius": 132.0, "force": 58.0, "damage": 0.16}, "vortice": {"every": 4, "radius": 152.0, "force": 72.0, "damage": 0.13}, "selo": {"hits": 3, "duration": 0.78}, "campo": {"radius": 158.0, "duration": 4.0, "slow": 0.68, "damage": 0.075}, "passo": {"radius": 132.0, "force": 66.0, "damage": 0.14}},
 	"gravitante": {"eco": {"every": 4, "scale": 0.38, "spread": 0.2}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.22, "range": 390.0}, "elo": {"radius": 176.0, "slow": 0.7}, "pulso": {"every": 4, "radius": 170.0, "force": 108.0, "damage": 0.12}, "vortice": {"every": 3, "radius": 210.0, "force": 128.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.82}, "campo": {"radius": 210.0, "duration": 3.6, "slow": 0.62, "damage": 0.045}, "passo": {"radius": 182.0, "force": 114.0, "damage": 0.1}},
-	"ancorada": {"eco": {"every": 4, "scale": 0.42, "spread": 0.12}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.1, "range": 260.0}, "elo": {"radius": 150.0, "slow": 0.66}, "pulso": {"every": 4, "radius": 160.0, "force": 96.0, "damage": 0.12}, "vortice": {"every": 5, "radius": 170.0, "force": 82.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.92}, "campo": {"radius": 190.0, "duration": 4.4, "slow": 0.6, "damage": 0.045}, "passo": {"radius": 154.0, "force": 92.0, "damage": 0.12}},
-	"cartografica": {"eco": {"every": 4, "scale": 0.36, "spread": 0.24}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.2, "range": 360.0}, "elo": {"radius": 164.0, "slow": 0.74}, "pulso": {"every": 4, "radius": 150.0, "force": 80.0, "damage": 0.12}, "vortice": {"every": 4, "radius": 178.0, "force": 98.0, "damage": 0.1}, "selo": {"hits": 3, "duration": 0.62}, "campo": {"radius": 182.0, "duration": 3.8, "slow": 0.68, "damage": 0.05}, "passo": {"radius": 168.0, "force": 86.0, "damage": 0.1}},
-	"mnesica": {"eco": {"every": 3, "scale": 0.34, "spread": 0.16}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.18, "range": 330.0}, "elo": {"radius": 150.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 142.0, "force": 72.0, "damage": 0.13}, "vortice": {"every": 5, "radius": 164.0, "force": 76.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.88}, "campo": {"radius": 166.0, "duration": 3.8, "slow": 0.7, "damage": 0.06}, "passo": {"radius": 150.0, "force": 78.0, "damage": 0.12}},
-	"ressonante": {"eco": {"every": 4, "scale": 0.4, "spread": 0.28}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.16, "range": 320.0}, "elo": {"radius": 172.0, "slow": 0.74}, "pulso": {"every": 3, "radius": 164.0, "force": 94.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 174.0, "force": 84.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.72}, "campo": {"radius": 188.0, "duration": 3.2, "slow": 0.72, "damage": 0.055}, "passo": {"radius": 160.0, "force": 90.0, "damage": 0.11}},
-	"contratual": {"eco": {"every": 4, "scale": 0.36, "spread": 0.12}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.14, "range": 310.0}, "elo": {"radius": 156.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 138.0, "force": 76.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 160.0, "force": 78.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.92}, "campo": {"radius": 172.0, "duration": 4.0, "slow": 0.66, "damage": 0.055}, "passo": {"radius": 150.0, "force": 82.0, "damage": 0.12}},
-	"acorrentada": {"eco": {"every": 3, "scale": 0.34, "spread": 0.1}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.15, "range": 300.0}, "elo": {"radius": 170.0, "slow": 0.64}, "pulso": {"every": 3, "radius": 154.0, "force": 88.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 176.0, "force": 112.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.86}, "campo": {"radius": 184.0, "duration": 3.6, "slow": 0.62, "damage": 0.055}, "passo": {"radius": 162.0, "force": 98.0, "damage": 0.12}},
-	"eclipsada": {"eco": {"every": 4, "scale": 0.36, "spread": 0.2}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.18, "range": 340.0}, "elo": {"radius": 160.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 148.0, "force": 86.0, "damage": 0.13}, "vortice": {"every": 4, "radius": 168.0, "force": 92.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.7}, "campo": {"radius": 176.0, "duration": 3.6, "slow": 0.68, "damage": 0.055}, "passo": {"radius": 156.0, "force": 90.0, "damage": 0.12}},
-	"necronada": {"eco": {"every": 4, "scale": 0.34, "spread": 0.18}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.14, "range": 320.0}, "elo": {"radius": 154.0, "slow": 0.7}, "pulso": {"every": 4, "radius": 144.0, "force": 76.0, "damage": 0.12}, "vortice": {"every": 4, "radius": 172.0, "force": 82.0, "damage": 0.1}, "selo": {"hits": 3, "duration": 0.76}, "campo": {"radius": 170.0, "duration": 3.8, "slow": 0.66, "damage": 0.052}, "passo": {"radius": 150.0, "force": 84.0, "damage": 0.11}}
 }
 
 const CARDS: = [
-	{"name": "Speed Boost", "nick": "Vento Celeste", "desc": "+6.5% velocidade de movimento.", "icon": "Deck/Speed_boost1.png", "frame_2": "Deck/Speed_boost2.png", "color": Color(0.0, 1.0, 0.78)},
-	{"name": "Porcao", "nick": "Sopro Vital", "desc": "Cura 45% da vida maxima; excesso aumenta vida maxima.", "icon": "Deck/carta_por1.png", "frame_2": "Deck/carta_por2.png", "color": Color(0.38, 1.0, 0.54)},
-	{"name": "Disparo crescente", "nick": "Odio Canalizado", "desc": "+15% do dano atual do auto attack.", "icon": "Deck/carta_odio1.png", "frame_2": "Deck/carta_odio2.png", "color": Color(1.0, 0.3, 0.28)},
-	{"name": "Tempestade", "nick": "Precisao Critica", "desc": "+5 dano e +2% chance critica.", "icon": "Deck/Carta_tempestade_crescente1.png", "frame_2": "Deck/Carta_tempestade_crescente2.png", "color": Color(0.96, 0.82, 0.22)},
+	{"name": "Speed Boost", "nick": "Última Corrida", "desc": "+6.5% velocidade de movimento.", "icon": "Deck/Speed_boost1.png", "frame_2": "Deck/Speed_boost2.png", "color": Color(0.0, 1.0, 0.78)},
+	{"name": "Porcao", "nick": "Coração Piedoso", "desc": "Cura 45% da vida maxima; excesso aumenta vida maxima.", "icon": "Deck/carta_por1.png", "frame_2": "Deck/carta_por2.png", "color": Color(0.38, 1.0, 0.54)},
+	{"name": "Disparo crescente", "nick": "Odio Canalizado", "desc": "+20% do dano base do auto attack, com crescimento composto por copia.", "icon": "Deck/carta_odio1.png", "frame_2": "Deck/carta_odio2.png", "color": Color(1.0, 0.3, 0.28)},
+	{"name": "Tempestade", "nick": "Tempestade da Meia-Noite", "desc": "+8 dano e +12% chance critica. Acima de 100%, o excesso aumenta o dano critico.", "icon": "Deck/Carta_tempestade_crescente1.png", "frame_2": "Deck/Carta_tempestade_crescente2.png", "color": Color(0.96, 0.82, 0.22)},
 	{"name": "Trembo", "nick": "Reversao Temporal", "desc": "Trembo acompanha e cura Geovana. Ao morrer, explode, restaura toda a vida, teleporta e concede 10s de imunidade.", "icon": "Deck/carta_trem1.png", "frame_2": "Deck/carta_trem2.png", "color": Color(0.16, 0.72, 1.0)},
-	{"name": "Roubo de Vida", "nick": "Hemofluxo", "desc": "Projeteis curam uma fracao da vida perdida ao acertar.", "icon": "Deck/Carta_roubo_vida1.png", "frame_2": "Deck/Carta_roubo_vida2.png", "color": Color(0.95, 0.1, 0.34)},
-	{"name": "Speed Atack", "nick": "Fluidez Letal", "desc": "Reduz levemente o intervalo entre disparos.", "icon": "Deck/carta_onda.png", "frame_2": "Deck/carta_onda2.png", "color": Color(1.0, 0.88, 0.2)},
-	{"name": "Teleporte", "nick": "Salto Espacial", "desc": "Reduz recarga do teleporte ate 0.5s.", "icon": "Deck/carta_teleporte1.png", "frame_2": "Deck/carta_teleporte2.png", "color": Color(1.0, 0.0, 0.92)},
+	{"name": "Roubo de Vida", "nick": "Centelha Revigorante", "rarity": CARD_RARITY_UNCOMMON, "desc": "Projeteis curam diretamente 3% do dano causado por copia, sem chance de falha.", "icon": "Deck/Carta_roubo_vida1.png", "frame_2": "Deck/Carta_roubo_vida2.png", "color": Color(0.95, 0.1, 0.34)},
+	{"name": "Speed Atack", "nick": "Fagulha Acelerada", "desc": "Reduz levemente o intervalo entre disparos.", "icon": "Deck/carta_onda.png", "frame_2": "Deck/carta_onda2.png", "color": Color(1.0, 0.88, 0.2)},
+	{"name": "Teleporte", "nick": "Salto Quântico Dimensional 3000", "desc": "Reduz recarga do teleporte ate 0.5s.", "icon": "Deck/carta_teleporte1.png", "frame_2": "Deck/carta_teleporte2.png", "color": Color(1.0, 0.0, 0.92)},
 	{"name": "Petro", "nick": "Sentinela Leal", "desc": "Invoca Petro com vida e resistencia proprias. Ele persegue, luta e evolui visualmente com novas copias.", "icon": "Deck/carta_petro1.png", "frame_2": "Deck/carta_petro2.png", "color": Color(0.24, 0.95, 1.0)},
-	{"name": "Defesa", "nick": "Pele Cronal", "desc": "+3.5 de resistencia, ate 50.", "icon": "Deck/carta_defesa1.png", "frame_2": "Deck/carta_defesa2.png", "color": Color(0.7, 0.88, 1.0)},
-	{"name": "Sorte", "nick": "Anomalia Favoravel", "desc": "+0.3% sorte para drops. Incomuns aparecem sem Sorte e ficam mais frequentes; raras exigem Sorte.", "icon": "Deck/carta_sorte1.png", "frame_2": "Deck/carta_sorte2.png", "color": Color(1.0, 0.66, 0.8)},
-	{"name": "Poison", "nick": "Toxina Temporal", "desc": "Projeteis envenenam inimigos e boss com dano por tempo.", "icon": "Deck/carta_poison1.png", "frame_2": "Deck/carta_poison2.png", "color": Color(0.68, 1.0, 0.2)},
+	{"name": "Defesa", "nick": "Escudo Sinérgico", "desc": "+5 de resistencia, ate 50.", "icon": "Deck/carta_defesa1.png", "frame_2": "Deck/carta_defesa2.png", "color": Color(0.7, 0.88, 1.0)},
+	{"name": "Sorte", "nick": "Convergência de Oportunidades", "desc": "As probabilidades se dobram a seu favor, mas a anomalia nao revela seus calculos.", "icon": "Deck/carta_sorte1.png", "frame_2": "Deck/carta_sorte2.png", "color": Color(1.0, 0.66, 0.8)},
+	{"name": "Poison", "nick": "Cuspe Sagrado", "desc": "Projeteis envenenam inimigos e boss com dano por tempo.", "icon": "Deck/carta_poison1.png", "frame_2": "Deck/carta_poison2.png", "color": Color(0.68, 1.0, 0.2)},
 	{"name": "Coletora", "nick": "Foice do Tempo", "desc": "Executa comuns abaixo do limite. Cada carta aumenta mais o limite comum e soma execucao extra contra boss.", "icon": "Deck/carta_estalo1.png", "frame_2": "Deck/carta_estalo2.png", "color": Color(0.95, 0.08, 0.24)},
-	{"name": "Mercenaria", "nick": "Contrato de Guerra", "desc": "Cada abate paga o bonus atual. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.", "icon": "Deck/carta_mercenaria1.png", "frame_2": "Deck/carta_mercenaria2.png", "color": Color(1.0, 0.62, 0.16)},
+	{"name": "Mercenaria", "nick": "Contrato de Guerra", "desc": "Cada abate paga +2 pontos por copia desde o primeiro. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.", "icon": "Deck/carta_mercenaria1.png", "frame_2": "Deck/carta_mercenaria2.png", "color": Color(1.0, 0.62, 0.16)},
 	{"id": "devorador_destinos", "name": "Devorador de Destinos", "nick": "Devorador de Destinos", "desc": "Marca o inimigo mais poderoso. Sua queda devora destinos ao redor, amedronta sobreviventes e protege Geovana.", "icon": "Deck/carta-Devorador_de_Destinos1.png", "frame_2": "Deck/carta-Devorador_de_Destinos2.png", "color": Color(0.92, 0.1, 0.72)},
-	{"id": "escolha_adiada", "name": "Escolha Adiada", "nick": "Reserva Causal", "desc": "Consumivel. Trava uma carta comum da loja no slot selecionado, preservando o preco atual ate comprar ou destravar.", "icon": "Deck/carta-Escolha_Adiada1.png", "frame_2": "Deck/carta-Escolha_Adiada2.png", "color": Color(0.4, 0.94, 1.0)},
-	{"id": "tregua_regenerativa", "name": "TrÃ©gua Regenerativa", "nick": "Paz Tecidual", "desc": "Sem receber dano, regenera vida passivamente.", "icon": "Deck/carta-Tr_guaRegenerativa1.png", "frame_2": "Deck/carta-Tr_guaRegenerativa2.png", "color": Color(0.38, 1.0, 0.72)},
-	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "desc": "Consumivel. Queima uma carta comum da loja. Quando essa carta voltar, ela vem chamuscada fortalecendo os atributos proprios daquela carta de forma acumulavel; o bonus se consolida ao compra-la.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)},
+	{"id": "tregua_regenerativa", "name": "Trégua Regenerativa", "nick": "Paz Tecidual", "rarity": CARD_RARITY_RARE, "desc": "Sem receber dano, regenera vida passivamente.", "icon": "Deck/carta-Tr_guaRegenerativa1.png", "frame_2": "Deck/carta-Tr_guaRegenerativa2.png", "color": Color(0.38, 1.0, 0.72)},
+	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "rarity": CARD_RARITY_UNCOMMON, "desc": "Item raro de energia: nao aparece na loja. So anomalias com muita energia (inimigos supremos: Larapio, Sineiro, Suturador, Arauto, Aguilhao) a geram, e ela sempre cai quando uma delas e derrotada. Queima uma carta comum da loja e outra carta aleatoria nasce no lugar. Quando a queimada voltar, vem chamuscada fortalecendo os atributos proprios dela de forma acumulavel; o bonus se consolida ao compra-la.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)},
 	{"id": "reserva_pulso", "name": "Reserva de Pulso", "nick": "Cura Guardada", "desc": "Guarda cura excedente e a libera em situacao critica.", "icon": "Deck/carta-ReservadePulso1.png", "frame_2": "Deck/carta-ReservadePulso2.png", "color": Color(0.44, 0.92, 1.0)},
 	{"id": "casulo_reativo", "name": "Casulo Reativo", "nick": "Defesa de Rajada", "desc": "Ao sofrer rajada de dano, forma um casulo protetor.", "icon": "Deck/carta-CasuloReativo1.png", "frame_2": "Deck/carta-CasuloReativo2.png", "color": Color(0.54, 1.0, 0.86)},
-	{"id": "passagem_intangivel", "name": "Passagem IntangÃ­vel", "nick": "Fase Fantasma", "desc": "Apos o teleporte, atravesse inimigos sem sofrer contato.", "icon": "Deck/carta-PassagemIntang_vel1.png", "frame_2": "Deck/carta-PassagemIntang_vel2.png", "color": Color(0.72, 0.9, 1.0)},
-	{"id": "ancora_vital", "name": "Ã‚ncora Vital", "nick": "Selo de Retorno", "desc": "Ao sofrer dano, cria uma ancora que devolve parte da vida.", "icon": "Deck/carta-ncoraVital1.png", "frame_2": "Deck/carta-ncoraVital2.png", "color": Color(0.34, 1.0, 0.66)},
+	{"id": "passagem_intangivel", "name": "Passagem Intangível", "nick": "Fase Fantasma", "desc": "Apos o teleporte, atravesse inimigos sem sofrer contato.", "icon": "Deck/carta-PassagemIntang_vel1.png", "frame_2": "Deck/carta-PassagemIntang_vel2.png", "color": Color(0.72, 0.9, 1.0)},
+	{"id": "ancora_vital", "name": "Âncora Vital", "nick": "Selo de Retorno", "desc": "Ao sofrer dano, cria uma ancora que devolve parte da vida.", "icon": "Deck/carta-ncoraVital1.png", "frame_2": "Deck/carta-ncoraVital2.png", "color": Color(0.34, 1.0, 0.66)},
 	{"id": "inercia_cronal", "name": "Inercia Cronal", "nick": "Corpo Ancorado", "desc": "Reduz empurroes e controles hostis sofridos pelo jogador.", "icon": "Deck/carta-InerciaCronal1.png", "frame_2": "Deck/carta-InerciaCronal2.png", "color": Color(0.56, 0.74, 1.0)},
-	{"id": "leitura_instante", "name": "Leitura do Instante", "nick": "Previsao Clara", "desc": "Aumenta a antecedencia visual de ataques inimigos e de chefes.", "icon": "Deck/carta-LeituraInstante1.png", "frame_2": "Deck/carta-LeituraInstante2.png", "color": Color(1.0, 0.84, 0.3)},
-	{"id": "margem_segura", "name": "Margem Segura", "nick": "Distancia Certa", "desc": "Inimigos comuns surgem mais longe do jogador.", "icon": "Deck/carta-MargenSegura1.png", "frame_2": "Deck/carta-MargenSegura2.png", "color": Color(0.26, 0.9, 0.96)},
-	{"id": "moeda_estavel", "name": "Moeda Estavel", "nick": "Economia Fixa", "desc": "Reduz o aumento de preco das proximas compras da loja.", "icon": "Deck/carta-MoedaEstavel1.png", "frame_2": "Deck/carta-MoedaEstavel2.png", "color": Color(1.0, 0.72, 0.18)},
+	{"id": "moeda_estavel", "name": "Moeda Estavel", "nick": "Economia Fixa", "rarity": CARD_RARITY_UNCOMMON, "desc": "Reduz o aumento de preco das proximas compras da loja.", "icon": "Deck/carta-MoedaEstavel1.png", "frame_2": "Deck/carta-MoedaEstavel2.png", "color": Color(1.0, 0.72, 0.18)},
 	{"id": "orbita_coletora", "name": "Orbita Coletora", "nick": "Alcance Neutro", "desc": "Aumenta o raio que atrai pontos, moedas, cartas soltas e orbes neutros. Recursos atraidos perseguem o jogador ate serem absorvidos.", "icon": "Deck/carta-OrbitaColetora1.png", "frame_2": "Deck/carta-OrbitaColetora2.png", "color": Color(0.42, 1.0, 0.68)},
-	{"id": "pacto_possibilidades", "name": "Pacto das Possibilidades", "nick": "Primeira Oferta", "desc": "Cartas comuns ainda nao compradas ficam mais baratas na loja.", "icon": "Deck/carta-Pacto_das_Possibilidades1.png", "frame_2": "Deck/carta-Pacto_das_Possibilidades2.png", "color": Color(0.96, 0.5, 1.0)},
-	{"id": "solo_consolidado", "name": "Solo Consolidado", "nick": "Chao Estavel", "desc": "Reduz a duracao de perigos hostis persistentes no chao.", "icon": "Deck/carta-SoloConsolidado1.png", "frame_2": "Deck/carta-SoloConsolidado2.png", "color": Color(0.78, 0.92, 0.42)},
-	{"id": "horizonte_ruptura", "name": "Horizonte de Ruptura", "nick": "Linha Limite", "rarity": CARD_RARITY_UNCOMMON, "desc": "+30 px de alcance e +2.5% de dano nos ataques basicos a distancia por copia, sem limite. Na Prismatica, os +30 px viram +3% de critico nos ricochetes.", "icon": "Deck/carta-Horizonte_de_Ruptura1.png", "frame_2": "Deck/carta-Horizonte_de_Ruptura2.png", "color": Color(0.22, 0.68, 1.0)},
+	{"id": "pacto_possibilidades", "name": "Pacto das Possibilidades", "nick": "Primeira Oferta", "rarity": CARD_RARITY_UNCOMMON, "desc": "Cartas comuns ainda nao compradas ficam mais baratas na loja.", "icon": "Deck/carta-Pacto_das_Possibilidades1.png", "frame_2": "Deck/carta-Pacto_das_Possibilidades2.png", "color": Color(0.96, 0.5, 1.0)},
+	{"id": "tributo_da_dor", "name": "Tributo da Dor", "nick": "Ferida Rentável", "rarity": CARD_RARITY_UNCOMMON, "desc": "Sempre que perder vida, recebe pontos. A recompensa cresce cada vez mais por cópia, sem limite.", "icon": "Deck/carta-Tributo_da_Dor1.png", "frame_2": "Deck/carta-Tributo_da_Dor2.png", "color": Color(1.0, 0.58, 0.18)},
+	{"id": "horizonte_ruptura", "name": "Horizonte de Ruptura", "nick": "Linha Limite", "rarity": CARD_RARITY_UNCOMMON, "desc": "+45 px de alcance e +2.5% de dano nos ataques basicos a distancia por copia, sem limite. Na Prismatica, os +45 px viram +3% de critico nos ricochetes.", "icon": "Deck/carta-Horizonte_de_Ruptura1.png", "frame_2": "Deck/carta-Horizonte_de_Ruptura2.png", "color": Color(0.22, 0.68, 1.0)},
 	{"id": "fragmentacao_reativa", "name": "Fragmentacao Reativa", "nick": "Estilhaco de Revide", "rarity": CARD_RARITY_UNCOMMON, "desc": "Ao perder vida para um impacto, dispara fragmentos contra ate 4 inimigos em 150 px. Copias aumentam o raio em 30 px e o dano, sem limite.", "icon": "Deck/carta-Fragmentacao_Reativa1.png", "frame_2": "Deck/carta-Fragmentacao_Reativa2.png", "color": Color(0.92, 0.14, 0.3)},
 	{"id": "bastiao_inercial", "name": "Bastiao Inercial", "nick": "Armadura de Repouso", "rarity": CARD_RARITY_UNCOMMON, "desc": "Apos 0.7s sem se mover, recebe +6 de armadura por copia. Cada copia tambem concede +1.5% de velocidade, sem limite.", "icon": "Deck/carta-Bastiao_Inercial1.png", "frame_2": "Deck/carta-Bastiao_Inercial2.png", "color": Color(0.84, 0.64, 0.3)},
+	{"id": "estilhaco_prismatico", "name": "Estilhaço Prismático", "nick": "Fortuna Lapidada", "rarity": CARD_RARITY_UNCOMMON, "desc": "Abates podem condensar uma lasca grande de prisma. Cada cópia aumenta continuamente a chance e o valor da lasca; os pontos também acompanham o tempo da partida.", "icon": "Deck/carta-Estilhaco_Prismatico1.png", "frame_2": "Deck/carta-Estilhaco_Prismatico2.png", "color": Color(0.32, 0.84, 1.0)},
 	{"id": "rastro_de_retorno", "name": "Rastro de Retorno", "nick": "Vestigio Vivo", "rarity": CARD_RARITY_UNCOMMON, "desc": "Deixa vestigios com mais frequencia. Retornar a eles concede um impulso forte e recupera parte relevante do teleporte.", "icon": "Deck/carta-RastrodeRetorno1.png", "frame_2": "Deck/carta-RastrodeRetorno2.png", "color": Color(0.2, 0.7, 1.0)},
 	{"id": "municao_de_rebate", "name": "Municao de Rebate", "nick": "Fragmento Teimoso", "rarity": CARD_RARITY_UNCOMMON, "desc": "Projeteis basicos que somem sem acertar tem alta chance de voltar como um fragmento perseguidor mais forte e de maior alcance.", "icon": "Deck/carta-municaorebatente1.png", "frame_2": "Deck/carta-municaorebatente2.png", "color": Color(0.18, 0.62, 1.0)},
 	{"id": "impulso_de_sobras", "name": "Impulso de Sobras", "nick": "Energia Guardada", "rarity": CARD_RARITY_UNCOMMON, "desc": "Q, E ou teleporte prontos por tempo suficiente guardam duas cargas que fortalecem e ampliam os proximos ataques basicos.", "icon": "Deck/carta-impulsodesobras1.png", "frame_2": "Deck/carta-impulsodesobras2.png", "color": Color(0.18, 0.62, 1.0)},
@@ -1996,10 +1820,12 @@ const CARDS: = [
 	{"id": "ponto_cego", "name": "Ponto Cego", "nick": "Ataque pelas Costas", "desc": "Ataques por tras causam dano extra e desorientam.", "icon": "Deck/carta-Ponto_Cego1.png", "frame_2": "Deck/carta-Ponto_Cego2.png", "color": Color(1.0, 0.86, 0.34)},
 	{"id": "mandamento_ruptura", "name": "Mandamento da Ruptura", "nick": "Terceira Lei", "desc": "A cada 3 habilidades, a terceira rompe seus limites.", "icon": "Deck/carta-Mandamento_da_Ruptura1.png", "frame_2": "Deck/carta-Mandamento_da_Ruptura2.png", "color": Color(0.94, 0.7, 1.0)},
 	{"id": "carta_zero", "name": "Carta Zero", "nick": "Origem Numerica", "desc": "Amplifica todos os efeitos numericos das cartas comuns.", "icon": "Deck/carta-Zero1.png", "frame_2": "Deck/carta-Zero2.png", "color": Color(0.9, 0.96, 1.0)},
-	{"id": "necrocronismo", "name": "Necrocronismo", "nick": "Aliados Espectrais", "desc": "Inimigos derrotados retornam temporariamente como aliados.", "icon": "Deck/carta-Necrocronismo1.png", "frame_2": "Deck/carta-Necrocronismo2.png", "color": Color(0.46, 1.0, 0.94)},
-	{"id": "coracao_antimateria", "name": "CoraÃ§Ã£o de AntimatÃ©ria", "nick": "Implosao Instavel", "desc": "Dano carrega um coracao que implode no proximo acerto.", "icon": "Deck/carta-Cora_o_de_Antimat_ria1.png", "frame_2": "Deck/carta-Cora_o_de_Antimat_ria2.png", "color": Color(0.76, 0.24, 1.0)},
+	{"id": "necrocronismo", "name": "Necrocronismo", "nick": "Aliados Espectrais", "desc": "A cada tantas mortes, um inimigo volta no tempo como Eco aliado: da investidas que atravessam e deixam lentos os inimigos, e implode no fim.", "icon": "Deck/carta-Necrocronismo1.png", "frame_2": "Deck/carta-Necrocronismo2.png", "color": Color(0.46, 1.0, 0.94)},
+	{"id": "coracao_antimateria", "name": "Coração de Antimatéria", "nick": "Implosao Instavel", "desc": "Dano carrega um coracao que implode no proximo acerto.", "icon": "Deck/carta-Cora_o_de_Antimat_ria1.png", "frame_2": "Deck/carta-Cora_o_de_Antimat_ria2.png", "color": Color(0.76, 0.24, 1.0)},
 	{"id": "cofre_excesso", "name": "Cofre do Excesso", "nick": "Reserva de Overkill", "desc": "Armazena dano excedente e descarrega em alvos poderosos.", "icon": "Deck/carta-Cofre_do_Excesso1.png", "frame_2": "Deck/carta-Cofre_do_Excesso2.png", "color": Color(1.0, 0.28, 0.22)},
-	{"id": "coracao_paradoxo", "name": "Coracao do Paradoxo", "nick": "Eco Impossivel", "rarity": CARD_RARITY_LEGENDARY, "max_count": 1, "desc": "18 acertos diretos carregam o nucleo. A proxima Q, E ou teleporte que acertar abre uma ruptura por 5s; danos diretos ecoam apos 0.55s com 35% da forca.", "icon": "Deck/carta-Coracao_do_Paradoxo1.png", "frame_2": "Deck/carta-Coracao_do_Paradoxo2.png", "color": CARD_RARITY_LEGENDARY_COLOR}
+	{"id": "critico_absoluto", "name": "Crítico Absoluto", "nick": "Dobra Letal", "rarity": CARD_RARITY_RARE, "desc": "Cada cópia aumenta em 100% o dano final dos acertos críticos, sem limite. Uma cópia dobra o crítico atual; cinco cópias multiplicam por seis.", "icon": "Deck/carta-Critico_Absoluto1.png", "frame_2": "Deck/carta-Critico_Absoluto2.png", "color": CARD_RARITY_RARE_COLOR},
+	{"id": "coracao_paradoxo", "name": "Coracao do Paradoxo", "nick": "Eco Impossivel", "rarity": CARD_RARITY_LEGENDARY, "desc": "18 acertos diretos carregam o nucleo. A proxima Q, E ou teleporte que acertar abre uma ruptura por 5s; danos diretos ecoam apos 0.55s com 35% da forca.", "icon": "Deck/carta-Coracao_do_Paradoxo1.png", "frame_2": "Deck/carta-Coracao_do_Paradoxo2.png", "color": CARD_RARITY_LEGENDARY_COLOR},
+	{"id": "arquivo_impossivel", "name": "Arquivo do Impossível", "nick": "Cópia Sem Fim", "rarity": CARD_RARITY_LEGENDARY, "desc": "Ao adquirir qualquer carta não lendária, recebe uma cópia adicional dela por cópia deste Arquivo. As cópias gratuitas não reativam o Arquivo.", "icon": "Deck/carta-Arquivo_do_Impossivel1.png", "frame_2": "Deck/carta-Arquivo_do_Impossivel2.png", "color": CARD_RARITY_LEGENDARY_COLOR}
 ]
 
 const CARD_MAX_COUNTS: = {
@@ -2026,6 +1852,10 @@ const CARD_SOURCE_LIMIAR: = "card_limiar_colapso"
 const CARD_SOURCE_DESVIO: = "card_desvio_probabilidade"
 const CARD_SOURCE_PONTO_CEGO: = "card_ponto_cego"
 const CARD_UNLIMITED_COUNT: = 999999
+const CARD_PRISM_SHARD_ID: = "estilhaco_prismatico"
+const CARD_PAIN_TRIBUTE_ID: = "tributo_da_dor"
+const CARD_ABSOLUTE_CRIT_ID: = "critico_absoluto"
+const CARD_IMPOSSIBLE_ARCHIVE_ID: = "arquivo_impossivel"
 const PORCAO_MAX_HP_GAIN_RATIO: = 0.1
 const PORCAO_HEAL_OLD_MAX_RATIO: = 0.05
 const CARD_RASTRO_ID: = "rastro_de_retorno"
@@ -2057,7 +1887,12 @@ const FERROLHO_RUPTURA_COOLDOWN: = 8.0
 const CHOQUE_FONTES_TARGET_COOLDOWN: = 4.0
 const CARD_TREGUA_ID: = "tregua_regenerativa"
 const CARD_CINZAS_ID: = "cinzas_escolha"
+const CARD_MOEDA_ESTAVEL_ID: = "moeda_estavel"
+## Cartas que nunca saem da loja nem de sorteios de recompensa: Cinzas so cai
+## de inimigos supremos; Moeda Estavel so vem das missoes do Mercador.
+const SHOP_EXCLUDED_CARD_IDS: Array[String] = [CARD_CINZAS_ID, CARD_MOEDA_ESTAVEL_ID]
 const CARD_ESCOLHA_ADIADA_ID: = "escolha_adiada"
+const RETIRED_CARD_IDS: Array[String] = [CARD_ESCOLHA_ADIADA_ID, "leitura_instante", "margem_segura", "solo_consolidado"]
 const CARD_RESERVA_ID: = "reserva_pulso"
 const CARD_CASULO_ID: = "casulo_reativo"
 const CARD_PASSAGEM_ID: = "passagem_intangivel"
@@ -2086,6 +1921,7 @@ const CARD_UNLOCK_ALWAYS_AVAILABLE: = [
 	CARD_MANTO_IMPULSO_ID, CARD_RECUSA_DANO_ID, CARD_CARRASCO_COLOSSOS_ID, CARD_SUTURA_GRADUAL_ID,
 	CARD_FRAGMENTACAO_REATIVA_ID, CARD_BASTIAO_INERCIAL_ID
 ]
+const CARD_UNLOCK_RUNTIME_SAMPLE_INTERVAL := 5.0
 const CARD_UNLOCK_RULES: = {
 	"Trembo": {"metric": "survive_seconds", "target": 1800.0, "challenge": "Sobreviver 30:00 em uma run"},
 	"Petro": {"metric": "survive_seconds", "target": 1200.0, "challenge": "Sobreviver 20:00 em uma run"},
@@ -2093,7 +1929,6 @@ const CARD_UNLOCK_RULES: = {
 	"Coletora": {"metric": "enemy_kills", "target": 280.0, "challenge": "Eliminar 280/280 inimigos"},
 	"Mercenaria": {"metric": "enemy_kills", "target": 420.0, "challenge": "Eliminar 420/420 inimigos"},
 	"devorador_destinos": {"metric": "boss_kills", "target": 2.0, "challenge": "Eliminar 2/2 chefes"},
-	CARD_ESCOLHA_ADIADA_ID: {"metric": "shop_rerolls", "target": 18.0, "challenge": "Rerollar 18/18 vezes e comprar 12 cartas", "all": [{"metric": "shop_purchases", "target": 12.0}]},
 	CARD_TREGUA_ID: {"metric": "survive_seconds", "target": 1500.0, "challenge": "Sobreviver 25:00 em uma run"},
 	CARD_CINZAS_ID: {"metric": "shop_purchases", "target": 30.0, "challenge": "Comprar 30/30 cartas e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
 	CARD_RESERVA_ID: {"metric": "healing_events", "target": 24.0, "challenge": "Receber cura 24/24 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
@@ -2101,11 +1936,8 @@ const CARD_UNLOCK_RULES: = {
 	CARD_PASSAGEM_ID: {"metric": "teleports_used", "target": 90.0, "challenge": "Usar teleporte 90/90 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
 	CARD_ANCORA_ID: {"metric": "damage_taken_events", "target": 65.0, "challenge": "Sobreviver a 65/65 impactos e chegar na Fase 2", "all": [{"metric": "phase_reached", "target": 2.0}]},
 	"inercia_cronal": {"metric": "damage_taken_events", "target": 80.0, "challenge": "Sobreviver a 80/80 impactos"},
-	"leitura_instante": {"metric": "survive_seconds", "target": 1800.0, "challenge": "Sobreviver 30:00 em uma run"},
-	"margem_segura": {"metric": "phase_reached", "target": 3.0, "challenge": "Chegar na Fase 3"},
 	"moeda_estavel": {"metric": "shop_purchases", "target": 18.0, "challenge": "Comprar 18/18 cartas"},
 	"pacto_possibilidades": {"metric": "unique_cards_bought", "target": 18.0, "challenge": "Comprar 18/18 cartas diferentes"},
-	"solo_consolidado": {"metric": "phase_reached", "target": 3.0, "challenge": "Chegar na Fase 3"},
 	CARD_RASTRO_ID: {"metric": "teleports_used", "target": 140.0, "challenge": "Usar teleporte 140/140 vezes"},
 	CARD_REBATE_ID: {"metric": "shots_fired", "target": 750.0, "challenge": "Disparar 750/750 vezes"},
 	CARD_IMPULSO_ID: {"metric": "abilities_used", "target": 140.0, "challenge": "Usar habilidades 140/140 vezes"},
@@ -2137,18 +1969,8 @@ const MANIFESTATION_UNLOCK_ALWAYS_AVAILABLE: = ["eletrica"]
 const MANIFESTATION_UNLOCK_RULES: = {
 	"lacerante": {"metric": "enemy_kills", "target": 250.0, "challenge": "Eliminar 250/250 inimigos"},
 	"prismatica": {"metric": "boss_kills", "target": 1.0, "challenge": "Eliminar 1/1 chefe"},
-	"retornante": {"metric": "teleports_used", "target": 100.0, "challenge": "Usar teleporte 100/100 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
 	"parasitica": {"metric": "phase_reached", "target": 6.0, "challenge": "Chegar na Fase 6"},
-	"gravitante": {"metric": "phase_reached", "target": 4.0, "challenge": "Chegar na Fase 4"},
-	"ancorada": {"metric": "teleports_used", "target": 90.0, "challenge": "Usar teleporte 90/90 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
-	"cartografica": {"metric": "phase_reached", "target": 4.0, "challenge": "Chegar na Fase 4"},
-	"mnesica": {"metric": "boss_kills", "target": 3.0, "challenge": "Eliminar 3/3 chefes"},
-	"ressonante": {"metric": "abilities_used", "target": 180.0, "challenge": "Usar habilidades 180/180 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
-	"contratual": {"metric": "shop_purchases", "target": 35.0, "challenge": "Comprar 35/35 cartas"},
-	"acorrentada": {"metric": "damage_taken_events", "target": 55.0, "challenge": "Sobreviver a 55/55 impactos e chegar na Fase 2", "all": [{"metric": "phase_reached", "target": 2.0}]},
-	"eclipsada": {"metric": "phase_reached", "target": 7.0, "challenge": "Chegar na Fase 7"},
-	"bombastica": {"metric": "enemy_kills", "target": 550.0, "challenge": "Eliminar 550/550 inimigos"},
-	"necronada": {"metric": "enemy_kills", "target": 700.0, "challenge": "Eliminar 700/700 inimigos e chegar na Fase 3", "all": [{"metric": "phase_reached", "target": 3.0}]}
+	"gravitante": {"metric": "phase_reached", "target": 4.0, "challenge": "Chegar na Fase 4"}
 }
 const SPECTRUM_UNLOCK_ALWAYS_AVAILABLE: = ["impulsiva"]
 const SPECTRUM_UNLOCK_RULES: = {
@@ -2184,17 +2006,17 @@ const AURAS: = [
 	{"key": "racional", "name": "Racional", "icon": "aurea_cientista.png", "desc": "Ficar imovel pontua. Teleporte desacelera o mundo por 8s e causa Rebote por 3s."},
 	{"key": "impulsiva", "name": "Impulsiva", "icon": "aurea_impulsiva.png", "desc": "Cinco abates sem dano ativam Frenesi. Um hit quebra a sequencia e arma Panico."},
 	{"key": "devota", "name": "Devota", "icon": "aurea_devota.png", "desc": "Tres cargas anulam impactos, curam vida perdida e abrem janelas de dano."},
-	{"key": "vanguarda", "name": "Vanguarda", "icon": "aurea_vanguarda.png", "desc": "Sofrer dano cria fogo; queimaduras ferem por vida maxima e pesam o Teleporte."},
+	{"key": "vanguarda", "name": "Vanguarda", "icon": "aurea_vanguarda.png", "desc": "Ser atingida solta uma Onda de Calor que empurra e queima. Cada golpe sofrido aquece o Incendio."},
 	{"key": "insana", "name": "Insana", "icon": "aurea_insana.png", "desc": "Ecos parados atraem inimigos e repetem seus tiros com 1s de atraso."},
-	{"key": "voraz", "name": "Voraz", "icon": "aurea_voraz.png", "desc": "Coagulos alimentam Fome, curam vida perdida e fortalecem disparos e recargas."},
+	{"key": "voraz", "name": "Voraz", "icon": "aurea_voraz.png", "desc": "Teleporte atraves de inimigos fracos para DEVORA-LOS. Quanto mais Fome, maior o limite de vida devoravel."},
 	{"key": "nula", "name": "Nula", "icon": "aurea_nula.png", "desc": "Ociosidade e abates carregam Vazio; o proximo tiro nulifica um alvo robusto."},
 	{"key": "abissal", "name": "Abissal", "icon": "aurea_abissal.png", "desc": "Cerco acumula Profundidade e invoca a Mare Negra, com o custo de pesar Geovana."},
-	{"key": "profetica", "name": "Profetica", "icon": "aurea_profetica.png", "desc": "Pressagios marcam alvos. Cumprir o destino recompensa; ignorar quebra o destino."},
+	{"key": "profetica", "name": "Profetica", "icon": "aurea_profetica.png", "desc": "De tempos em tempos ela VE O FUTURO: tiros e inimigos aparecem adiantados. Desviar de um tiro previsto guarda um critico."},
 	{"key": "sanguinaria", "name": "Sanguinaria", "icon": AURA_SANGUINARIA_ICON_PATH, "desc": "Dano repetido abre Feridas, alimenta Sede e prepara Carnificina Controlada."},
 	{"key": "crepuscular", "name": "Crepuscular", "icon": "res://assets/sprites/aurea-eclipsa.png", "desc": "Alterna entre Alvorada defensiva e Ocaso ofensivo. Domine a transicao para ativar Eclipse."},
-	{"key": "peregrino", "name": "Peregrino", "icon": "res://assets/sprites/aurea-peregrina.png", "desc": "Explore setores diferentes da arena para iniciar uma Jornada e criar um Refugio."},
+	{"key": "peregrino", "name": "Peregrino", "icon": "res://assets/sprites/aurea-peregrina.png", "desc": "Andar deixa um rastro que queima e atrasa inimigos. Feche um LACO com o rastro para explodir o Territorio e se curar."},
 	{"key": "equilibrista", "name": "Equilibrista", "icon": "res://assets/sprites/aurea-equilibrista.png", "desc": "Mantenha a vida entre 35% e 80% para armar Equilibrio, escudo e Divida controlada."},
-	{"key": "avarento", "name": "Avarento", "icon": "res://assets/sprites/aurea-avarenta.png", "desc": "Pontos guardados viram Lastro defensivo. Ao gastar, rompa o Cofre para ganhar velocidade e escudo."},
+	{"key": "avarento", "name": "Avarento", "icon": "res://assets/sprites/aurea-avarenta.png", "desc": "Pontos guardados viram Lastro defensivo. Gastar arma o Cofre: ao voltar para a luta ele explode em moedas, escudo e velocidade."},
 	{"key": "oportunista", "name": "Oportunista", "icon": "res://assets/sprites/aurea-oportunista.png", "desc": "Ataque durante preparacao ou recuperacao inimiga para armar um Golpe de Oportunidade."}
 ]
 
@@ -2257,6 +2079,8 @@ var content_update_download_request: HTTPRequest = null
 var veteran_unlock_request: HTTPRequest = null
 var app_update_checked: = false
 var app_update_check_timer: = APP_UPDATE_CHECK_DELAY
+var app_update_check_in_flight: = false
+var app_update_check_attempts: = 0
 var content_update_checked: = false
 var content_update_check_timer: = CONTENT_UPDATE_CHECK_DELAY
 var veteran_unlock_checked: = false
@@ -2266,6 +2090,9 @@ var app_update_manifest: Dictionary = {}
 var app_update_status: = "idle"
 var app_update_error: = ""
 var app_update_download_path: = ""
+var app_update_download_part_path: = ""
+var app_update_download_resume_path: = ""
+var app_update_download_resume_offset: = 0
 var app_update_selected: = 0
 var content_update_manifest: Dictionary = {}
 var content_update_status: = "idle"
@@ -2320,6 +2147,7 @@ var online_lobby_client_ready: bool = false
 var online_local_ready_confirmed: bool = false
 var online_room_list: Array = []
 var online_room_list_selected: int = 0
+var online_room_list_last_requested_ms: int = 0
 var online_joining_room_code: String = ""
 var online_ready_last_sent_ms: int = 0
 var online_ready_pending_started_ms: int = 0
@@ -2512,7 +2340,8 @@ const NET_WORLD_BUDGET_BYTES_PER_SEC: = 300000
 const NET_VISUAL_BUDGET_BYTES_PER_SEC: = 180000
 const NET_WORLD_CHUNKS_PER_FRAME: = 3
 const NET_VISUAL_CHUNKS_PER_FRAME: = 2
-const ONLINE_ROOM_HEARTBEAT_INTERVAL_MS: = 20000
+const ONLINE_ROOM_HEARTBEAT_INTERVAL_MS: = 10000
+const ONLINE_ROOM_LIST_REFRESH_INTERVAL_MS: = 5000
 const ONLINE_ROOM_HEARTBEAT_WARN_MS: = 70000
 const ONLINE_ROOM_HEARTBEAT_TIMEOUT: = 6.0
 const NET_ABILITY_ATTACK: = RTNetContractScript.ABILITY_ATTACK
@@ -2566,7 +2395,12 @@ const NET_ENEMY_TYPES: = [
 	ENEMY_MIASMA_EEL, ENEMY_LODARIO, ENEMY_FOSSIL_PUSTULE, ENEMY_CHRONAL_LEECH,
 	ENEMY_CINERIDO, ENEMY_PANGOLIRO, ENEMY_CORVOL,
 	ENEMY_AMBER_SUTURER, ENEMY_AMBER_SUTURE_NODE,
-	ENEMY_FLAGELANTE, ENEMY_SALMODIANTE, ENEMY_RELICARIO
+	ENEMY_FLAGELANTE, ENEMY_SALMODIANTE, ENEMY_RELICARIO,
+	"jabuti_errante", "tartaruga_mandacaru", "jabuti_morteiro",
+	"cagado_piao", "cagado_cangaceiro", "ovo_jabuti",
+	"aranha_lobo", "viuva_silencio", "aranha_alcapao", "aranha_saltadora",
+	"aranha_mimica", "noiva_de_seda", "filhote_aranha", "olho_vigia",
+	"aranha_boleadeira", "aranha_armadeira"
 ]
 const NET_BULLET_TYPES: = [
 	"", "atirador", "arauto_shot", "boss_pressure_bubble", "cout_attack_speed",
@@ -2653,6 +2487,10 @@ var run_behavior_player_last_pos: Vector2 = PLAYER_START
 var run_behavior_player_last_sample_pos: Vector2 = PLAYER_START
 var run_behavior_move_samples: int = 0
 var run_behavior_stationary_samples: int = 0
+var run_last_damage_source: String = ""
+var run_death_source: String = ""
+var run_death_cause: String = ""
+var run_death_phase: int = 0
 var run_end_payload: Dictionary = {}
 var qa_data_unlocked: bool = false
 var henry_cheat_unlocked: bool = false
@@ -2709,6 +2547,11 @@ var rational_dilation_flash: float = 0.0
 var rational_trail_points: Array = []
 var rational_trail_sample_timer: float = 0.0
 var rational_rebound_active: bool = false
+var rational_end_flash: float = 0.0
+## Efeitos e avisos de recompensa dos espectros (RTSpectreVfx).
+var spectre_fx: Array = []
+var spectre_toasts: Array = []
+var peregrino_contact_tick: float = 0.0
 var crepuscular_last_phase: String = ""
 var crepuscular_phase_flash_timer: float = 0.0
 var crepuscular_spotlight_timer: float = 0.0
@@ -2728,7 +2571,10 @@ var menu_motion_mode: String = ""
 var menu_page_age: float = 0.0
 var menu_selection_age: float = 0.0
 var menu_motion_selection: int = -1
-var geovana_bark_controller: RefCounted = GeovanaBarkControllerScript.new()
+## Baloes de fala genericos (jogador, inimigos, NPCs). Ver speech_bubble_controller.gd.
+var speech_bubbles: RefCounted = SpeechBubblesScript.new()
+## Geovana falando sozinha na primeira partida (tutorial).
+var geovana_first_run_monologue: RefCounted = GeovanaFirstRunMonologueScript.new()
 var save_controller = RuntimeSaveControllerScript.new()
 var phase_flow_controller = PhaseFlowControllerScript.new()
 var experimental_phase_controller = ExperimentalPhaseControllerScript.new()
@@ -2808,7 +2654,14 @@ var henry_ultimate_cast_active: bool = false
 var henry_ultimate_cast_elapsed: float = 0.0
 var henry_ultimate_center: Vector2 = Vector2.ZERO
 var henry_ultimate_event_id: String = ""
+var henry_ultimate_pulses_released: int = 0
 var henry_heat_waves: Array = []
+var henry_spin_active: bool = false
+var henry_spin_elapsed: float = 0.0
+var henry_spin_origin: Vector2 = Vector2.ZERO
+var henry_spin_dash_target: Vector2 = Vector2.ZERO
+var henry_spin_dash_direction: Vector2 = Vector2.RIGHT
+var henry_spin_event_id: String = ""
 var henry_boss_burn_state: Dictionary = {}
 var henry_friction: float = 0.0
 var henry_friction_release_timer: float = 0.0
@@ -2838,6 +2691,8 @@ var player_hp = PLAYER_BASE_HP
 var player_hp_max = PLAYER_BASE_HP
 var player_speed = PLAYER_BASE_SPEED
 var player_damage = PLAYER_BASE_DAMAGE
+var player_run_level: int = 1
+var player_run_xp: int = 0
 var player_attack_interval = PLAYER_BASE_ATTACK_INTERVAL
 var player_dash_cooldown = PLAYER_BASE_DASH_COOLDOWN
 var player_start_down_fall_timer: float = 0.0
@@ -2850,25 +2705,6 @@ var henry_idle_beard_timer: float = 0.0
 var henry_idle_beard_side: int = 0
 var player_defense = 0.0
 var player_crit_chance = 0.0
-var ancorada_still_timer: = 0.0
-var ancorada_crit_bonus: = 0.0
-var ancorada_weight_timer: = 0.0
-var ancorada_weight_knockback: = 5.0
-var ancorada_prev_pos: = Vector2.ZERO
-var ancorada_spinning: = []
-var lastro_stacks: int = 0
-var lastro_points: int = 0
-var lastro_decay_timer: float = 0.0
-var lastro_decay_interval_timer: float = 0.0
-var lastro_hud_drain_timer: float = 0.0
-var lastro_hud_drain_prev_stacks: int = 0
-var lastro_5_callout_triggered: bool = false
-var hab1_ancorada_active: bool = false
-var hab1_ancorada_timer: float = 0.0
-var hab1_ancorada_cast_lastro: int = 0
-var hab1_ancorada_cast_pos: Vector2 = Vector2.ZERO
-var hab1_ancorada_cast_origin: Vector2 = Vector2.ZERO
-var hab1_ancorada_impact_done: bool = false
 var player_lifesteal = 0.0
 var poison_damage = 0.0
 var execute_threshold = 0.0
@@ -2937,7 +2773,6 @@ var last_skill_time = -10.0
 var last_secondary_time = -999.0
 var secondary_key_was_pressed = false
 var last_damage_time = -10.0
-var retornante_memoria_pending = false
 var forced_shop_timer = -1.0
 var forced_shop_triggered = false
 var forced_shop_enabled = true
@@ -3007,20 +2842,40 @@ var lobby_controller: Node = RTLobbyControllerScript.new()
 var progression_controller = RuntimeProgressionControllerScript.new()
 var drop_mode_controller = RuntimeDropModeControllerScript.new()
 var enemy_manager: Node = EnemyManagerScript.new()
+var runtime_targeting_controller: RefCounted = RuntimeTargetingControllerScript.new()
+var runtime_performance_controller: RefCounted = RuntimePerformanceControllerScript.new()
+var runtime_work_scheduler: RefCounted = RuntimeWorkSchedulerScript.new()
+var runtime_projectile_batch_renderer: RefCounted = RuntimeProjectileBatchRendererScript.new()
+var runtime_enemy_projectile_batch_renderer: RefCounted = RuntimeProjectileBatchRendererScript.new()
+var runtime_enemy_sprite_batch_renderer: RefCounted = RuntimeSpriteBatchRendererScript.new()
 var sineiro_boreal_controller: Node = Phase2SineiroBorealControllerScript.new()
 var phase3_enemy_controller: Node = Phase3EnemyControllerScript.new()
 var amber_suturer_controller: Node = Phase6AmberSuturerControllerScript.new()
 var early_boss_controller: Node = EarlyBossControllerScript.new()
 var modern_boss_controller: Node = ModernBossControllerScript.new()
+var boss6_stage_controller: RefCounted = preload("res://scripts/systems/bosses/boss6_stage_controller.gd").new()
+var boss6_controller: RefCounted = preload("res://scripts/systems/bosses/boss6_controller.gd").new()
+## Dimensao 8 (Sertao das Tartarugas): inimigos, mini chefe, projeteis e chefe.
+var sertao_controller: RTSertaoController = RTSertaoController.new()
+var boss8_controller: RTBoss8Controller = RTBoss8Controller.new()
+## Dimensao 9 (Cripta de Seda): terror com visao em cone, aranhas e a Matriarca.
+var cripta_controller: RTCriptaController = RTCriptaController.new()
+var boss9_controller: RTBoss9Controller = RTBoss9Controller.new()
+## Dimensao 10 (Bailao da Dona Boleta): eletrofunk, borboletas na batida, Teor e a Dona Boleta.
+var baile_controller: RTBaileController = RTBaileController.new()
+var boss10_controller: RTBoss10Controller = RTBoss10Controller.new()
 var player_control_controller: RefCounted = PlayerControlControllerScript.new()
-var necronada_ability_controller: RefCounted = NecronadaAbilityControllerScript.new()
-var ancorada_ability_controller: RefCounted = AncoradaAbilityControllerScript.new()
 var henry_incendiary_ability_controller: RefCounted = HenryIncendiaryAbilityControllerScript.new()
 var henry_barometric_ability_controller: RefCounted = HenryBarometricAbilityControllerScript.new()
 var henry_colossus_ability_controller: RefCounted = HenryColossusAbilityControllerScript.new()
 var reactive_survival_card_controller: RefCounted = ReactiveSurvivalCardControllerScript.new()
+var roguelike_point_card_controller: RefCounted = RoguelikePointCardControllerScript.new()
+var card_power_feedback_controller: RefCounted = CardPowerFeedbackControllerScript.new()
+var point_boost_pickup_controller: RefCounted = PointBoostPickupControllerScript.new()
+var shop_rift_controller: RefCounted = MerchantRiftControllerScript.new()
 var shared_boss_attack_contract: RefCounted = RTSharedBossAttackContractScript.new()
 var boss4_instability_fissure_controller: RefCounted = RTBoss4InstabilityFissureControllerScript.new()
+var boss4_controller: RefCounted = RTBoss4ControllerScript.new()
 var runtime_event_director: Node = RuntimeEventDirectorScript.new()
 var phase3_ritual_pulse_controller: Node = Phase3RitualPulseControllerScript.new()
 var phase4_instability_pulse_controller: Node = Phase4InstabilityPulseControllerScript.new()
@@ -3062,6 +2917,10 @@ var shop_recent_manual_open_count = 0
 var shop_purchases_this_visit = 0
 var shop_last_exit_had_purchase = false
 var shop_last_exit_time = -999.0
+var shop_rift: Dictionary = {}
+var shop_rift_kills: int = 0
+var shop_rift_fragments: int = 0
+var shop_rift_next_allowed_time: float = 0.0
 var shop_abuse_penalty_count = 0
 var shop_manual_reopen_warning_until_ms: int = 0
 var shop_manual_reopen_warning_text: String = ""
@@ -3177,81 +3036,6 @@ var paradox_ready: = false
 var paradox_active_timer: = 0.0
 var paradox_echo_queue: Array = []
 var paradox_flash: = 0.0
-var acorrentada_combo_step = 1
-var acorrentada_combo_reset_timer = 0.0
-var acorrentada_tension = 0.0
-var acorrentada_last_hit_timer = 0.0
-var acorrentada_overcharge_ready = false
-var acorrentada_force_next_attack_3 = false
-var acorrentada_links = []
-var acorrentada_visuals = []
-var acorrentada_worn_chains = []
-var acorrentada_last_player_pos = PLAYER_START
-var acorrentada_boss_elos = 0
-var acorrentada_boss_elo_timer = 0.0
-var acorrentada_boss_crack_timer = 0.0
-var acorrentada_boss_containment_charges = 0
-var eclipsada_attack_step = 0
-var eclipsada_next_attack_time = 0.0
-var eclipsada_q_speed_timer = 0.0
-var eclipsada_stealth_timer = 0.0
-var eclipsada_lua_stealth_active = false
-var eclipsada_lua_stealth_elapsed = 0.0
-var eclipsada_lua_stealth_damage_timer = 0.0
-var eclipsada_lua_last_skill_time = -999.0
-var eclipsada_sol_last_skill_time = -999.0
-var eclipsada_lua_last_secondary_time = -999.0
-var eclipsada_sol_last_secondary_time = -999.0
-var eclipsada_passive_timer = ECLIPSADA_PASSIVE_READY_TIME
-var eclipsada_trait_timer = 0.0
-var eclipsada_trait_key = ""
-var eclipsada_trait_name = ""
-var eclipsada_trait_color = Color(0.58, 0.42, 1.0)
-var eclipsada_form = ECLIPSADA_FORM_LUA
-var eclipsada_vfx = []
-var bombastica_bombs: Array = []
-var bombastica_powder_marks: Dictionary = {}
-var bombastica_vfx: Array = []
-var bombastica_q_recharges: Array = [0.0, 0.0, 0.0]
-var bombastica_next_id: = 1
-var bombastica_detonator_touch_index: = -1
-var bombastica_detonator_hold: = 0.0
-var bombastica_total_detonation_flash: = 0.0
-var bombastica_explosion_vfx_scene: PackedScene = (load("res://vfx/bombastica/BombasticaExplosionVFX.tscn") if ResourceLoader.exists("res://vfx/bombastica/BombasticaExplosionVFX.tscn") else null)
-var bombastica_mine_vfx_scene: PackedScene = (load("res://vfx/bombastica/BombasticaMineExplosionVFX.tscn") if ResourceLoader.exists("res://vfx/bombastica/BombasticaMineExplosionVFX.tscn") else null)
-var bombastica_ignition_vfx_scene: PackedScene = (load("res://vfx/bombastica/BombasticaIgnitionVFX.tscn") if ResourceLoader.exists("res://vfx/bombastica/BombasticaIgnitionVFX.tscn") else null)
-var bombastica_world_vfx_root: Node2D = null
-var bombastica_explosion_pool: Array = []
-var bombastica_mine_pool: Array = []
-var bombastica_ignition_pool: Array = []
-var bombastica_use_old_vfx: bool = false
-var bombastica_ult_state: String = "IDLE"
-var bombastica_ult_timer: float = 0.0
-var bombastica_ult_visual_path: Array = []
-var bombastica_ult_blast_anchors: Array = []
-var bombastica_ult_reverse_anchors: Array = []
-var bombastica_ult_start_pos: Vector2 = Vector2.ZERO
-var bombastica_ult_detonation_index: int = 0
-var bombastica_ult_detonation_timer: float = 0.0
-var bombastica_ult_target_hits: Dictionary = {}
-var bombastica_ult_fuse_pos: Vector2 = Vector2.ZERO
-var bombastica_ult_seed: int = 0
-var bombastica_powder_trail_tex: Texture2D = _safe_load("res://vfx/bombastica/textures/powder_trail_texture.png")
-var necronada_vestiges: Array = []
-var necronada_ossuary: Array = []
-var necronada_remnants: Array = []
-var necronada_requiem: Dictionary = {}
-var necronada_pente_history: Array = []
-var necronada_selected_slot: = 0
-var necronada_next_id: = 1
-var necronada_vfx: Array = []
-var necronada_attack_counter: = 0
-var necronada_empowered_ready: = false
-var necronada_empower_until: = 0.0
-var necronada_empower_cooldown_until: = 0.0
-var necronada_horde_progress: = 0
-var necronada_boss_empower_rose_window: = 0.0
-var necronada_boss_empower_rose_hits: = 0
 var devorador_mark_timer = 0.0
 var devorador_mark_kind = ""
 var devorador_mark_uid = 0
@@ -3352,6 +3136,7 @@ var larapio_spawned = false
 var next_larapio_spawn_time = LARAPIO_SPAWN_TIME
 var larapio_coin_drops = []
 var fusion_check_timer = 0.0
+var fusion_cooldown_timer: float = 0.0
 var event_alert_text = ""
 var event_alert_color = Color.WHITE
 var event_alert_timer = 0.0
@@ -3447,6 +3232,9 @@ var hit_freeze_timer: float = 0.0
 var boss_hp_lag: float = -1.0
 var gfx_shadows: bool = true
 var gfx_screen_shake: bool = true
+var camera_comfort_enabled: bool = true
+var camera_follow_center := Vector2.ZERO
+var camera_follow_initialized: bool = false
 var gfx_health_warning_start: float = 0.55
 var gfx_health_warning_strength: float = 1.0
 var gfx_low_resource: bool = false
@@ -3465,6 +3253,8 @@ const DESKTOP_ATTACK_AIM_AUTO: = "auto"
 const DESKTOP_ATTACK_AIM_CURSOR: = "cursor"
 var desktop_attack_aim_mode: String = DESKTOP_ATTACK_AIM_AUTO
 var desktop_hud_scale: float = DESKTOP_HUD_SCALE_MIN
+var auto_attack_range_color_index: int = 0
+var auto_attack_range_opacity: float = 1.0
 var desktop_aim_action: String = ""
 var desktop_aim_event_binding: String = ""
 var desktop_aim_is_hold: bool = false
@@ -3477,7 +3267,6 @@ var show_fps_counter: bool = false
 var run_tutorial_enabled: bool = true
 var shop_tutorial_seen: bool = false
 var boss_call_tutorial_seen: bool = false
-var retornante_unlocked: bool = false
 var gameplay_cheat_text: String = ""
 var gameplay_cheat_focused: bool = false
 var experimental_phase_requested: bool = false
@@ -3498,10 +3287,16 @@ var initial_phase_current_recorded: bool = true
 var run_initial_phase: int = 0
 var run_phase6_completed: bool = false
 const DIMENSION_FINAL_PHASE: int = 5
-const DIMENSION_FIRST_FARM_PHASE: int = 7
-const DIMENSION_ROUTE_POOL: Array[int] = [1, 2, 3, 6]
-const DIMENSION_FARM_RANDOM_COUNT: int = 2
-const DIMENSION_FARM_RETURN_PHASE: int = 4
+const DIMENSION_ROUTE_POOL: Array[int] = [1, 2, 3, 4, 6, 7]
+## Rota fixa de cada inicio (as runs alternam 1 e 6). Depois do 4 abre a escolha 5 x 7.
+const DIMENSION_START_ROUTES: Dictionary = {1: [2, 6, 3, 4], 6: [1, 2, 3, 4]}
+## Ciclo de farm (a partir da 6a dimensao): Floresta (7) + 3 regioes sorteadas, sem
+## repetir, entre DIMENSION_FARM_POOL; depois da 4a do ciclo, escolha: novo ciclo x Umbra.
+## Sertao (8), Cripta (9) e Bailao (10) so existem aqui, entao nunca aparecem antes da 7.
+const DIMENSION_FARM_ENTRY_PHASE: int = 7
+const DIMENSION_FARM_RANDOM_COUNT: int = 3
+const DIMENSION_FARM_POOL: Array[int] = [1, 2, 3, 8, 9, 10]
+const DIMENSION_CYCLE_LENGTH: int = 4
 const DIMENSION_EXTRACTION_INTERVAL: int = 10
 var dimension_route_queue: Array = []
 var dimension_route_farm_cycles: int = 0
@@ -3529,6 +3324,11 @@ var gamepad_bindings: Dictionary = {
 	"boss": JOY_BUTTON_BACK
 }
 var gamepad_mapping_action: String = ""
+## Slot "ALEATORIA" do carrossel de montagem: indice sentinela, foco por etapa
+## ("manifest", "aura", "mutation", "effect") e sorteios feitos em silencio.
+const BUILD_RANDOM_INDEX: int = -7
+var build_random_focus: Dictionary = {}
+var build_random_hidden: Dictionary = {}
 var keyboard_bindings: Dictionary = {
 	"attack": INPUT_BIND_MOUSE_PREFIX + str(MOUSE_BUTTON_LEFT),
 	"skill": INPUT_BIND_MOUSE_PREFIX + str(MOUSE_BUTTON_RIGHT),
@@ -3563,6 +3363,16 @@ var catalog_detail_text: RichTextLabel
 var catalog_detail_signature: String = ""
 var catalog_search_query: = ""
 var catalog_filter_mode: = "all"
+## Catalogo com rolagem continua (CatalogInterface).
+var catalog_scroll_px: float = 0.0
+var catalog_scroll_vel: float = 0.0
+var catalog_subfilter: String = ""
+var catalog_drag_active: bool = false
+var catalog_drag_moved: bool = false
+var catalog_drag_last: Vector2 = Vector2.ZERO
+var catalog_last_selected: int = -1
+var catalog_keyboard_nav: bool = false
+var catalog_related_buttons: Dictionary = {}
 var eletrica_shot_counter = 0
 var boss_eletrica_static_stacks: = 0
 var boss_eletrica_static_timer: = 0.0
@@ -3602,6 +3412,9 @@ var net_collected_fragment_ids: Dictionary = {}
 var net_collected_gameplay_orb_ids: Dictionary = {}
 var net_seen_card_unlock_request_ids: Dictionary = {}
 var net_confirmed_card_unlock_event_ids: Dictionary = {}
+var net_seen_lacerante_execution_request_ids: Dictionary = {}
+var net_remote_lacerante_execution_jobs: Array = []
+var net_lacerante_execution_times_by_peer: Dictionary = {}
 var net_reward_sequence: int = 0
 var shockwaves = []
 var effects = []
@@ -3684,6 +3497,9 @@ var phase3_miasma_zones = []
 var phase3_cheeses = []
 var phase6_pustule_pools = []
 var boss6_state = BOSS6_STATE_IDLE
+var boss6_stage: int = 1
+var boss6_move_phase: float = 0.0
+var boss6_ai_state: Dictionary = {}
 var boss6_current_ability = ""
 var boss6_state_timer = 0.0
 var boss6_global_recovery = 0.0
@@ -3738,6 +3554,15 @@ var boss6_necro_erosion_radius = 9999.0
 var boss6_necro_erosion_timer = 0.0
 var boss6_necro_erosion_duration = 10.0
 var boss6_necro_erosion_damage_timer = 0.0
+## Tempo restante do corte de cura da fase 6 (parcial).
+var boss6_heal_cut_timer = 0.0
+## Cargas de geada do Sineiro e o tempo ate a proxima cair sozinha.
+var player_frost_stacks: int = 0
+var player_frost_timer: float = 0.0
+## Patinacao: tempo restante de chao congelado e a inercia atual do corpo.
+var player_ice_slip_timer: float = 0.0
+var player_ice_slip_dir: Vector2 = Vector2.ZERO
+var player_ice_slip_speed: float = 1.0
 var insane_echo_visuals = []
 var boss3_faith = 50.0
 var boss3_stage = 1
@@ -3804,7 +3629,7 @@ var phase4_history_sample_timer = 0.0
 var boss4_attack_timer = BOSS4_ATTACK_INTERVAL
 var boss4_attack_pose_timer = 0.0
 var boss4_anim_time = 0.0
-var boss4_entry_target = Vector2(WORLD_SIZE.x * 0.78, WORLD_SIZE.y * 0.5)
+var boss4_entry_target = Vector2(WORLD_SIZE.x * 0.68, WORLD_SIZE.y * 0.5)
 var boss4_instability = 0.0
 var boss4_stage = 1
 var boss4_no_hit_timer = 0.0
@@ -3836,6 +3661,17 @@ var boss4_vulnerable_timer = 0.0
 var boss4_column_barrage_timer = BOSS4_COLUMN_BARRAGE_FIRST_DELAY
 var boss4_drag_wave_timer = BOSS4_DRAG_WAVE_FIRST_DELAY
 var boss4_sonic_used = false
+var boss4_ai_state: Dictionary = {}
+var boss4_last_attack: String = ""
+var boss4_visual_state: String = "idle"
+var boss4_visual_state_elapsed: float = 0.0
+var boss4_hit_timer: float = 0.0
+var boss4_hit_duration: float = 0.22
+var boss4_death_timer: float = 0.0
+var boss4_death_duration: float = 1.5
+var boss4_death_pos: Vector2 = Vector2.ZERO
+var boss4_ultimate_outcome: String = ""
+var boss4_ultimate_outcome_timer: float = 0.0
 var phase5_player_history = []
 var phase5_history_sample_timer = 0.0
 var phase5_hazards = []
@@ -3889,6 +3725,7 @@ var boss5_neural_runtime
 var boss5_multihead_policy
 var umbra_memory_controller := UmbraMemoryController.new()
 var umbra_authority_controller := UmbraAuthorityController.new()
+var umbra_run_knowledge: Dictionary = {}
 var boss5_authoritative_decision: Dictionary = {}
 var boss5_predatory_mods: Array = []
 var boss5_profile_confidence = 0.0
@@ -3909,38 +3746,13 @@ var apolo_phase5_exhibition_last_hp: int = 0
 var apolo_phase5_exhibition_last_boss_hp: float = 0.0
 var apolo_phase5_exhibition_arch: Dictionary = {}
 var apolo_phase5_exhibition_card_memory: Dictionary = {}
-var anchors = []
 var prisms = []
 var orbitals = []
 var gravitante_vfx_events: Array = []
 var seed_links = []
 var parasite_spit_zones = []
-var return_bullets = []
 var manifestation_secondaries = []
-var cartographic_coords = []
-var cartographic_route_timer = 0.0
-var cartographic_boss_displacement = 0
-var cartographic_coord_sequence = 0
-var cartographic_complete_map_timer = 0.0
-var cartographic_trace_flash = 0.0
-var carto_tp_origin = Vector2.ZERO
-var carto_tp_pin = Vector2.ZERO
-var carto_tp_window = 0.0
 var lacerante_attack_lock_timer = 0.0
-var mnesic_trick_timer = 0.0
-var mnesic_trick_origin = Vector2.ZERO
-var mnesic_boss_vulnerability = 0.0
-var resonant_perfect_streak = 0
-var resonant_noise = 0
-var resonant_next_perfect = false
-var resonant_speed_timer = 0.0
-var resonant_sinfonia_buff_timer = 0.0
-var resonant_note_index = 0
-var boss_resonant_notes = {}
-var boss_contract_clause = ""
-var boss_contract_infractions = 0
-var boss_contract_vulnerability = 0.0
-var contractual_notifications = []
 var unlock_notifications = []
 var retry_run_snapshot: Dictionary:
 	get:
@@ -3975,6 +3787,7 @@ var retry_return_timer: float:
 var death_screen_delay_timer: float = 0.0
 var death_screen_pending_result: String = ""
 var death_screen_pending_specter_upgrade: bool = false
+var death_screen_focus_pos: Vector2 = Vector2.ZERO
 var unlocked_card_ids: Dictionary = {}
 var unlocked_manifestation_ids: Dictionary = {}
 var unlocked_spectrum_ids: Dictionary = {}
@@ -3990,13 +3803,18 @@ var specter_upgrade_previous_mode: String = "game_over"
 var specter_upgrade_selected_index: int = 1
 var specter_upgrade_message: String = ""
 var card_unlock_progress: Dictionary = {}
+var card_unlock_rules_by_metric: Dictionary = {}
+var card_unlock_next_threshold_by_metric: Dictionary = {}
 var card_unlock_runtime_accumulator: float = 0.0
 var card_unlock_last_player_pos: Vector2 = PLAYER_START
 var card_unlock_stationary_tick: float = 0.0
 var card_unlocks_dirty: bool = false
 var card_unlock_save_timer: float = 0.0
 var player_progress_install_secret: String = ""
+var player_progress_device_id_cache: String = ""
 var player_progress_pending_events: Array = []
+var player_progress_pending_unlock_index: Dictionary = {}
+var player_progress_deferred_unlock_progress: Dictionary = {}
 var player_progress_sync_sent_event_ids: Dictionary = {}
 var player_progress_quarantined_events: Array = []
 var player_progress_event_sequence: int = 0
@@ -4011,12 +3829,6 @@ var player_progress_last_remote_confirmation: String = ""
 var player_progress_identity_creation_confirmed: bool = false
 var player_progress_identity_request_kind: String = ""
 var player_progress_claim_recovery_code: String = ""
-var contractual_vfx = []
-var contractual_penalty_timer = 0.0
-var contractual_order: Dictionary = {}
-var contractual_order_rewards: Dictionary = {}
-var contractual_order_penalties: Dictionary = {}
-var contractual_order_real_delta: = 0.0
 var last_facing = Vector2.RIGHT
 var lacerante_combo = 0
 var lacerante_combo_visual = 0
@@ -4037,8 +3849,6 @@ var tp_effects = []
 var tp_cooldown_pending = false
 var tp_cooldown_override = -1.0
 var tp_cooldown_release_time = -1.0
-var retornante_tp_origin = Vector2.ZERO
-var retornante_tp_window = 0.0
 var boss_tp_stun_timer = 0.0
 var rng = RandomNumberGenerator.new()
 
@@ -4064,11 +3874,8 @@ var prismatica_music_restore_volume: = 1.0
 var rain_audio_player = null
 var boss1_walk_audio_player = null
 var boss1_stop_audio_player = null
-var acorrentada_walk_audio_player = null
 var prismatica_ultimate_audio_player = null
 var nevasca_audio_player = null
-var acorrentada_walk_current_volume: = 0.0
-var acorrentada_walk_previous_pos = PLAYER_START
 var boss1_walk_previous_pos = Vector2.ZERO
 var boss1_stop_music_duck_active: = false
 var boss1_stop_music_duck_mode: = ""

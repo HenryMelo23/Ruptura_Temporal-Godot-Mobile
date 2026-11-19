@@ -52,10 +52,9 @@ func _run() -> void:
 	game.player_nickname = "GeoQA"
 	game.mode = "settings_gameplay"
 	game.gameplay_cheat_focused = false
-	game.retornante_unlocked = false
 	game.qa_data_unlocked = false
 	var rects: Dictionary = game._gameplay_preferences_rects(viewport)
-	game._handle_gameplay_settings_touch(rects["retornante_cheat"].get_center(), viewport)
+	game._handle_gameplay_settings_touch(rects["gameplay_cheat"].get_center(), viewport)
 	game._update_cheat_input_visibility()
 	game.cheat_edit.grab_focus()
 	game._sync_cheat_input_rect(viewport)

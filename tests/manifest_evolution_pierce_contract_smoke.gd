@@ -131,21 +131,6 @@ func _run_boss_and_arauto_case() -> void:
 	_check(game.bullets.is_empty(), "two valid boss-family hits must exhaust two evolution charges")
 
 
-func _run_native_returning_case() -> void:
-	_clear_combat()
-	_activate_pierce(true)
-	var returning := _bullet_at(game.player_pos)
-	returning["kind"] = "retornante"
-	returning["pierce"] = true
-	game._apply_manifest_evolution_to_bullet(returning)
-	var first := {"uid": "return_a", "kind": "enemy", "pos": game.player_pos + Vector2(60.0, 0.0)}
-	var second := {"uid": "return_b", "kind": "enemy", "pos": game.player_pos + Vector2(90.0, 0.0)}
-	_check(bool(returning.get("native_pierce", false)), "Retornante native pierce was not recorded")
-	_check(game._manifest_evolution_on_projectile_hit(returning, first, Vector2(first["pos"])), "Retornante lost native pierce on first hit")
-	_check(game._manifest_evolution_on_projectile_hit(returning, second, Vector2(second["pos"])), "Retornante lost native pierce on second hit")
-	_check(int(returning.get("evolution_pierce_left", 0)) == 2, "Retornante consumed evolution charges despite native pierce")
-
-
 func _run_public_attack_case() -> void:
 	# This is the public-flow counterpart to the exact low-level collision
 	# cases above.  It proves a real input attack produces one additional hit,
@@ -186,6 +171,10 @@ func _run_public_attack_case() -> void:
 
 
 func _run() -> void:
+	if not game.MANIFEST_EVOLUTIONS_ENABLED:
+		print("MANIFEST_EVOLUTION_PIERCE_CONTRACT_OK disabled=true roster=%d" % game.MANIFESTATIONS.size())
+		quit(0)
+		return
 	game._start_game()
 	game.mode = "game"
 	game.current_phase = 1
@@ -199,7 +188,6 @@ func _run() -> void:
 	_run_collision_case("two charges", true, true, 3)
 	_run_distinct_target_case()
 	_run_boss_and_arauto_case()
-	_run_native_returning_case()
 	_run_public_attack_case()
 
 	print("MANIFEST_EVOLUTION_PIERCE_CONTRACT_OK charges=0/1/2 boss_arauto=ok returning_native=ok")

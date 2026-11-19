@@ -10,6 +10,8 @@ const HENRY_FROZEN_DRAW_OFFSET := Vector2(0.0, 4.0)
 const Boss1AnimationPresentation = preload("res://scripts/presentation/boss1_animation_presentation.gd")
 const Boss2AnimationPresentation = preload("res://scripts/presentation/boss2_animation_presentation.gd")
 const Boss3AnimationPresentation = preload("res://scripts/presentation/boss3_animation_presentation.gd")
+const Boss4AnimationPresentation = preload("res://scripts/presentation/boss4_animation_presentation.gd")
+const Boss6AnimationPresentation = preload("res://scripts/presentation/boss6_animation_presentation.gd")
 
 
 static func _petro_frame(game: Node2D) -> Texture2D:
@@ -54,6 +56,12 @@ static func _arauto_texture(game: Node2D) -> Texture2D:
 
 
 static func _enemy_draw_size(game: Node2D, enemy: Dictionary) -> Vector2:
+	if game.sertao_controller.owns_kind(String(enemy.get("type", ""))):
+		return RTSertaoPresentation.enemy_draw_size(String(enemy.get("type", "")))
+	if game.cripta_controller.owns_kind(String(enemy.get("type", ""))):
+		return RTCriptaPresentation.enemy_draw_size(String(enemy.get("type", "")))
+	if game.baile_controller.owns_kind(String(enemy.get("type", ""))):
+		return RTBailePresentation.enemy_draw_size(String(enemy.get("type", "")))
 	match String(enemy.get("type", game.ENEMY_COMMON)):
 		game.ENEMY_AGGLOMERATOR:
 			return Vector2(86, 86)
@@ -96,7 +104,7 @@ static func _enemy_draw_size(game: Node2D, enemy: Dictionary) -> Vector2:
 		game.ENEMY_FOSSIL_PUSTULE:
 			return Vector2(92, 102)
 		game.ENEMY_CHRONAL_LEECH:
-			return Vector2(98, 62)
+			return Vector2(39.2, 24.8)
 		game.ENEMY_AMBER_SUTURER:
 			# The repacked 224x144 cells are rendered at a uniform 0.75 scale.
 			return Vector2(168, 108)
@@ -118,6 +126,18 @@ static func _enemy_draw_size(game: Node2D, enemy: Dictionary) -> Vector2:
 static func _enemy_texture(game: Node2D, enemy: Dictionary) -> Texture2D:
 	var idx: int = int(enemy["phase"]) % 2
 	var kind7: String = String(enemy.get("type", game.ENEMY_COMMON))
+	if game.baile_controller.owns_kind(kind7):
+		var s10_tex: Texture2D = RTBailePresentation.enemy_texture(game, enemy)
+		if s10_tex != null:
+			return s10_tex
+	if game.cripta_controller.owns_kind(kind7):
+		var s9_tex: Texture2D = RTCriptaPresentation.enemy_texture(game, enemy)
+		if s9_tex != null:
+			return s9_tex
+	if game.sertao_controller.owns_kind(kind7):
+		var s8_tex: Texture2D = RTSertaoPresentation.enemy_texture(game, enemy)
+		if s8_tex != null:
+			return s8_tex
 	if kind7 == game.ENEMY_SINEIRO_BOREAL:
 		var sineiro_texture: Texture2D = game.SineiroBorealPresentation.enemy_texture(game, enemy)
 		if sineiro_texture != null:
@@ -157,6 +177,23 @@ static func _enemy_texture(game: Node2D, enemy: Dictionary) -> Texture2D:
 		var phase6_texture: Texture2D = game._texture_frame(game._phase6_enemy_texture_key(kind6), idx)
 		return phase6_texture if phase6_texture != null else game._texture_frame("enemy_common_phase_1", idx)
 	if game.current_phase == 4:
+		var phase4_kind := String(enemy.get("type", game.ENEMY_COMMON))
+		var typed_phase4_key := ""
+		match phase4_kind:
+			game.ENEMY_NEXUS_CARTOGRAPHER:
+				typed_phase4_key = "enemy_phase_4_cartografo"
+			game.ENEMY_NEXUS_CHRONOPHAGE:
+				typed_phase4_key = "enemy_phase_4_cronofago"
+			game.ENEMY_NEXUS_REFRACTOR:
+				typed_phase4_key = "enemy_phase_4_refrator"
+			game.ENEMY_NEXUS_WEAVER:
+				typed_phase4_key = "enemy_phase_4_tecelao"
+			game.ENEMY_NEXUS_ECHO:
+				typed_phase4_key = "enemy_phase_4_eco"
+		if typed_phase4_key != "":
+			var typed_phase4_texture: Texture2D = game._texture_frame(typed_phase4_key, idx)
+			if typed_phase4_texture != null:
+				return typed_phase4_texture
 		var moving_right4 = Vector2(enemy.get("facing_dir", Vector2.LEFT)).x >= 0.0
 		var phase4_key = "enemy_phase_4_right" if moving_right4 else "enemy_phase_4_left"
 		var phase4_texture: Texture2D = game._texture_frame(phase4_key, idx)
@@ -217,6 +254,8 @@ static func _enemy_texture(game: Node2D, enemy: Dictionary) -> Texture2D:
 
 
 static func _enemy_should_flip(game: Node2D, enemy: Dictionary) -> bool:
+	if game.sertao_controller.owns_kind(String(enemy.get("type", ""))) or game.cripta_controller.owns_kind(String(enemy.get("type", ""))) or game.baile_controller.owns_kind(String(enemy.get("type", ""))):
+		return Vector2(enemy.get("facing_dir", Vector2.RIGHT)).x < -0.05
 	if String(enemy.get("type", game.ENEMY_COMMON)) == game.ENEMY_SINEIRO_BOREAL:
 		return Vector2(enemy.get("facing_dir", Vector2.RIGHT)).x < -0.05
 	if game.current_phase == 6:
@@ -231,6 +270,9 @@ static func _enemy_should_flip(game: Node2D, enemy: Dictionary) -> bool:
 			return Vector2(enemy.get("facing_dir", Vector2.RIGHT)).x < -0.05
 		return false
 	if game.current_phase == 4:
+		var phase4_kind := String(enemy.get("type", game.ENEMY_COMMON))
+		if phase4_kind in [game.ENEMY_NEXUS_CARTOGRAPHER, game.ENEMY_NEXUS_CHRONOPHAGE, game.ENEMY_NEXUS_REFRACTOR, game.ENEMY_NEXUS_WEAVER, game.ENEMY_NEXUS_ECHO]:
+			return Vector2(enemy.get("facing_dir", Vector2.RIGHT)).x < -0.05
 		return false
 	var dir: Vector2 = Vector2(enemy.get("facing_dir", game._enemy_default_facing(String(enemy.get("type", game.ENEMY_COMMON)))))
 	var moving_right = dir.x >= 0.0
@@ -277,19 +319,33 @@ static func _enemy_visual_offset(game: Node2D, enemy: Dictionary) -> Vector2:
 
 
 static func _boss_texture(game: Node2D) -> Texture2D:
+	if game.current_phase == RTSertaoController.PHASE:
+		return RTSertaoPresentation.boss_texture(game)
+	if game.current_phase == RTCriptaController.PHASE:
+		return RTCriptaPresentation.boss_texture(game)
+	if game.current_phase == RTBaileController.PHASE:
+		return RTBailePresentation.boss_texture(game)
 	if game.current_phase == 7:
+		if not game.boss7_core_active:
+			return RTBoss7Animator.texture(game)
 		var key7: = "boss7_dive" if game.boss7_state == game.BOSS7_STATE_DIVE else "boss7_fly"
 		var frames7: Array = game.textures.get(key7, [])
 		if not frames7.is_empty() and frames7[int(game.boss_phase) % frames7.size()] != null:
 			return frames7[int(game.boss_phase) % frames7.size()]
-		return game.textures["boss"]
+		return game.textures.get("boss")
 	if game.current_phase == 6:
+		var action_texture: Texture2D = Boss6AnimationPresentation.active_texture(game)
+		if action_texture != null:
+			return action_texture
 		var form_key: String = game._boss6_form_key()
 		var frames6: Array = game.textures.get(form_key, [])
 		if not frames6.is_empty() and frames6[int(game.boss_phase) % frames6.size()] != null:
 			return frames6[int(game.boss_phase) % frames6.size()]
-		return game.textures["boss"]
+		return game.textures.get("boss")
 	if game.current_phase == 5:
+		var umbra_tex: Texture2D = RTUmbraBossAnimation.active_texture(game)
+		if umbra_tex != null:
+			return umbra_tex
 		if game.boss5_siphon_timer > 0.0:
 			var shield_frames: Array = game.textures.get("boss5_shield", [])
 			if not shield_frames.is_empty() and shield_frames[int(game.boss_phase) % shield_frames.size()] != null:
@@ -301,14 +357,13 @@ static func _boss_texture(game: Node2D) -> Texture2D:
 		var frames5: Array = game.textures.get("boss5", [])
 		if not frames5.is_empty() and frames5[int(game.boss_phase) % frames5.size()] != null:
 			return frames5[int(game.boss_phase) % frames5.size()]
-		return game.textures["boss"]
+		return game.textures.get("boss")
 	if game.current_phase == 4:
-		if game.boss4_attack_pose_timer > 0.0 and game.textures.get("boss4_attack") != null:
-			return game.textures["boss4_attack"]
-		var frames4: Array = game.textures.get("boss4", [])
-		if not frames4.is_empty():
-			return frames4[int(game.boss4_anim_time) % frames4.size()]
-		return game.textures["boss"]
+		var boss4_animation_texture: Texture2D = Boss4AnimationPresentation.active_texture(game)
+		if boss4_animation_texture != null:
+			return boss4_animation_texture
+		var boss4_idle_frames: Array = game.textures.get("boss4_rework_idle", [])
+		return boss4_idle_frames[0] if not boss4_idle_frames.is_empty() else null
 	if game.current_phase == 3:
 		var boss3_animation_texture: Texture2D = Boss3AnimationPresentation.active_texture(game)
 		if boss3_animation_texture != null:
@@ -325,11 +380,11 @@ static func _boss_texture(game: Node2D) -> Texture2D:
 		return boss1_animation_texture
 	var pct = game.boss_hp / max(1.0, game.boss_hp_max)
 	var idx = int(game.boss_phase) % 2
-	if pct >= 0.6:
-		return game.textures["boss_stage1"][idx] if game.textures["boss_stage1"][idx] else game.textures["boss"]
-	if pct >= 0.4:
-		return game.textures["boss_stage2"][idx] if game.textures["boss_stage2"][idx] else game.textures["boss"]
-	return game.textures["boss_stage3"][idx] if game.textures["boss_stage3"][idx] else game.textures["boss"]
+	var stage_key := "boss_stage1" if pct >= 0.6 else ("boss_stage2" if pct >= 0.4 else "boss_stage3")
+	var stage_frames: Array = game.textures.get(stage_key, [])
+	if idx < stage_frames.size() and stage_frames[idx] != null:
+		return stage_frames[idx]
+	return game.textures.get("boss")
 
 
 static func _boss2_texture(game: Node2D) -> Texture2D:
@@ -338,11 +393,11 @@ static func _boss2_texture(game: Node2D) -> Texture2D:
 		return remaster_texture
 	var boss2_frames = game.textures.get("boss2", [])
 	if not boss2_frames is Array or boss2_frames.is_empty():
-		return game.textures["boss"]
+		return game.textures.get("boss")
 	var frames: Array = boss2_frames
 	var frame_count: = 2 if game.boss2_state == game.BOSS2_STATE_REPOSITION else frames.size()
 	var idx = game.boss2_anim_frame % max(1, min(frame_count, frames.size()))
-	return frames[idx] if frames[idx] else game.textures["boss"]
+	return frames[idx] if frames[idx] else game.textures.get("boss")
 
 
 static func _boss_draw_position(game: Node2D) -> Vector2:
@@ -352,11 +407,11 @@ static func _boss_draw_position(game: Node2D) -> Vector2:
 			hover = -8.0
 		return game.boss_pos + Vector2(0, hover)
 	if game.current_phase == 6:
-		return game.boss_pos
+		return Boss6AnimationPresentation.draw_position(game)
 	if game.current_phase == 5:
-		return game.boss_pos + Vector2(sin(game.boss_phase * 0.65) * 4.0, sin(game.boss_phase * 1.1) * 5.0)
+		return RTUmbraBossAnimation.draw_position(game)
 	if game.current_phase == 4:
-		return game.boss_pos + Vector2(0, sin(game.boss4_anim_time * 2.0) * 4.0)
+		return Boss4AnimationPresentation.draw_position(game)
 	if game.current_phase == 3:
 		return game.boss_pos
 	if game.current_phase == 2:
@@ -381,11 +436,19 @@ static func _boss_draw_position(game: Node2D) -> Vector2:
 
 
 static func _boss_draw_size(game: Node2D) -> Vector2:
+	if game.current_phase == RTSertaoController.PHASE:
+		return RTBoss8Controller.DRAW_SIZE
+	if game.current_phase == RTCriptaController.PHASE:
+		return RTBoss9Controller.DRAW_SIZE
+	if game.current_phase == RTBaileController.PHASE:
+		return RTBoss10Controller.DRAW_SIZE
 	if game.current_phase == 1:
 		return Boss1AnimationPresentation.draw_size(game)
 	if game.current_phase == 2:
 		return Boss2AnimationPresentation.draw_size()
-	return game.BOSS7_VISUAL_SIZE if game.current_phase == 7 else (Vector2(286, 257) if game.current_phase == 6 else (Vector2(300, 250) if game.current_phase == 4 else (Vector2(59.4, 88.0) if game.current_phase == 5 else Vector2(184, 170))))
+	if game.current_phase == 4:
+		return Boss4AnimationPresentation.draw_size(game)
+	return game.BOSS7_VISUAL_SIZE if game.current_phase == 7 else (Vector2(286, 257) if game.current_phase == 6 else (Vector2(300, 250) if game.current_phase == 4 else ((RTUmbraBossAnimation.DRAW_SIZE if RTUmbraBossAnimation.available() else Vector2(59.4, 88.0)) if game.current_phase == 5 else Vector2(184, 170))))
 
 
 static func _should_flip_player_sprite(game: Node2D) -> bool:
@@ -438,18 +501,32 @@ static func _player_fire_animation_info(game: Node2D, direction: Vector2 = Vecto
 	var sector: int = posmod(roundi(dir.angle() / (PI / 4.0)), 8)
 	var columns: Array[int] = [-1, 5, 0, 4, -1, 3, 1, 2]
 	var column: int = columns[sector]
+	# Quadros por direcao: 2 na arte antiga, 4 na Geovana v2 (preparo, carga,
+	# disparo, recuo). Os indices de rede seguem o mesmo bloco por direcao.
+	var per_dir: int = _player_fire_frames_per_direction(game, fire_prefix)
 	if column < 0:
 		return {"key": fire_prefix, "flip_h": sector == 4, "network_offset": 0}
-	return {"key": fire_prefix + "_" + game.PLAYER_FIRE_DIRECTIONS[column], "flip_h": false, "network_offset": 2 + column * 2}
+	return {"key": fire_prefix + "_" + game.PLAYER_FIRE_DIRECTIONS[column], "flip_h": false, "network_offset": per_dir + column * per_dir}
+
+
+static func _player_fire_frames_per_direction(game: Node2D, fire_prefix: String = "player_fire") -> int:
+	var base: Array = game.textures.get(fire_prefix, [])
+	return base.size() if base.size() > 2 and RTGeovanaV2.is_v2(base[0]) else 2
 
 
 static func _player_fire_frame_index(game: Node2D, elapsed_time: float) -> int:
+	var per_dir: int = _player_fire_frames_per_direction(game)
+	if per_dir > 2 and game.manifestation_key != "prismatica" and game.manifestation_key != "parasitica":
+		return RTGeovanaV2.fire_frame(per_dir, elapsed_time, game.PLAYER_FIRE_FRAME_SECONDS * 2.0)
 	return clampi(int(elapsed_time / game.PLAYER_FIRE_FRAME_SECONDS), 0, 1)
 
 
 static func _player_fire_texture_for_current_attack(game: Node2D, elapsed_time: float) -> Texture2D:
 	var info: Dictionary = game._player_fire_animation_info()
 	var frames: Array = game.textures.get(String(info["key"]), [])
+	if frames.size() > 2 and RTGeovanaV2.is_v2(frames[0]):
+		# v2: preparo, carga, disparo e recuo dentro da mesma janela da pose.
+		return frames[clampi(game._player_fire_frame_index(elapsed_time), 0, frames.size() - 1)]
 	return frames[game._player_fire_frame_index(elapsed_time)] if frames.size() == 2 else null
 
 
@@ -484,7 +561,9 @@ static func _player_draw_profile(game: Node2D) -> Dictionary:
 			"size": game.PLAYER_DRAW_FROZEN_SIZE, 
 			"offset": Vector2.ZERO
 		}
-	if game.time_alive - game.last_damage_time < 0.35:
+	if RTGeovanaV2.is_v2(game._player_texture()):
+		return RTGeovanaV2.draw_profile()
+	if game._player_damage_pose_active(move):
 		return {
 			"size": game.PLAYER_DRAW_DAMAGE_SIZE, 
 			"offset": Vector2.ZERO

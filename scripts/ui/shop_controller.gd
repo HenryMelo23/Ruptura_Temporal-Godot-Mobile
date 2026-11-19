@@ -295,6 +295,11 @@ func request_exit_or_finish() -> void:
 
 
 func _commit_exit_or_finish() -> void:
+	# Na oficina o portao do grupo e o portal de saida, nao a tela de cartas:
+	# quem termina de comprar volta a andar e corre para a saida.
+	if game._merchant_dimension().active:
+		finish()
+		return
 	if game.is_multiplayer:
 		if game.is_dead or game.online_local_spectator:
 			game.mode = "shop_mp_waiting"
@@ -361,6 +366,7 @@ func open_shop(forced: bool) -> void:
 	game.mode = "shop"
 	game._update_audio_volumes()
 	game.shop_rerolls = game.SHOP_FREE_REROLLS_PER_VISIT
+	var rift_entry: bool = game.shop_rift_controller.apply_entry_bonus()
 	game.shop_paid_rerolls_this_visit = 0
 	reset()
 	game.shop_mp_ready_count = 0
@@ -383,7 +389,7 @@ func open_shop(forced: bool) -> void:
 	game.shop_select_pulse_timer = 0.2
 	game.shop_last_tap_index = -1
 	game.shop_last_tap_msec = 0
-	if forced:
+	if forced and not rift_entry:
 		game._add_text("Loja forcada", game.player_pos + Vector2(0, -92), Color(0.0, 1.0, 0.82), 1.4, 26)
 	if game.shop_endurance_discount > 0.0:
 		game._add_text("RESISTENCIA: -%d%%" % int(round(game.shop_endurance_discount * 100.0)), game.player_pos + Vector2(0, -128), Color(1.0, 0.86, 0.28), 1.6, 24)
@@ -609,6 +615,7 @@ func finish() -> void:
 	bargain_exit_confirmation_pending = false
 	game.shop_last_exit_had_purchase = game.shop_purchases_this_visit > 0
 	game.shop_last_exit_time = game.time_alive
+	game.shop_rift_controller.on_shop_closed()
 	finish_manual_visit()
 	game.shop_purchase_anim_timer = 0.0
 	game.shop_purchase_pending_card = {}
@@ -633,8 +640,6 @@ func finish() -> void:
 	if game.has_method("_consume_bargain_discount_shop_session"):
 		game._consume_bargain_discount_shop_session()
 	game.next_forced_shop_time = game.shop_auto_interval if game.shop_auto_enabled else INF
-	if game.has_method("_geovana_bark") and game.shop_purchases_this_visit > 0:
-		game._geovana_bark("shop_exit", {"purchases": game.shop_purchases_this_visit})
 	game._update_audio_volumes()
 	game._block_ui_input()
 
@@ -656,6 +661,8 @@ func update_waiting(delta: float) -> void:
 
 func should_trigger_forced() -> bool:
 	if game._is_drop_game_mode():
+		return false
+	if game.shop_rift_controller.replaces_forced_countdown():
 		return false
 	if not game.shop_auto_enabled or game.forced_shop_triggered or game.forced_shop_timer >= 0.0 or game.shop_opening_timer > 0.0:
 		return false
@@ -683,13 +690,18 @@ func set_auto_enabled(enabled: bool) -> void:
 			game.settings_previous_mode = "game"
 
 
+## A loja manual foi aposentada: a Fenda do Mercador e a unica entrada da loja.
+## O atalho segue so para ferramentas de QA (dados QA ou fase inicial forcada).
+func manual_dev_access() -> bool:
+	return not game._is_drop_game_mode() and (bool(game.qa_data_unlocked) or game._sanitize_forced_initial_phase(game.forced_initial_phase) > 0)
+
+
 func try_open_manual() -> void:
 	if game._is_drop_game_mode():
 		return
 	if game._local_player_controls_locked():
 		return
-	var development_tools_active: bool = game.qa_data_unlocked or game._sanitize_forced_initial_phase(game.forced_initial_phase) > 0
-	if (game.shop_auto_enabled and not development_tools_active) or game.mode != "game":
+	if not manual_dev_access() or game.mode != "game":
 		return
 	if not manual_available():
 		warn_manual_reopen_penalty()
@@ -755,8 +767,8 @@ func update(delta: float) -> void:
 	game._apply_card(card)
 	game._register_card_purchase_unlock_progress(card)
 	game.card_cost += game._shop_price_increment_after_purchase()
-	game._clear_locked_shop_slot_for_card(card)
-	game._refill_shop_slot_after_purchase(game.shop_selected)
+	game.shop_locked_slots.clear()
+	game.shop_cards = game._roll_shop_cards("purchase")
 	game.shop_selected = clamp(game.shop_selected, 0, max(0, game.shop_cards.size() - 1))
 	game.shop_select_pulse_index = game.shop_selected
 	game.shop_select_pulse_timer = 0.22
@@ -811,9 +823,9 @@ func handle_touch(pos: Vector2, viewport: Vector2) -> void:
 			game._reroll_shop()
 		elif Rect2(areas.deck).has_point(pos) and game._deck_total_cards() > 0:
 			game._open_deck("shop")
-		elif Rect2(areas.burn).has_point(pos):
+		elif game.buttons.has("shop_burn_%d" % game.shop_selected) and Rect2(game.buttons["shop_burn_%d" % game.shop_selected]).has_point(pos):
 			game._burn_shop_card(game.shop_selected)
-		elif Rect2(areas.reserve).has_point(pos):
+		elif game.buttons.has("shop_reserve_%d" % game.shop_selected) and Rect2(game.buttons["shop_reserve_%d" % game.shop_selected]).has_point(pos):
 			game._reserve_shop_card(game.shop_selected)
 		else:
 			for i in range(mini(3, game.shop_cards.size())):

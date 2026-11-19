@@ -28,7 +28,8 @@ func _run(game: Node) -> void:
 			_check(FileAccess.file_exists(icon_path), "icon path does not resolve: " + icon_path)
 			_check(FileAccess.file_exists(icon_path + ".import"), "icon has no import metadata for Android export: " + icon_path)
 			_check(ResourceLoader.exists(icon_path), "icon is not visible to ResourceLoader: " + icon_path)
-			_check(game.textures.get("aura_" + key) != null, "aura texture did not load: " + key)
+			_check(game._get_texture("aura_" + key) != null, "aura texture did not load: " + key)
+			game.unlocked_spectrum_ids[key] = true
 			game.selected_aura = game.AURAS.find(aura)
 			game._start_game()
 			_check(String(game.aura_state.get("name", "")) == String(aura.get("name", "")), "selected aura state mismatch for " + key)

@@ -26,6 +26,107 @@ void fragment() {
 	color *= 1.0 + ripple * mask * 0.045 * motion_scale;
 	COLOR = vec4(color, base.a);
 }"""
+const STATIC_SHADER_CODE := """shader_type canvas_item;
+render_mode unshaded, blend_disabled;
+
+void fragment() {
+	COLOR = texture(TEXTURE, UV);
+}"""
+# World-space sampling blends neighboring cells across irregular strips. The
+# authored altar remains part of the atlas; no decal or per-frame image baking.
+const CHUNK_SHADER_CODE := """shader_type canvas_item;
+render_mode unshaded, blend_disabled;
+uniform vec2 camera_origin = vec2(0.0);
+uniform vec2 altar_cell = vec2(0.0);
+uniform sampler2D ground_terrain : filter_nearest;
+uniform sampler2D altar_terrain : filter_nearest;
+uniform vec2 altar_source_center = vec2(0.5);
+uniform float chunk_size = 384.0;
+uniform float elapsed = 0.0;
+// Transmutacao da UMBRA: dentro do circulo a dimensao nova, fora a antiga.
+uniform sampler2D old_terrain : filter_nearest;
+uniform float reveal_radius = -1.0;
+uniform vec2 reveal_center = vec2(0.0);
+uniform vec4 reveal_color : source_color = vec4(0.36, 1.0, 0.56, 1.0);
+varying vec2 world_position;
+void vertex() { world_position = VERTEX + camera_origin; }
+float tile_id(vec2 cell) {
+	if (all(lessThan(abs(cell - altar_cell), vec2(0.1)))) { return 5.0; }
+	float id = mod(cell.x * 7.0 + cell.y * 11.0 + floor(cell.y / 3.0) * 4.0, 15.0);
+	return id >= 5.0 ? id + 1.0 : id;
+}
+vec4 ground_sample(vec2 pixel_size, vec2 cell, bool old) {
+	float id = tile_id(cell);
+	vec2 local = 1.0 - abs(1.0 - mod(world_position / chunk_size - cell, vec2(2.0)));
+	// Trim the atlas's ruler-like gravel margins on ordinary terrain only.
+	float inset = id == 5.0 ? 0.0 : 0.095;
+	local = mix(vec2(inset), vec2(1.0 - inset), local);
+	if (id == 5.0) { local += altar_source_center - vec2(0.5); }
+	vec2 tile = vec2(mod(id, 4.0), floor(id / 4.0));
+	vec2 uv = (tile + local) / 4.0;
+	// The altar's centered crop may include its adjacent authored ground.
+	// Never clamp to its cell edge: that stretches a row into visible stripes.
+	if (id == 5.0) {
+		uv = clamp(uv, pixel_size * 0.5, vec2(1.0) - pixel_size * 0.5);
+	} else {
+		uv = clamp(uv, tile / 4.0 + pixel_size * 0.5,
+			(tile + 1.0) / 4.0 - pixel_size * 0.5);
+	}
+	if (id == 5.0) { return texture(altar_terrain, uv); }
+	if (old) { return texture(old_terrain, uv); }
+	return texture(ground_terrain, uv);
+}
+vec4 terrain(vec2 pixel_size, bool old) {
+	vec2 grid = world_position / chunk_size - 0.5;
+	vec2 cell = floor(grid);
+	vec2 local = fract(grid);
+	vec2 ripple = vec2(sin(world_position.y * 0.037) + sin(world_position.y * 0.083),
+		sin(world_position.x * 0.041) + sin(world_position.x * 0.071)) * 0.018;
+	vec2 weight = smoothstep(vec2(0.47) + ripple, vec2(0.53) + ripple, local);
+	vec2 left_cell = cell + vec2(weight.x >= 1.0 ? 1.0 : 0.0, weight.y >= 1.0 ? 1.0 : 0.0);
+	vec4 left = ground_sample(pixel_size, left_cell, old);
+	if (weight.y > 0.0 && weight.y < 1.0) {
+		left = mix(left, ground_sample(pixel_size, vec2(left_cell.x, cell.y + 1.0), old), weight.y);
+	}
+	vec4 result = left;
+	if (weight.x > 0.0 && weight.x < 1.0) {
+		vec4 right = ground_sample(pixel_size, cell + vec2(1.0, weight.y >= 1.0 ? 1.0 : 0.0), old);
+		if (weight.y > 0.0 && weight.y < 1.0) {
+			right = mix(right, ground_sample(pixel_size, cell + vec2(1.0, 1.0), old), weight.y);
+		}
+		result = mix(left, right, weight.x);
+	}
+	return result;
+}
+void fragment() {
+	vec4 result = terrain(TEXTURE_PIXEL_SIZE, false);
+	float energy = smoothstep(0.12, 0.35, result.b - result.g);
+	result.rgb *= 1.0 + energy * sin(elapsed * 0.7 + world_position.x * 0.013 + world_position.y * 0.009) * 0.035;
+	if (reveal_radius >= 0.0) {
+		vec2 rel = world_position - reveal_center;
+		float d = length(rel);
+		float ang = atan(rel.y, rel.x);
+		// Borda rasgada (nao um circulo perfeito) que tremula.
+		float edge = reveal_radius + sin(ang * 9.0 + elapsed * 3.1) * 16.0 + sin(ang * 23.0 - elapsed * 5.3) * 8.0 + sin(ang * 61.0) * 5.0;
+		if (d > edge) {
+			vec4 old_ground = terrain(TEXTURE_PIXEL_SIZE, true);
+			// A realidade antiga perde a cor e racha perto da frente.
+			float near = 1.0 - smoothstep(0.0, 220.0, d - edge);
+			float grey = dot(old_ground.rgb, vec3(0.3, 0.59, 0.11));
+			result.rgb = mix(old_ground.rgb, vec3(grey) * 0.75, near * 0.55);
+		} else {
+			// O lado novo nasce banhado na cor da dimensao.
+			float wash = 1.0 - smoothstep(0.0, 260.0, edge - d);
+			result.rgb = mix(result.rgb, result.rgb * 0.55 + reveal_color.rgb * 0.6, wash * 0.45);
+		}
+		float rim = 1.0 - smoothstep(0.0, 18.0, abs(d - edge));
+		float hot = 1.0 - smoothstep(0.0, 5.0, abs(d - edge));
+		result.rgb = mix(result.rgb, reveal_color.rgb * 1.25 + vec3(0.12), rim * 0.8);
+		result.rgb = mix(result.rgb, vec3(1.0), hot * 0.85);
+	}
+	COLOR = vec4(result.rgb, 1.0);
+}
+"""
 const MAX_MOTES := 18
 const LOW_RESOURCE_MOTES := 8
 const TINTS := {
@@ -38,7 +139,10 @@ const TINTS := {
 var map_texture: Texture2D
 var map_rect := Rect2()
 var map_tile_rects: Array[Rect2] = []
+var map_chunks: Array[Dictionary] = []
+var chunk_material: ShaderMaterial
 var life_material: ShaderMaterial
+var static_material: ShaderMaterial
 var presented_surface: int = -1
 var presented_low_resource: bool = false
 
@@ -51,36 +155,69 @@ func _init() -> void:
 	var life_shader := Shader.new()
 	life_shader.code = LIFE_SHADER_CODE
 	life_material.shader = life_shader
+	static_material = ShaderMaterial.new()
+	var static_shader := Shader.new()
+	static_shader.code = STATIC_SHADER_CODE
+	static_material.shader = static_shader
+	chunk_material = ShaderMaterial.new()
+	var chunk_shader := Shader.new()
+	chunk_shader.code = CHUNK_SHADER_CODE
+	chunk_material.shader = chunk_shader
 	material = life_material
 
 
 func present(texture: Texture2D, rect: Rect2, surface: int, elapsed: float, low_resource: bool) -> void:
-	var geometry_changed: bool = texture != map_texture or not rect.is_equal_approx(map_rect) or not map_tile_rects.is_empty()
-	var material_mode_changed: bool = surface != presented_surface or low_resource != presented_low_resource
+	var geometry_changed: bool = texture != map_texture or not rect.is_equal_approx(map_rect) or not map_tile_rects.is_empty() or not map_chunks.is_empty()
+	var material_mode_changed: bool = surface != presented_surface or low_resource != presented_low_resource or material == chunk_material
 	if geometry_changed:
 		map_texture = texture
 		map_rect = rect
 		map_tile_rects.clear()
+		map_chunks.clear()
 	_apply_presentation(surface, elapsed, low_resource, geometry_changed, material_mode_changed)
 
 
-func present_tiled(texture: Texture2D, rects: Array[Rect2], surface: int, elapsed: float, low_resource: bool) -> void:
-	var geometry_changed: bool = texture != map_texture or rects != map_tile_rects
-	var material_mode_changed: bool = surface != presented_surface or low_resource != presented_low_resource
-	if geometry_changed:
-		map_texture = texture
-		map_rect = Rect2()
-		map_tile_rects = rects.duplicate()
+func present_chunks(texture: Texture2D, chunks: Array[Dictionary], camera: Vector2, altar: Vector2, altar_uv: Vector2, surface: int, elapsed: float, low_resource: bool, altar_texture: Texture2D = null) -> void:
+	var geometry_changed := map_texture != texture or map_chunks != chunks
+	var material_mode_changed := presented_surface != surface or low_resource != presented_low_resource
+	map_texture = texture
+	map_chunks = chunks
+	map_tile_rects.clear()
 	_apply_presentation(surface, elapsed, low_resource, geometry_changed, material_mode_changed)
+	material = chunk_material
+	chunk_material.set_shader_parameter("ground_terrain", texture)
+	chunk_material.set_shader_parameter("altar_terrain", altar_texture if altar_texture != null else texture)
+	chunk_material.set_shader_parameter("camera_origin", camera)
+	chunk_material.set_shader_parameter("altar_source_center", altar_uv)
+	chunk_material.set_shader_parameter("altar_cell", (altar / RTExperimentalPhaseController.CHUNK_SIZE).floor())
+	chunk_material.set_shader_parameter("elapsed", elapsed)
+	chunk_material.set_shader_parameter("chunk_size", RTExperimentalPhaseController.CHUNK_SIZE)
+
+
+## Frente da transmutacao da UMBRA (raio < 0 desliga).
+func set_reveal(old_texture: Texture2D, center: Vector2, radius: float, color: Color) -> void:
+	if chunk_material == null:
+		return
+	chunk_material.set_shader_parameter("reveal_radius", radius)
+	if radius < 0.0:
+		return
+	chunk_material.set_shader_parameter("old_terrain", old_texture if old_texture != null else map_texture)
+	chunk_material.set_shader_parameter("reveal_center", center)
+	chunk_material.set_shader_parameter("reveal_color", color)
 
 
 func _apply_presentation(surface: int, elapsed: float, low_resource: bool, geometry_changed: bool, material_mode_changed: bool) -> void:
-	life_material.set_shader_parameter("elapsed", elapsed)
 	if material_mode_changed:
 		presented_surface = surface
 		presented_low_resource = low_resource
+		# The full-screen animated shader and alpha blend dominate Android frame
+		# time. The map is opaque, so performance/adaptive modes use a one-sample
+		# shader with blending disabled while preserving the authored texture.
+		material = static_material if low_resource else life_material
 		life_material.set_shader_parameter("fluid_surface", not low_resource and surface not in [1, 4])
 		life_material.set_shader_parameter("motion_scale", 0.65 if low_resource else 1.0)
+	if not low_resource:
+		life_material.set_shader_parameter("elapsed", elapsed)
 	if not visible:
 		show()
 	if geometry_changed:
@@ -89,6 +226,13 @@ func _apply_presentation(surface: int, elapsed: float, low_resource: bool, geome
 
 func _draw() -> void:
 	if map_texture == null:
+		return
+	if not map_chunks.is_empty():
+		var source_size := Vector2(map_texture.get_size()) / 4.0
+		for chunk in map_chunks:
+			var tile: int = chunk["tile"]
+			var source := Rect2(Vector2(tile % 4, tile / 4) * source_size, source_size)
+			draw_texture_rect_region(map_texture, chunk["rect"], source)
 		return
 	if map_tile_rects.is_empty():
 		draw_texture_rect(map_texture, map_rect, false)

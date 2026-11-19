@@ -1,0 +1,11 @@
+[Unit]
+Description=Renew Ruptura Temporal TLS certificate only
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ruptura/renew-ruptura-certificate.sh
+TimeoutStartSec=600
+UMask=0077

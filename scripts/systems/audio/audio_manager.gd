@@ -19,12 +19,10 @@ func play_sfx(name: String, pitch_variance: float = 0.0, volume_scale: float = 1
 		return
 	if game._is_silent_manifestation_shot_sfx(name):
 		return
-	if name in ["Inimigo1_hit.wav", "Inimigo3_hit.mp3", "Hit_Boss1.mp3", "eletrica_hit"] or name.begins_with("acorrentada_hit_"):
+	if name in ["Inimigo1_hit.wav", "Inimigo3_hit.mp3", "Hit_Boss1.mp3", "eletrica_hit"]:
 		return
 	if name in ["Disparo_Geo.wav", "Disparo.MP3"]:
 		name = "player_shot"
-	elif name in ["skill_acorrentada", "ult_acorrentada", "atk_acorrentada_light", "atk_acorrentada_heavy"]:
-		return
 	elif name.begins_with("skill_") or name.begins_with("ult_") or (name.begins_with("atk_") and not name.begins_with("atk_lacerante_")):
 		if name.contains("lacerante"):
 			name = "atk_lacerante_3" if name.begins_with("ult_") else "atk_lacerante_2"

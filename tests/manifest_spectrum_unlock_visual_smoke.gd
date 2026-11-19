@@ -30,7 +30,6 @@ func _prepare_clean_unlock_state() -> void:
 	game.unlocked_manifestation_ids.clear()
 	game.unlocked_spectrum_ids.clear()
 	game.card_unlock_progress.clear()
-	game.retornante_unlocked = false
 	game._ensure_card_unlock_defaults()
 	_check(game._manifestation_unlocked(0), "eletrica should be unlocked by default")
 	_check(game._spectrum_unlocked(1), "impulsiva should be unlocked by default")
@@ -68,7 +67,7 @@ func _run() -> void:
 	_check(game._catalog_detail_mechanics(manifest_items[1]).find("OBJETIVO") >= 0, "manifestation objective missing")
 	await _capture(OUT_MANIFEST)
 
-	game.catalog_tab = 4
+	game.catalog_tab = 5
 	game.catalog_selected = 0
 	game.catalog_scroll_index = 0
 	game.catalog_detail_open = true

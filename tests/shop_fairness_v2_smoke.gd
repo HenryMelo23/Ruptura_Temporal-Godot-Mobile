@@ -138,15 +138,16 @@ func _run() -> void:
 	_check(float(second_copy["copy_multiplier"]) < 1.0, "second copy was not softly penalized")
 
 	game.cards_bought[game.CARD_CINZAS_ID] = 1
-	var tregua: Dictionary = game._find_card_by_id(game.CARD_TREGUA_ID)
-	game.shop_cards = [tregua.duplicate(true)]
+	var ashes_common_id: String = game.CARD_RESERVA_ID
+	var ashes_common: Dictionary = game._find_card_by_id(ashes_common_id)
+	game.shop_cards = [ashes_common.duplicate(true)]
 	_check(game._burn_shop_card(0), "Cinzas could not mark a common card")
-	_check(game._cinzas_weight_multiplier(game.CARD_TREGUA_ID) > 2.5, "Cinzas did not add real weight")
+	_check(game._cinzas_weight_multiplier(ashes_common_id) > 2.5, "Cinzas did not add real weight")
 	game.cinzas_burn_marks[0]["eligible_misses"] = game.SHOP_ASHES_GUARANTEE_VISITS
 	game.shop_locked_slots.clear()
 	game.shop_slot_intents = [game.SHOP_INTENT_CONSOLIDATION, game.SHOP_INTENT_FREE, game.SHOP_INTENT_DISCOVERY]
 	var guaranteed: Array = game._roll_shop_cards_v2("reroll")
-	_check(_card_ids(guaranteed).has(game.CARD_TREGUA_ID), "Cinzas guarantee did not force return")
+	_check(_card_ids(guaranteed).has(ashes_common_id), "Cinzas guarantee did not force return")
 
 	_prepare_build_started()
 	game.cards_bought["Sorte"] = 1

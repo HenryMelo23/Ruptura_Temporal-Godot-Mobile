@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "mode": "blend",
+  "confidence": 0.026,
+  "features": [
+    "bias",
+    "distance",
+    "umbra_hp",
+    "player_hp",
+    "player_speed",
+    "player_edge",
+    "player_dash_ready",
+    "under_fire",
+    "dimension_base",
+    "hazards",
+    "rewind_armed",
+    "fight_time"
+  ],
+  "weights": {
+    "ATAQUE": [
+      -0.8197,
+      -0.0472,
+      -0.085,
+      -0.0821,
+      -0.0383,
+      0,
+      -0.085,
+      0,
+      -0.085,
+      0,
+      0,
+      0
+    ],
+    "REBOBINAR": [
+      1.0197,
+      0.0472,
+      0.085,
+      0.0821,
+      0.0383,
+      0,
+      0.085,
+      0,
+      0.085,
+      0,
+      0,
+      0
+    ]
+  },
+  "skill_priors": {},
+  "runs": 32,
+  "samples": 384,
+  "collective_version": "umbra-col-710b2347a7"
+}

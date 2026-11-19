@@ -49,8 +49,7 @@ func _run() -> void:
 
 	game.phase4_enemy_hazards.clear()
 	game.boss4_meteor_event_started = false
-	game.boss4_meteor_event_timer = 0.0
-	game._update_boss4_meteorites(0.01)
+	game._start_boss4_meteor_event()
 	assert(game.boss4_meteorites.size() == 3)
 	game._update_boss4_meteorites(game.BOSS4_METEOR_WARNING + 0.05)
 	assert(game.boss4_meteorites.all(func(m): return bool(m.get("impacted", false))))
@@ -71,6 +70,7 @@ func _run() -> void:
 	game.boss4_ultimate_active = false
 	game._start_boss4_ultimate()
 	assert(game.boss4_ultimate_active)
+	assert(game.boss4_rupture_anchors.size() == 3)
 	game._update_boss4_ultimate(0.01)
 	var rays: Array = game.phase4_enemy_hazards.filter(func(h): return String(h.get("kind", "")) == "boss4_ultimate_ray")
 	assert(rays.size() == 1)

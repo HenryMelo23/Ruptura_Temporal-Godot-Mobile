@@ -73,8 +73,8 @@ func _run() -> void:
 		_check(not game._is_rare_card(card), "card_should_be_common_%s" % card_id)
 		_check(game._card_max_count(card) >= 999999, "card_should_be_infinite_%s" % card_id)
 		_check(game.cards_bought.has(card_id), "missing_card_counter_%s" % card_id)
-		_check(game.textures["card_" + String(card["name"])] != null, "missing_frame_1_%s" % card_id)
-		_check(game.textures["card_" + String(card["name"]) + "_2"] != null, "missing_frame_2_%s" % card_id)
+		_check(game._get_texture("card_" + String(card["name"])) != null, "missing_frame_1_%s" % card_id)
+		_check(game._get_texture("card_" + String(card["name"]) + "_2") != null, "missing_frame_2_%s" % card_id)
 		for i in range(24):
 			game._apply_card(card)
 		_check(game.cards_bought[card_id] == 24, "card_was_clamped_%s" % card_id)

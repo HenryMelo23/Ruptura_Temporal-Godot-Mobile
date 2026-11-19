@@ -18,8 +18,7 @@ func _check(condition: bool, message: String) -> void:
 
 
 func _capture(label: String, size: Vector2i) -> void:
-	game.geovana_bark_controller.active_text = ""
-	game.geovana_bark_controller.active_timer = 0.0
+	game.speech_bubbles.clear()
 	root.size = size
 	root.content_scale_size = size
 	game.queue_redraw()
@@ -48,7 +47,6 @@ func _run() -> void:
 	game.phase_started_at = 0.0
 	game.time_alive = 0.0
 	game.boss_ready = false
-	game.geovana_bark_controller.next_ambient_at = INF
 	game.unlock_notifications.clear()
 	game.player_start_down_fall_timer = 0.0
 	game.player_start_down_landing_timer = 0.0

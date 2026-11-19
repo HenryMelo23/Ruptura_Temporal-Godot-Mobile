@@ -58,8 +58,8 @@ func _run() -> void:
 	_check(game._is_rare_card(card), "devorador_not_rare")
 	_check(String(card.get("icon", "")) == "Deck/carta-Devorador_de_Destinos1.png", "bad_frame_1_path")
 	_check(String(card.get("frame_2", "")) == "Deck/carta-Devorador_de_Destinos2.png", "bad_frame_2_path")
-	_check(game.textures["card_" + String(card["name"])] != null, "missing_frame_1_texture")
-	_check(game.textures["card_" + String(card["name"]) + "_2"] != null, "missing_frame_2_texture")
+	_check(game._get_texture("card_" + String(card["name"])) != null, "missing_frame_1_texture")
+	_check(game._get_texture("card_" + String(card["name"]) + "_2") != null, "missing_frame_2_texture")
 	game.cards_bought["devorador_destinos"] = 500
 	_check(not game._card_at_max(card), "devorador_should_be_infinite")
 	_check(not game._card_damage_can_trigger(game.DEVORADOR_SOURCE), "devorador_should_not_trigger_cards")

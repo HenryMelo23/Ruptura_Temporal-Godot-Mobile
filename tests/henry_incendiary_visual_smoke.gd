@@ -27,9 +27,13 @@ func _run() -> void:
 	game.card_unlock_progress["umbra_victories"] = 1.0
 	game.mode = "character_select"
 	game.character_select_index = 1
+	game.startup_thanks_done = true
+	game.startup_thanks_timer = 0.0
+	game.startup_thanks_fading = false
 	await _capture("henry_character_select_1280x720.png", "orange")
 
 	game.active_character_key = game.CHARACTER_HENRY
+	game.run_tutorial_enabled = false
 	game._start_game()
 	game.henry_incendiary_ability_controller.cancel_entrance()
 	game.set_process(false)
@@ -104,10 +108,12 @@ func _run() -> void:
 	_check(game.henry_incendiary_ability_controller.begin_skill(game.player_pos + Vector2.RIGHT * 400.0), "could not begin cone cast")
 	game.henry_skill_cast_elapsed = 0.08
 	await _capture("henry_basic_skill_windup_1280x720.png", "")
-	game.henry_incendiary_ability_controller.update(0.52)
+	for skill_step in range(25):
+		game.henry_incendiary_ability_controller.update(0.02)
 	await _capture("henry_incendiary_cone_1280x720.png", "orange")
-
 	game.henry_flame_cones.clear()
+	await _capture("henry_hab1_guard_bursts_1280x720.png", "orange")
+
 	game.henry_incendiary_ability_controller.update(game.HENRY_SKILL_CAST_DURATION)
 	_check(game.henry_incendiary_ability_controller.cast_ultimate(), "could not cast heat wave")
 	game.henry_ultimate_cast_elapsed = 0.05
@@ -121,6 +127,43 @@ func _run() -> void:
 	game.henry_incendiary_ability_controller.update(0.03)
 	game.henry_incendiary_ability_controller.update(0.18)
 	await _capture("henry_incandescence_wave_1280x720.png", "orange")
+	game.henry_incendiary_ability_controller.update(0.60)
+	await _capture("henry_ultimate_second_cycle_1280x720.png", "orange")
+	game.henry_incendiary_ability_controller.update(0.80)
+	await _capture("henry_ultimate_third_cycle_1280x720.png", "orange")
+
+	game.henry_incendiary_ability_controller.reset()
+	game.enemies.clear()
+	game._spawn_enemy(game.ENEMY_COMMON, game.player_pos + Vector2(400.0, 0.0))
+	var spin_target: Dictionary = game.enemies[-1]
+	spin_target["hp"] = 5000.0
+	spin_target["max_hp"] = 5000.0
+	spin_target["stun"] = 999.0
+	for stack_index in range(5):
+		game._damage_enemy(spin_target, 10.0, "henry_spark", false, false, game.player_pos, "basic_attack")
+	await _capture("henry_burn_five_stacks_1280x720.png", "")
+	# Rastro de Brasa: investida e chao em chamas.
+	var dash_from: Vector2 = game.player_pos
+	game.last_dash_time = -99.0
+	game._execute_teleport(game.player_pos + Vector2.RIGHT * 400.0)
+	game.henry_incendiary_ability_controller.update(0.1)
+	await _capture("henry_dash_mid_1280x720.png", "orange")
+	game.henry_incendiary_ability_controller.update(0.3)
+	await _capture("henry_dash_trail_1280x720.png", "orange")
+	root.size = Vector2i(960, 540)
+	await _capture("henry_dash_trail_mobile_960x540.png", "orange_low")
+	root.size = Vector2i(1280, 720)
+	game.player_pos = dash_from
+
+	# Bola de fogo do 3o golpe explodindo.
+	game.henry_incendiary_ability_controller.reset()
+	game.henry_attack_combo = 2
+	game.henry_incendiary_ability_controller.fire_auto_attack()
+	await _capture("henry_fireball_flight_1280x720.png", "orange")
+	game.henry_incendiary_ability_controller.update(0.0)
+	game.bullets.clear()
+	game.henry_incendiary_ability_controller.update(0.12)
+	await _capture("henry_fireball_explosion_1280x720.png", "orange")
 
 	game.henry_heat_waves.clear()
 	game.henry_incendiary_ability_controller.reset()
@@ -132,16 +175,31 @@ func _run() -> void:
 	game.henry_incendiary_ability_controller.reset()
 	game.gfx_low_resource = false
 	root.size = Vector2i(1280, 720)
-	game.henry_incendiary_ability_controller.on_player_damaged(180)
-	game.henry_incendiary_ability_controller.update(game.HENRY_FRICTION_RELEASE_INTERVAL + 0.01)
-	game.henry_incendiary_ability_controller.update(0.36)
-	await _capture("henry_incandescence_passive_1280x720.png", "orange")
-
+	# Combustao em Cadeia: um inimigo com 5 cargas morre no meio de outros.
+	game.henry_incendiary_ability_controller.reset()
+	game.enemies.clear()
+	var chain_center: Vector2 = game.player_pos + Vector2(220.0, 0.0)
+	for index in range(6):
+		game._spawn_enemy(game.ENEMY_COMMON, chain_center + Vector2.from_angle(float(index) * TAU / 6.0) * 70.0)
+		game.enemies[-1]["hp"] = 5000.0
+		game.enemies[-1]["max_hp"] = 5000.0
+		game.enemies[-1]["stun"] = 999.0
+	game._spawn_enemy(game.ENEMY_COMMON, chain_center)
+	var bomb: Dictionary = game.enemies[-1]
+	for _stack in range(5):
+		game.henry_incendiary_ability_controller.apply_burn_to_enemy(bomb, 20.0, 0, true)
+	await _capture("henry_combustion_before_1280x720.png", "")
+	game._damage_enemy(bomb, 999999.0, "test_kill", false, false, game.player_pos, "basic_attack")
+	game.enemy_manager.update_enemies(0.01)
+	game.henry_incendiary_ability_controller.update(0.08)
+	await _capture("henry_combustion_burst_1280x720.png", "orange")
+	game.henry_incendiary_ability_controller.update(0.12)
+	await _capture("henry_combustion_spread_1280x720.png", "orange")
 	game.gfx_low_resource = true
 	root.size = Vector2i(960, 540)
-	await _capture("henry_incandescence_passive_low_960x540.png", "orange")
+	await _capture("henry_combustion_low_960x540.png", "")
 
-	print("HENRY_INCENDIARY_VISUAL_OK selection=true intro=materialize_glasses_ready_equal_scale shop_entry=flash_impact_tie_ready_mobile idle=pocket_tap beard=left_right walk=down_right_left_mirror_up fire=dedicated_equal_scale basic_skill=corrected_8dir ultimate=800ms_8frames_crouch_absorb_rise_release dialogue=off cone=true wave=true passive=true low=true " + ProjectSettings.globalize_path(OUT_DIR))
+	print("HENRY_INCENDIARY_VISUAL_OK selection=true intro=materialize_glasses_ready_equal_scale shop_entry=flash_impact_tie_ready_mobile idle=pocket_tap beard=left_right walk=down_right_left_mirror_up fire=dedicated_equal_scale basic_skill=cone_plus_3_guard_bursts ultimate=3x_800ms dash=ember_trail fireball=combo3_burst burn_stacks=5 desktop=true mobile=true passive=combustion_chain low=true " + ProjectSettings.globalize_path(OUT_DIR))
 	game._cleanup_runtime_resources()
 	game.queue_free()
 	await process_frame

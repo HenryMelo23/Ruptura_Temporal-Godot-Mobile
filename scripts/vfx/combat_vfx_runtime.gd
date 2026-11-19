@@ -1,5 +1,4 @@
 extends RefCounted
-
 # Host-owned state and compatibility wrappers are retained during extraction.
 
 
@@ -14,12 +13,16 @@ static func _runtime_visual_budget_active(game: Node2D) -> bool:
 static func _low_resource_cap(game: Node2D, default_cap: int, low_cap: int) -> int:
 	if game._memory_saver_active():
 		return mini(low_cap, int(ceil(float(low_cap) * 0.42)))
+	if game._runtime_emergency_visual_budget_active():
+		return mini(low_cap, int(ceil(float(low_cap) * 0.30)))
 	if game.mobile_adaptive_visual_budget:
-		return mini(low_cap, int(ceil(float(low_cap) * 0.62)))
+		return mini(low_cap, int(ceil(float(low_cap) * 0.52)))
 	return low_cap if game.gfx_low_resource else default_cap
 
 
 static func _visual_effect_cap(game: Node2D) -> int:
+	if game._runtime_emergency_visual_budget_active():
+		return 36
 	return game.MEMORY_SAVER_EFFECT_CAP if game._memory_saver_active() else game.LOW_RESOURCE_EFFECT_CAP
 
 
@@ -47,10 +50,11 @@ static func _trim_visual_effect_arrays(game: Node2D) -> void :
 		return
 	while game.effects.size() > game._visual_effect_cap():
 		game.effects.pop_front()
-	var slash_cap: = 18 if game._memory_saver_active() else 42
+	var emergency: bool = game._runtime_emergency_visual_budget_active()
+	var slash_cap: = 12 if emergency else (18 if game._memory_saver_active() else 42)
 	while game.slashes.size() > slash_cap:
 		game.slashes.pop_front()
-	var frost_cap: = 28 if game._memory_saver_active() else 70
+	var frost_cap: = 16 if emergency else (28 if game._memory_saver_active() else 70)
 	while game.boss2_frost_particles.size() > frost_cap:
 		game.boss2_frost_particles.pop_front()
 	var phase7_patch_cap: int = game._phase7_ember_patch_cap()
@@ -62,10 +66,10 @@ static func _trim_visual_effect_arrays(game: Node2D) -> void :
 		game.snowflakes.pop_front()
 	while game.puddles.size() > game._low_resource_cap(game.WEATHER_MAX_PUDDLES, game.LOW_RESOURCE_PUDDLE_CAP):
 		game.puddles.pop_front()
-	var splash_cap: int = 16 if game._memory_saver_active() else 26
+	var splash_cap: int = 8 if emergency else (16 if game._memory_saver_active() else 26)
 	while game.rain_splashes.size() > splash_cap:
 		game.rain_splashes.pop_front()
-	var flame_wave_cap: int = 2 if game._memory_saver_active() else 4
+	var flame_wave_cap: int = 2 if emergency or game._memory_saver_active() else 4
 	while game.boss7_flame_waves.size() > flame_wave_cap:
 		game.boss7_flame_waves.pop_front()
 
@@ -109,31 +113,6 @@ static func _spawn_insane_echo_visual(game: Node2D, pos: Vector2, direction: Vec
 		game.insane_echo_visuals.pop_front()
 
 
-static func _push_eclipsada_vfx(game: Node2D, visual: Dictionary) -> void :
-	if not visual.has("life"):
-		visual["life"] = 0.35
-	if not visual.has("max"):
-		visual["max"] = float(visual["life"])
-	visual["color"] = visual.get("color", game._eclipsada_color())
-	visual["seed"] = int(visual.get("seed", game.rng.randi()))
-	game.eclipsada_vfx.append(visual)
-	while game.eclipsada_vfx.size() > 72:
-		game.eclipsada_vfx.pop_front()
-
-
-static func _spawn_contract_break_vfx(game: Node2D, pos: Vector2, clause: String, infractions: int) -> void :
-	game.contractual_vfx.append({
-		"kind": "gavel", 
-		"pos": pos, 
-		"clause": clause, 
-		"infractions": infractions, 
-		"life": 0.62, 
-		"max": 0.62, 
-		"seed": game.rng.randi()
-	})
-	game._spawn_radial_particles(pos + Vector2(0, -42), game._contract_clause_color(clause), 8 + infractions * 3)
-
-
 static func _spawn_tp_cut_visual(game: Node2D, pos: Vector2, cut_index: int) -> void :
 	var angle: float = float(cut_index) * 2.399
 	var direction: = Vector2.from_angle(angle)
@@ -169,27 +148,24 @@ static func _start_phase5_transmute_vfx(game: Node2D, old_dim: String, new_dim: 
 		old_tex = game._get_texture("map_phase_5")
 	if new_tex == null:
 		new_tex = game._get_texture("map_phase_5")
+	if game.experimental_phase_controller.uses_definitive_world():
+		# Chao definitivo: a frente da dimensao nova (RTUmbraTransmuteVfx) mostra
+		# o atlas antigo do lado de fora ate passar.
+		var old_atlas_key: String = game.experimental_phase_controller.map_key_for_dimension(old_dim)
+		game._ensure_runtime_texture(old_atlas_key)
+		var old_atlas: Texture2D = game._get_texture(old_atlas_key)
+		if old_atlas != null:
+			old_tex = old_atlas
 
 	game.phase5_transmute_active = true
 	game.phase5_transmute_timer = 0.0
-	game.phase5_transmute_duration = game.BOSS5_TRANSMUTE_VFX_DURATION
-	game.phase5_transmute_center = game.player_pos
+	game.phase5_transmute_duration = RTUmbraTransmuteVfx.DURATION
+	game.phase5_transmute_center = game.boss_pos
 	game.phase5_transmute_old_tex = old_tex
 	game.phase5_transmute_new_tex = new_tex
 	game.phase5_transmute_color = dim_color
 	game.phase5_transmute_particles.clear()
-
-	for i in range(120):
-		var ang: float = game.rng.randf_range(0.0, TAU)
-		var speed: float = game.rng.randf_range(500.0, 950.0)
-		var radius: float = game.rng.randf_range(2.0, 7.0)
-		game.phase5_transmute_particles.append({
-			"pos": game.boss_pos, 
-			"vel": Vector2.from_angle(ang) * speed, 
-			"size": radius, 
-			"max_life": game.BOSS5_TRANSMUTE_VFX_DURATION, 
-			"life": game.BOSS5_TRANSMUTE_VFX_DURATION
-		})
+	# O visual (carga, estalo, frente da dimensao nova) e RTUmbraTransmuteVfx.
 
 
 static func _add_boss7_dive_trail(game: Node2D, a: Vector2, b: Vector2) -> void:
@@ -218,7 +194,12 @@ static func _spawn_bullet_hit_fragments(game: Node2D, pos: Vector2, bullet: Dict
 	var dir: Vector2 = Vector2(bullet.get("dir", Vector2.RIGHT)).normalized()
 	if dir.length() <= 0.05:
 		dir = Vector2.RIGHT
-	var total: int = game._adaptive_particle_count(20)
+	# Anel de choque + luz de impacto, antes dos estilhacos.
+	game.effects.append({"kind": "ring", "text": "", "pos": pos, "life": 0.18, "max": 0.18, "color": color, "size": 24.0, "light": 72.0})
+	for i in range(2 if game.gfx_low_resource else 3):
+		var spark_dir: Vector2 = (-dir).rotated(game.rng.randf_range(-0.9, 0.9))
+		game.effects.append({"kind": "spark", "text": "", "pos": pos, "life": game.rng.randf_range(0.14, 0.24), "max": 0.24, "color": color.lerp(Color.WHITE, 0.5), "size": game.rng.randf_range(2.2, 3.6), "vel": spark_dir * game.rng.randf_range(160.0, 300.0)})
+	var total: int = game._adaptive_particle_count(14)
 	for i in range(total):
 		var spread: float = game.rng.randf_range(-1.8, 1.8)
 		var shard_dir: Vector2 = dir.rotated(PI + spread).normalized()
@@ -274,8 +255,10 @@ static func _adaptive_particle_count(game: Node2D, count: int) -> int:
 		factor = 0.78
 	if game._memory_saver_active():
 		factor *= 0.22
+	elif game._runtime_emergency_visual_budget_active():
+		factor *= 0.12
 	elif game.mobile_adaptive_visual_budget:
-		factor *= 0.28
+		factor *= 0.25
 	elif game.gfx_low_resource:
 		factor *= 0.45
 	var min_count: int = 1 if game._runtime_visual_budget_active() else 2
@@ -391,28 +374,6 @@ static func _projectile_palette(game: Node2D, kind: String) -> Dictionary:
 			return {"core": Color(0.8, 1.0, 0.54), "glow": Color(0.24, 0.95, 0.38, 0.9), "trail": Color(0.78, 1.0, 0.26, 0.42), "size": 8.0, "trail_size": 8.0}
 		"gravitante":
 			return {"core": Color(0.92, 0.98, 1.0), "glow": Color(0.5, 0.78, 1.0, 0.92), "trail": Color(0.74, 0.54, 1.0, 0.34), "size": 9.0, "trail_size": 9.0}
-		"ancorada":
-			return {"core": Color(1.0, 1.0, 1.0), "glow": Color(0.26, 0.96, 1.0, 0.9), "trail": Color(1.0, 0.78, 0.24, 0.38), "size": 8.0, "trail_size": 6.0}
-		"cartografica":
-			return {"core": Color(0.94, 1.0, 0.8), "glow": Color(0.3, 1.0, 0.78, 0.92), "trail": Color(1.0, 0.78, 0.24, 0.42), "size": 7.0, "trail_size": 6.0}
-		"mnesica":
-			return {"core": Color(1.0, 0.88, 1.0), "glow": Color(0.8, 0.5, 1.0, 0.9), "trail": Color(1.0, 0.42, 0.88, 0.38), "size": 7.0, "trail_size": 7.0}
-		"ressonante":
-			return {"core": Color(1.0, 0.96, 0.72), "glow": Color(1.0, 0.72, 0.18, 0.92), "trail": Color(0.34, 0.92, 1.0, 0.4), "size": 8.0, "trail_size": 7.0}
-		"contratual":
-			return {"core": Color(1.0, 0.96, 0.82), "glow": Color(1.0, 0.52, 0.2, 0.92), "trail": Color(1.0, 0.86, 0.42, 0.36), "size": 8.0, "trail_size": 6.0}
-		"bombastica":
-			return {"core": Color(1.0, 0.92, 0.46), "glow": Color(1.0, 0.46, 0.08, 0.94), "trail": Color(0.18, 0.88, 1.0, 0.36), "size": 9.0, "trail_size": 8.0}
-		"retornante":
-			return {"core": Color(1.0, 0.92, 1.0), "glow": Color(1.0, 0.34, 0.88, 0.94), "trail": Color(0.72, 0.42, 1.0, 0.38), "size": 8.0, "trail_size": 8.0}
-		"necronada":
-			return {"core": Color(0.92, 0.98, 1.0), "glow": Color(0.48, 0.34, 0.92, 0.94), "trail": Color(0.72, 0.96, 1.0, 0.38), "size": 8.0, "trail_size": 8.0}
-		"necronada_dust":
-			return {"core": Color(0.82, 0.7, 1.0), "glow": Color(0.35, 0.14, 0.58, 0.92), "trail": Color(0.06, 0.03, 0.1, 0.52), "size": 11.0, "trail_size": 14.0}
-		"eclipsada_lua", "shuriken_eclipsado":
-			return {"core": Color(0.92, 0.86, 1.0), "glow": Color(0.7, 0.36, 1.0, 0.94), "trail": Color(0.36, 0.72, 1.0, 0.38), "size": 8.0, "trail_size": 8.0}
-		"eclipsada_sol":
-			return {"core": Color(1.0, 0.96, 0.62), "glow": Color(1.0, 0.62, 0.16, 0.96), "trail": Color(1.0, 0.88, 0.3, 0.42), "size": 9.0, "trail_size": 9.0}
 		"petro":
 			return {"core": Color(0.82, 1.0, 1.0), "glow": Color(0.16, 0.92, 1.0, 0.88), "trail": Color(0.72, 1.0, 1.0, 0.38), "size": 6.0, "trail_size": 5.0}
 	return {"core": Color.WHITE, "glow": Color(0.72, 0.92, 1.0, 0.9), "trail": Color(0.72, 0.92, 1.0, 0.35), "size": 7.0, "trail_size": 6.0}
@@ -423,6 +384,9 @@ static func _spawn_projectile_muzzle(game: Node2D, kind: String, pos: Vector2, d
 	var glow: Color = palette["glow"]
 	var core: Color = palette["core"]
 	var count = 7 if kind == "eletrica_charged" else 5
+	if game.gfx_particles:
+		# Clarao direcional do cano + luz curta no chao.
+		game.effects.append({"kind": "muzzle", "text": "", "pos": pos, "life": 0.11, "max": 0.11, "color": glow, "size": float(palette["size"]) * 2.4, "dir": dir, "light": 95.0})
 	game._spawn_radial_particles(pos, glow, count)
 	var sparks: = 1 if game.gfx_low_resource else 3
 	for i in range(sparks):
@@ -445,6 +409,11 @@ static func _spawn_projectile_muzzle(game: Node2D, kind: String, pos: Vector2, d
 static func _emit_projectile_trail(game: Node2D, bullet: Dictionary) -> void :
 	if String(bullet.get("kind", "")) == "gravitante":
 		return # Short curved arcs are drawn with the projectile, without particle allocations.
+	# The projectile body remains visible through its authored or batched draw.
+	# When particles are disabled (including Performance mode), do not keep
+	# allocating hundreds of short-lived trail dictionaries every second.
+	if not bool(game.gfx_particles):
+		return
 	if game.gfx_low_resource and (game.effects.size() >= game.LOW_RESOURCE_EFFECT_CAP or game.rng.randf() < 0.45):
 		return
 	var palette = game._projectile_palette(String(bullet.get("kind", "")))
@@ -509,13 +478,3 @@ static func _spawn_prismatica_ultimate_finish(game: Node2D, center: Vector2) -> 
 			"vel": dir * game.rng.randf_range(120.0, 260.0), 
 			"kind": "spark"
 		})
-
-
-static func _spawn_ancorada_counterweight_vfx(game: Node2D, pos: Vector2, L: int) -> void :
-	var vfx_scene: PackedScene = load("res://vfx/ancorada/AncoradaCounterweightVFX.tscn")
-	if vfx_scene:
-		var inst = vfx_scene.instantiate()
-		game.add_child(inst)
-		inst.global_position = pos
-		var profile: String = game._get_boss_wave_quality_profile()
-		inst.setup(L, profile, false)

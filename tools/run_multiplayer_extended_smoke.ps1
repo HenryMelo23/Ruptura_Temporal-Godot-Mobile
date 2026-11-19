@@ -12,6 +12,20 @@ if (-not $GodotBin -or -not (Test-Path -LiteralPath $GodotBin -PathType Leaf)) {
     throw 'Informe um executavel Godot valido em -GodotBin ou GODOT_BIN.'
 }
 
+$classCachePath = Join-Path $projectRoot '.godot\global_script_class_cache.cfg'
+if (-not (Test-Path -LiteralPath $classCachePath -PathType Leaf)) {
+    $importStdout = Join-Path $logDir 'COLD_IMPORT.out.log'
+    $importStderr = Join-Path $logDir 'COLD_IMPORT.err.log'
+    $importProcess = Start-Process -FilePath $GodotBin `
+        -ArgumentList @('--headless', '--path', ('"{0}"' -f $projectRoot), '--import') `
+        -RedirectStandardOutput $importStdout -RedirectStandardError $importStderr `
+        -PassThru -Wait
+    if ($importProcess.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $classCachePath -PathType Leaf)) {
+        $importErrors = Get-Content -LiteralPath $importStderr -Raw -ErrorAction SilentlyContinue
+        throw "Importacao fria do projeto falhou antes do multiplayer.`n$importErrors"
+    }
+}
+
 function Invoke-MultiplayerCase {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -20,7 +34,8 @@ function Invoke-MultiplayerCase {
         [Parameter(Mandatory = $true)][string]$ResultPrefix,
         [Parameter(Mandatory = $true)][string[]]$RequiredResults,
         [Parameter(Mandatory = $true)][string]$ErrorFile,
-        [string]$ServerMarker = ''
+        [string]$ServerMarker = '',
+        [string]$Scenario = ''
     )
 
     Get-ChildItem -LiteralPath (Join-Path $projectRoot 'tests') -Filter "$ResultPrefix*.txt" -File -ErrorAction SilentlyContinue |
@@ -41,6 +56,9 @@ function Invoke-MultiplayerCase {
                 "--role=$role",
                 "--port=$Port"
             )
+            if ($Scenario) {
+                $arguments += "--scenario=$Scenario"
+            }
             $startArgs = @{
                 FilePath = $GodotBin
                 ArgumentList = $arguments
@@ -124,4 +142,14 @@ Invoke-MultiplayerCase -Name 'ROOM_LIFECYCLE' `
     -ResultPrefix 'room_lifecycle_' -RequiredResults @('server_result', 'host_result', 'client_result') `
     -ErrorFile 'room_lifecycle_error.txt'
 
-Write-Host 'MULTIPLAYER_EXTENDED_BATTERY_OK authority=true visuals=true lifecycle=true'
+Invoke-MultiplayerCase -Name 'WORLD_ALTAR' `
+    -Script 'multiplayer_world_interaction_smoke.gd' -Port 4614 `
+    -ResultPrefix 'world_interaction_altar_' -RequiredResults @('server_result', 'host_result', 'client_result') `
+    -ErrorFile 'world_interaction_altar_error.txt' -Scenario 'altar'
+
+Invoke-MultiplayerCase -Name 'WORLD_SHOP_PORTAL' `
+    -Script 'multiplayer_world_interaction_smoke.gd' -Port 4615 `
+    -ResultPrefix 'world_interaction_shop_' -RequiredResults @('server_result', 'host_result', 'client_result') `
+    -ErrorFile 'world_interaction_shop_error.txt' -Scenario 'shop'
+
+Write-Host 'MULTIPLAYER_EXTENDED_BATTERY_OK authority=true visuals=true lifecycle=true altar_presence=true shop_portal_presence=true'

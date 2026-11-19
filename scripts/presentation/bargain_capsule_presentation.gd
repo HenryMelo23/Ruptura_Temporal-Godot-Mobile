@@ -80,6 +80,13 @@ static func _draw_bars(game: Node2D, pos: Vector2, capsule: Dictionary) -> void:
 	game.draw_rect(hp_rect, Color(0.04, 0.01, 0.0, 0.78), true)
 	game.draw_rect(Rect2(hp_rect.position, Vector2(hp_rect.size.x * hp_ratio, hp_rect.size.y)), Color(1.0, 0.58, 0.18, 0.96), true)
 	game.draw_rect(hp_rect, Color(1.0, 0.86, 0.24, 0.7), false, 1.0)
+	# Escudo rigido: faixa ciano por cima da vida, e uma casca em volta da capsula.
+	var shield_max: float = float(capsule.get("shield_max", 0.0))
+	var shield_ratio: float = clampf(float(capsule.get("shield", 0.0)) / shield_max, 0.0, 1.0) if shield_max > 0.0 else 0.0
+	if shield_ratio > 0.0:
+		game.draw_rect(Rect2(hp_rect.position - Vector2(0.0, 4.0), Vector2(hp_rect.size.x * shield_ratio, 3.0)), Color(0.55, 0.95, 1.0, 0.95), true)
+		var flash: float = clampf(float(capsule.get("hit_flash", 0.0)) / 0.22, 0.0, 1.0)
+		game.draw_arc(pos + Vector2(0.0, -8.0), 44.0, 0.0, TAU, 32, Color(0.55, 0.95, 1.0, 0.18 + 0.32 * shield_ratio + 0.4 * flash), 1.5 + 2.0 * shield_ratio, true)
 	game.draw_rect(time_rect, Color(0.02, 0.02, 0.05, 0.78), true)
 	game.draw_rect(Rect2(time_rect.position, Vector2(time_rect.size.x * time_ratio, time_rect.size.y)), Color(0.35, 0.86, 1.0, 0.92), true)
 	game.draw_rect(time_rect, Color(0.64, 0.95, 1.0, 0.58), false, 1.0)
@@ -91,10 +98,18 @@ static func draw(game: Node2D, camera: Vector2) -> void:
 	_hit_reaction = _texture(HIT_REACTION_PATH, _hit_reaction)
 	if _motion_results == null or _idle_damage == null or _hit_reaction == null:
 		return
-	var capsule: Dictionary = game.bargain_capsule
+	var capsules: Array = Array(game.bargain_capsule.get("capsules", [])) if game.bargain_capsule.has("capsules") else [game.bargain_capsule]
+	for capsule_value in capsules:
+		if capsule_value is Dictionary:
+			_draw_capsule(game, camera, Dictionary(capsule_value))
+
+
+static func _draw_capsule(game: Node2D, camera: Vector2, capsule: Dictionary) -> void:
 	if capsule.is_empty():
 		return
 	var state: String = String(capsule.get("state", ""))
+	if state == "destroyed":
+		state = game.BARGAIN_CAPSULE_STATE_FAIL
 	if state == game.BARGAIN_CAPSULE_STATE_NONE:
 		return
 	var world_pos: Vector2 = Vector2(capsule.get("pos", game.player_pos))

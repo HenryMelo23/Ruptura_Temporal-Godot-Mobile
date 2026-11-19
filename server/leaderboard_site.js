@@ -1,4 +1,6 @@
 "use strict";
+const { meritPage, umbraPage, downloadsPage, themeCss } = require("./observatory_site");
+const { scoreRun, campaignPhase: rankingCampaignPhase } = require("./ranking_score");
 
 function safeNumber(value, fallback = 0) {
   const number = Number(value);
@@ -90,9 +92,7 @@ function rawPhase(run) {
 }
 
 function campaignPhase(run) {
-  const phase = rawPhase(run);
-  if (phase === 6) return 1;
-  return Math.max(0, Math.min(5, phase));
+  return rankingCampaignPhase(run || {});
 }
 
 function phaseSortLabel(run) {
@@ -122,17 +122,10 @@ function progressRank(run) {
 }
 
 function progressValue(run) {
-  return progressRank(run) * 1000000 + safeNumber(run && run.durationSeconds);
+  return progressRank(run);
 }
 
-function speedrunValue(run) {
-  const duration = Math.max(1, safeNumber(run && run.durationSeconds, 1));
-  return progressRank(run) * 1000000 - duration;
-}
 
-function speedrunDetail(run) {
-  return `${phaseLabel(run)} em ${formatDuration(run && run.durationSeconds)} | ${formatNumber(run && run.score)} pts`;
-}
 
 function phaseMapPath(phase) {
   if (phase === 6) return "Fase6.png";
@@ -217,6 +210,23 @@ function behaviorOf(run) {
   return run && run.behaviorMetrics && typeof run.behaviorMetrics === "object" ? run.behaviorMetrics : {};
 }
 
+function knowledgeOf(run) {
+  return run && run.umbraKnowledge && typeof run.umbraKnowledge === "object" ? run.umbraKnowledge : {};
+}
+
+const UMBRA_KNOWLEDGE_LABELS = {
+  movement: "Movimento", shooting: "Disparo", choices: "Escolhas", preferences: "Preferencias", weaknesses: "Fraquezas"
+};
+
+function umbraKnowledgeBars(knowledge) {
+  const categories = knowledge && knowledge.categories && typeof knowledge.categories === "object" ? knowledge.categories : {};
+  return `<div class="umbra-knowledge-bars">${Object.entries(UMBRA_KNOWLEDGE_LABELS).map(([key, label]) => {
+    const row = categories[key] && typeof categories[key] === "object" ? categories[key] : {};
+    const percent = Math.max(0, Math.min(100, Math.round(safeNumber(row.percent))));
+    return `<div class="umbra-knowledge-row"><span>${escapeHtml(label)}</span><i><b style="width:${percent}%"></b></i><strong>${percent}%</strong></div>`;
+  }).join("")}</div>`;
+}
+
 function classifyUmbraRun(run) {
   const behavior = behaviorOf(run);
   const edge = safeNumber(behavior.edgeRatio);
@@ -237,13 +247,19 @@ function classifyUmbraRun(run) {
 function umbraAnalytics(runs) {
   const audited = arrayOf(runs);
   const eligible = audited.filter((run) => run && run.umbraTrainingEligible);
+  const knowledgeRows = eligible.map(knowledgeOf).filter((row) => safeNumber(row.totalPercent) > 0);
+  const knowledgeCategories = {};
+  for (const key of Object.keys(UMBRA_KNOWLEDGE_LABELS)) {
+    knowledgeCategories[key] = { percent: knowledgeRows.reduce((sum, row) => sum + safeNumber(row.categories && row.categories[key] && row.categories[key].percent), 0) / Math.max(1, knowledgeRows.length) };
+  }
   return {
     eligible,
     rejected: Math.max(0, audited.length - eligible.length),
     archetypes: countBy(eligible.map(classifyUmbraRun)).slice(0, 8),
     averagePhase1Seconds: eligible.reduce((sum, run) => sum + safeNumber(behaviorOf(run).phase1Seconds), 0) / Math.max(1, eligible.length),
     averageDashPerMinute: eligible.reduce((sum, run) => sum + safeNumber(behaviorOf(run).dashPerMinute), 0) / Math.max(1, eligible.length),
-    averageEdgeRatio: eligible.reduce((sum, run) => sum + safeNumber(behaviorOf(run).edgeRatio), 0) / Math.max(1, eligible.length)
+    averageEdgeRatio: eligible.reduce((sum, run) => sum + safeNumber(behaviorOf(run).edgeRatio), 0) / Math.max(1, eligible.length),
+    knowledge: { totalPercent: knowledgeRows.reduce((sum, row) => sum + safeNumber(row.totalPercent), 0) / Math.max(1, knowledgeRows.length), categories: knowledgeCategories }
   };
 }
 
@@ -273,7 +289,7 @@ function collectCards(runs) {
 function aggregateSnapshot(snapshot) {
   const runs = arrayOf(snapshot && (snapshot.runs || snapshot.recent));
   const auditedRuns = arrayOf(snapshot && snapshot.auditedRuns).length ? arrayOf(snapshot && snapshot.auditedRuns) : runs;
-  const profiles = playerAggregates(runs);
+  const profiles = playerAggregates(runs).filter((profile) => safeNumber(profile.best.score) > 0);
   const bestScore = [...runs].sort((a, b) => safeNumber(b.score) - safeNumber(a.score))[0] || null;
   const bestTime = [...runs].sort((a, b) => safeNumber(b.durationSeconds) - safeNumber(a.durationSeconds))[0] || null;
   const bestBoss = [...runs].sort((a, b) => safeNumber(b.bossDamage) - safeNumber(a.bossDamage))[0] || null;
@@ -282,7 +298,13 @@ function aggregateSnapshot(snapshot) {
   const totalBossDamage = runs.reduce((sum, run) => sum + safeNumber(run.bossDamage), 0);
   const totalEnemyDamage = runs.reduce((sum, run) => sum + safeNumber(run.enemyDamage), 0);
   const totalKills = runs.reduce((sum, run) => sum + safeNumber(run.kills), 0);
-  const latestVersion = mostFrequent(latest.slice(0, 20).map((run) => run.version))[0];
+  const activeRelease = arrayOf(snapshot && snapshot.downloads)
+    .filter((release) => release && release.available !== false && textValue(release.version, ""))
+    .sort((a, b) => safeNumber(b.versionCode) - safeNumber(a.versionCode))[0] || null;
+  const latestRunVersion = mostFrequent(latest.slice(0, 20).map((run) => run.version))[0];
+  // The header describes the build players can download now. Run telemetry may
+  // legitimately lag behind after a release, so it is only the fallback.
+  const latestVersion = activeRelease ? textValue(activeRelease.version, latestRunVersion) : latestRunVersion;
   const maxPhase = Math.max(0, ...runs.map((run) => campaignPhase(run)));
   return {
     runs,
@@ -370,10 +392,12 @@ function bossIcon(run, publicAssetUrl) {
 function nav(active, analytics) {
   const links = [
     ["home", "/leaderboard", "Visao geral"],
+    ["downloads", "/leaderboard/downloads", "Downloads"],
     ["story", "/leaderboard/historia", "Historia"],
     ["catalog", "/leaderboard/catalogo", "Catalogo"],
     ["operators", "/leaderboard#operadores", "Operadores"],
     ["rankings", "/leaderboard/rankings", "Rankings"],
+    ["umbra", "/leaderboard/umbra", "Mente da Umbra"],
     ["archive", "/leaderboard#arquivo", "Arquivo de runs"]
   ];
   return `<nav class="main-nav" aria-label="Navegacao principal">
@@ -404,7 +428,7 @@ function pageShell({ title, subtitle, active, content, analytics, script = "", p
   <meta name="color-scheme" content="dark">
   <link rel="icon" href="data:,">
   <title>${escapeHtml(pageTitle)} - Ruptura Temporal</title>
-  <style>${siteCss()}</style>
+  <style>${siteCss()}${themeCss()}</style>
 </head>
 <body class="${escapeAttr(pageClass)}">
   <a class="skip-link" href="#conteudo">Ir para o conteudo</a>
@@ -430,7 +454,7 @@ function pageShell({ title, subtitle, active, content, analytics, script = "", p
     <span>${formatNumber(analytics.runs.length)} expedicoes sincronizadas · Build mais recente v${escapeHtml(analytics.latestVersion || "?")}</span>
     <span>Horarios exibidos em America/Sao_Paulo · Dados enviados pelas builds do jogo</span>
   </footer>
-  <script>${baseClientScript()}${script}</script>
+  <script>${baseClientScript()}requestAnimationFrame(()=>document.querySelector('.main-nav a.active')?.scrollIntoView({block:'nearest',inline:'center'}));${script}</script>
 </body>
 </html>`;
 }
@@ -566,8 +590,8 @@ function runTimelineReport(run) {
       windows: [],
       precision: "not-calculable",
       note: finalPoint.duration < RUN_ANALYSIS_MIN_SECONDS
-        ? "Run menor que 2 minutos. O Observatorio preserva o registro, mas nao usa esta partida como parametro do grafico por falta de variaveis suficientes."
-        : "Sem baseline inicial e checkpoint de 2 minutos na mesma run. O registro existe, mas nao entra como parametro calculavel."
+        ? "Run menor que 2 minutos. O Observatorio nao usa esta partida como parametro do grafico por falta de variaveis suficientes."
+        : "Sem baseline inicial e checkpoint de 2 minutos na mesma run. O registro nao entra como parametro calculavel."
     };
   }
   const windows = [];
@@ -651,6 +675,7 @@ function runResultTone(run) {
 }
 
 function runRow(run, index = 0) {
+  const death = textValue(run && run.deathCause, "");
   return `<article class="run-row">
     <a class="run-row-main" href="${runPath(run)}">
       <time>${escapeHtml(formatDate(run))}</time>
@@ -659,12 +684,13 @@ function runRow(run, index = 0) {
         <b>${escapeHtml(textValue(run.player, "Jogador"))}</b>
         <small>${escapeHtml(textValue(run.manifestation, "?"))} + ${escapeHtml(textValue(run.spectrum, "?"))} · v${escapeHtml(textValue(run.version, "?"))}</small>
       </div>
-      <strong>${formatNumber(run && run.score)} pts</strong>
+      <strong>${formatNumber(run && run.score)} mérito</strong>
     </a>
     <div class="run-row-meta">
       ${statusBadge(textValue(run && run.result, "Run"), runResultTone(run))}
       <span>${escapeHtml(phaseLabel(run))}</span>
       <span>${formatDuration(run && run.durationSeconds)}</span>
+      ${death ? `<span>Morte: ${escapeHtml(death)}</span>` : ""}
     </div>
   </article>`;
 }
@@ -677,148 +703,53 @@ function signatureList(items, tone) {
   </div>`).join("")}</div>`;
 }
 
-function renderHome(snapshot, cardAssetUrl, publicAssetUrl) {
-  const analytics = aggregateSnapshot(snapshot);
-  const best = analytics.bestScore;
-  const latest = analytics.latest.slice(0, 14);
-  const heroImage = best ? manifestationIcon(best, publicAssetUrl) : publicAsset(publicAssetUrl, "Geo1.png");
-  const heroTitle = analytics.runs.length ? "A RUPTURA CONTINUA INSTAVEL" : "NENHUMA EXPEDICAO SINCRONIZADA";
-  const heroText = analytics.runs.length
-    ? `${formatNumber(analytics.runs.length)} expedicoes de ${formatNumber(analytics.profiles.length)} operadores foram recuperadas. A fase 6 e tratada como ramificacao inicial; o limite de campanha registrado e a Fase ${formatNumber(analytics.maxPhase || 1)}.`
-    : "O terminal esta ativo e aguardando a primeira run enviada pelas builds do jogo.";
-  const cards = arrayOf(best && best.cards).slice(0, 8);
-  const umbra = analytics.umbra || umbraAnalytics([]);
-  const topUmbra = arrayOf(umbra.archetypes)[0];
-  const campaign = [1, 2, 3, 4, 5].map((phase) => {
-    const count = analytics.runs.filter((run) => campaignPhase(run) >= phase).length;
-    const active = count > 0;
-    return `<article class="campaign-stage ${active ? "active" : ""}">
-      <span>F${phase}</span><b>${active ? `${formatNumber(count)} registros` : "Sem leitura"}</b><small>${phase === 1 ? "Linha 1 / Chaga" : phase === 5 ? "Umbra" : `Linha ${phase}`}</small>
-    </article>`;
-  }).join("");
-  const playerCards = analytics.profiles.slice(0, 6).map((profile, index) => `<a class="player-tile" href="${playerPathByKey(profile.key)}">
-    <span>#${index + 1}</span>
-    <b>${escapeHtml(profile.player)}</b>
-    <small>${escapeHtml(profile.favoriteBuild)} · v${escapeHtml(profile.favoriteVersion)}</small>
-    <i>${formatNumber(profile.best.score)} pts</i>
-  </a>`).join("");
-  const content = `
-    <section class="hero-terminal">
-      <div class="hero-copy">
-        <p class="eyebrow">LINHA TEMPORAL // ESTADO GLOBAL</p>
-        <h2>${escapeHtml(heroTitle)}</h2>
-        <p>${escapeHtml(heroText)}</p>
-        <div class="hero-actions">
-          <a class="button primary" href="/leaderboard/rankings">Explorar rankings</a>
-          <a class="button ghost" href="/leaderboard/historia">Ler historia</a>
-          ${analytics.latestRun ? `<a class="button ghost" href="${runPath(analytics.latestRun)}">Abrir ultima expedicao</a>` : `<span class="button disabled">Aguardando expedicao</span>`}
-        </div>
-      </div>
-      <aside class="hero-operator">
-        <span>OPERADOR EM DESTAQUE</span>
-        <div class="hero-orbit">${safeImage(heroImage, best ? textValue(best.manifestation, "Manifestacao") : "Ruptura Temporal", "", "RT", true)}</div>
-        <h3>${escapeHtml(best ? textValue(best.player, "Jogador") : "Sem operador")}</h3>
-        <strong>${formatNumber(best && best.score)} pts</strong>
-        <p>${escapeHtml(best ? `${textValue(best.manifestation, "?")} + ${textValue(best.spectrum, "?")} · ${phaseLabel(best)} · v${textValue(best.version, "?")}` : "Aguardando dados reais.")}</p>
-        ${best ? `<a href="${playerPath(best)}">Abrir dossie</a>` : ""}
-      </aside>
-    </section>
-    <section class="pulse-grid" aria-label="Pulso da ruptura">
-      ${metric("Expedicoes registradas", formatNumber(analytics.runs.length), `${formatNumber(analytics.profiles.length)} operadores unicos`, "cyan", "RUN")}
-      ${metric("Maior dano em boss", formatNumber(analytics.bestBoss && analytics.bestBoss.bossDamage), analytics.bestBoss ? textValue(analytics.bestBoss.player, "Jogador") : "Sem leitura", "magenta", "DMG")}
-      ${metric("Recorde de sobrevivencia", formatDuration(analytics.bestTime && analytics.bestTime.durationSeconds), analytics.bestTime ? textValue(analytics.bestTime.player, "Jogador") : "Sem leitura", "amber", "TMP")}
-      ${metric("Dano total auditado", formatNumber(analytics.totalBossDamage + analytics.totalEnemyDamage), "Boss + inimigos em todas as runs", "green", "AUD")}
-      ${metric("Maior progressao", analytics.bestProgress ? phaseLabel(analytics.bestProgress) : "Fase 0", analytics.bestProgress ? textValue(analytics.bestProgress.player, "Jogador") : "Sem leitura", "violet", "PRG")}
-    </section>
-    <section class="umbra-mind-block">
-      ${sectionHeader("Mente da UMBRA", "Camadas 1, 2 e 3", "A camada 1 le movimento, a camada 2 separa arquetipos e a camada 3 prepara o dossie individual usado pela mente remota. Runs com Fase 1 abaixo de 5 minutos ficam fora do treino.")}
-      <section class="pulse-grid" aria-label="Resumo da mente da UMBRA">
-        ${metric("Runs de treino", formatNumber(umbra.eligible.length), `${formatNumber(umbra.rejected)} descartadas por baixa confianca`, "magenta", "L1")}
-        ${metric("Tempo medio na Fase 1", formatDuration(umbra.averagePhase1Seconds), "Filtro minimo: 5 minutos", "amber", "L1")}
-        ${metric("Dash medio", `${formatDecimal(umbra.averageDashPerMinute, 1)}/min`, "Memoria de mobilidade", "cyan", "L2")}
-        ${metric("Pressao nas bordas", formatPercent(umbra.averageEdgeRatio), "Leitura de mapa de calor", "green", "L2")}
-        ${metric("Arquetipo dominante", topUmbra ? topUmbra.label : "Sem leitura", topUmbra ? `${formatNumber(topUmbra.count)} dossies` : "Aguardando dados", "violet", "L3")}
-      </section>
-      <div class="terminal-panel">${signatureList(arrayOf(umbra.archetypes), "magenta")}</div>
-    </section>
-    <section class="observatory-grid">
-      <div class="terminal-panel span-8" id="arquivo">
-        ${sectionHeader("Arquivo temporal", "Expedicoes recentes", "Partidas enviadas pelas builds QA em ordem cronologica.", `<a href="/leaderboard/rankings">Comparar jogadores</a>`)}
-        <div class="run-list">${latest.map(runRow).join("") || emptyState("Nenhuma expedicao recuperada", "Quando uma run terminar, ela aparecera neste arquivo.")}</div>
-      </div>
-      <aside class="terminal-panel span-4 build-feature">
-        ${sectionHeader("Build do recorde", "Arsenal sincronizado", best ? `${textValue(best.manifestation, "?")} + ${textValue(best.spectrum, "?")} · v${textValue(best.version, "?")}` : "Sem run registrada")}
-        <div class="deck-grid compact-grid">${cards.map((card) => cardTile(card, cardAssetUrl, true)).join("") || emptyState("Deck nao registrado", "A build do recorde ainda nao enviou cartas.")}</div>
-        ${best ? `<a class="button ghost full" href="${runPath(best)}">Abrir relatorio completo</a>` : ""}
-      </aside>
-      <div class="terminal-panel span-12">
-        ${sectionHeader("Mapa de campanha", "Limite de progressao global", "Cada capsula mostra quantas runs atravessaram aquela fase.")}
-        <div class="campaign-line">${campaign}</div>
-      </div>
-      <div class="terminal-panel span-7" id="operadores">
-        ${sectionHeader("Operadores", "Dossies em destaque", "Perfis persistentes com melhor score, build favorita e versao mais usada.")}
-        <div class="player-grid">${playerCards || emptyState("Nenhum operador catalogado", "O primeiro jogador aparecera aqui apos enviar uma run.")}</div>
-      </div>
-      <div class="terminal-panel span-5">
-        ${sectionHeader("Assinaturas recorrentes", "Manifestacoes e espectros", "Leitura agregada das escolhas mais frequentes.")}
-        <div class="dual-signatures">
-          <div><h3>Manifestacoes</h3>${signatureList(analytics.manifestations, "violet")}</div>
-          <div><h3>Espectros</h3>${signatureList(analytics.spectra, "cyan")}</div>
-        </div>
-      </div>
-    </section>`;
-  return pageShell({ title: "CENTRAL DO OBSERVATORIO", subtitle: "Estado consolidado das linhas temporais registradas.", active: "home", analytics, content, pageClass: "home-page" });
-}
 
 function renderStory(snapshot) {
   const analytics = aggregateSnapshot(snapshot);
-  const chapters = [
-    ["O primeiro rasgo", "Geovana encontra uma ruptura que nao so abre espaco: ela altera habito, tempo e memoria. Cada run e uma tentativa de atravessar uma regra nova sem perder o proprio corpo no processo."],
-    ["A ramificacao da Chaga", "A fase 6 nao e o fim numerico da jornada. Ela e uma abertura alternativa, uma contaminacao inicial que pode substituir ou interromper a primeira linha antes da campanha seguir para as camadas seguintes."],
-    ["As manifestacoes", "Cada manifestacao e uma forma diferente de negociar com a Ruptura. Eletrica insiste em energia acumulada, Necronada transforma perda em exercito, Contratual troca risco por julgamento e Bombastica altera o mapa com consequencias explosivas."],
-    ["O observatorio", "Este site le as runs como documentos. Tempo, dano, escolhas, cartas e posicoes mostram onde o jogador dominou a partida e onde a fase obrigou uma decisao ruim."]
-  ];
   const content = `
-    <section class="lore-hero">
+    <section class="lore-hero story-hero">
       <div>
-        <p class="eyebrow">ARQUIVO // RUPTURA TEMPORAL</p>
-        <h2>A campanha nao e uma linha reta.</h2>
-        <p>A fase 6 funciona como ramificacao inicial. Por isso o observatorio nao considera "chegar na fase 6" mais distante do que chegar na fase 5; ele interpreta a Chaga como uma abertura alternativa dentro do primeiro trecho da campanha.</p>
+        <p class="eyebrow">ORIGEM REAL / HISTÓRIA FICTÍCIA</p>
+        <h2>Até onde você iria por quem ama?</h2>
+        <p>Essa pergunta veio antes do código. Ruptura Temporal nasceu como uma homenagem a Geovana e virou uma história sobre amor, luto e o custo de tentar desfazer uma perda.</p>
+        <p><a class="button primary" href="#origem">Conheça a origem ↓</a> <a class="button" href="#universo">Entre no universo ↓</a></p>
       </div>
       <aside>
-        <b>${formatNumber(analytics.runs.length)}</b>
-        <span>expedicoes preservadas</span>
-        <small>Dados vivos: builds, decks, dano, fase, bosses e rotas de cada jogador.</small>
+        <small>CAMADAS DE SABEDORIA</small>
+        <b>03</b>
+        <span>anos construindo em Pygame</span>
+        <small>Um sonho pessoal virou uma forma de estudar, criar e medir o próprio aprendizado. Em 2026, o projeto ganhou uma nova versão em Godot.</small>
       </aside>
     </section>
-    <section class="story-grid">
-      ${chapters.map(([title, text], index) => `<article>
-        <span>${String(index + 1).padStart(2, "0")}</span>
-        <h3>${escapeHtml(title)}</h3>
-        <p>${escapeHtml(text)}</p>
-      </article>`).join("")}
+    <section class="terminal-panel story-chapter" id="origem">
+      <p class="eyebrow">01 / A ORIGEM REAL</p>
+      <h2>Uma homenagem antes de ser um jogo</h2>
+      <p>Henrique queria impressionar a menina de quem gostava. Imaginou uma história fictícia de amor sobre os dois e, no começo, pensou em terminar o jogo com um pedido de casamento. Escolheu um roguelike com bullet hell, embora Geovana preferisse jogos mais calmos. Quando ela mal conseguiu passar da primeira fase, o pedido deixou de ser o destino do projeto. A homenagem permaneceu.</p>
+      <p>O primeiro Ruptura foi feito em Python com Pygame, incluindo um motor gráfico construído pelo próprio Henrique. Durante três anos, cada disciplina da faculdade encontrou um lugar no projeto: programação ensinou a construir, estruturas de dados ajudaram a organizar e otimizar, redes abriu a possibilidade de jogar junto. A matéria de Tópicos Avançados em Programação 2 ajudou a estruturar rotina e trabalho em equipe.</p>
+      <p>Em 2026, a vontade de levar o jogo também ao público de celular motivou a passagem para Godot. A IA entrou como ferramenta para portar, polir e ampliar o que já existia. Ruptura continua sendo a maior homenagem que Henrique fez a alguém e um registro das coisas que aprendeu para construí-la.</p>
     </section>
-    <section class="observatory-grid">
-      <div class="terminal-panel span-7">
-        ${sectionHeader("Leitura narrativa", "O que os dados contam", "Os melhores registros nao mostram so quem sobreviveu: mostram qual escolha sustentou a pressao.")}
-        <div class="insight-grid">
-          ${analytics.bestProgress ? `<article><b>Avanco mais profundo</b><span>${escapeHtml(textValue(analytics.bestProgress.player, "Jogador"))}</span><small>${escapeHtml(phaseLabel(analytics.bestProgress))} com ${formatDuration(analytics.bestProgress.durationSeconds)}</small></article>` : emptyState("Sem progresso", "Ainda nao ha runs elegiveis.")}
-          ${analytics.bestBoss ? `<article><b>Maior pressao em chefe</b><span>${escapeHtml(textValue(analytics.bestBoss.player, "Jogador"))}</span><small>${formatNumber(analytics.bestBoss.bossDamage)} dano em boss</small></article>` : emptyState("Sem boss", "Nenhum dano de boss registrado.")}
-          ${analytics.bestTime ? `<article><b>Maior resistencia</b><span>${escapeHtml(textValue(analytics.bestTime.player, "Jogador"))}</span><small>${formatDuration(analytics.bestTime.durationSeconds)} vivo</small></article>` : emptyState("Sem tempo", "Nenhum tempo registrado.")}
-        </div>
-      </div>
-      <div class="terminal-panel span-5">
-        ${sectionHeader("Campanha", "Ordem interpretada")}
-        <ol class="route-list">
-          <li><b>Fase 1 ou Fase 6</b><span>Abertura sorteada/alternada.</span></li>
-          <li><b>Fase 2</b><span>Escalada fria e controle de espaco.</span></li>
-          <li><b>Fase 6 ou Fase 3</b><span>Se a Chaga nao veio no inicio, ela pode entrar aqui.</span></li>
-          <li><b>Fase 4</b><span>Ruptura de gravidade e pressao mecanica.</span></li>
-          <li><b>Fase 5</b><span>UMBRA, limite real de campanha.</span></li>
-        </ol>
-      </div>
-    </section>`;
-  return pageShell({ title: "ARQUIVO NARRATIVO", subtitle: "Historia da ruptura, das fases e das escolhas dos operadores.", active: "story", analytics, content, pageClass: "story-page" });
+    <section class="terminal-panel story-chapter" id="universo">
+      <p class="eyebrow">02 / DENTRO DO JOGO</p>
+      <h2>O projeto que recebeu o nome de Ruptura Temporal</h2>
+      <p>Em sua dimensão, Geovana é uma cientista brilhante. Henrique, seu marido, morre em um acidente de trabalho ligado a um projeto de portal ainda sem nome. Tomada pelo luto, ela muda o rumo da pesquisa e da equipe sem o conhecimento do governo. O novo objetivo é romper o espaço-tempo e impedir a morte dele.</p>
+      <p>O general Aires, metódico, questiona a responsabilidade de transformar um projeto governamental em uma busca pessoal. Ao tentar impedi-la, danifica e desregula a máquina. A explosão acontece de fora para dentro e puxa a instalação inteira. O destino das outras pessoas absorvidas permanece desconhecido.</p>
+      <p>Na travessia, Geovana recebe uma carga de energia que responde ao subconsciente. Elétrica, Lacerante, Parasítica, Prismática e Gravitante são versões dimensionais dela, unidas pelo impulso de reconstruir a máquina, voltar para casa ou salvar Henrique.</p>
+    </section>
+    <section class="observatory-grid story-conflict">
+      <article class="terminal-panel span-7">
+        <p class="eyebrow">03 / DUAS RESPOSTAS AO LUTO</p>
+        <h2>A Geovana que atravessa</h2>
+        <p>A protagonista não aceita que o fluxo do universo tenha levado Henrique. Mesmo alertada de que romper outra realidade pode destruí-la, ela duvida dessa ameaça e segue em frente. Para ela, desistir também tem um custo impossível.</p>
+      </article>
+      <article class="terminal-panel span-5">
+        <p class="eyebrow">A GEOVANA QUE IMPEDE</p>
+        <h2>Umbra</h2>
+        <p>Umbra também perdeu Henrique. Foi a primeira Geovana a interromper a sequência de tentar salvá-lo. Ela se opõe à protagonista porque conhece o preço que um universo inocente pode pagar.</p>
+        <details class="story-reveal"><summary>Conhecer a origem da Umbra</summary><p>Umbra chegou até Henrique, mas a realidade recusou aquele reencontro. O universo se fragmentou e ele foi perdido outra vez, junto com tudo ao redor. Ela decidiu impedir que outras Geovanas causassem essa dor duas vezes. Quando uma Geovana derrota outra, recebe sua energia. Umbra conquistou poder assim, mas também absorve a dor das versões que derrota.</p></details>
+      </article>
+    </section>
+    <section class="story-outro"><p class="eyebrow">O DESFECHO PERTENCE AO JOGADOR</p><h2>Qual resposta você escolheria?</h2><p>A história apresenta as razões de cada Geovana. O que acontece no fim fica para quem atravessa a Ruptura.</p><a class="button primary" href="/leaderboard/downloads">Jogar Ruptura Temporal ↗</a></section>`;
+  return pageShell({ title: "A HISTÓRIA DA RUPTURA", subtitle: "A origem real, o acidente e duas respostas ao mesmo luto. Os finais ficam no jogo.", active: "story", analytics, content, pageClass: "story-page" });
 }
 
 function renderCatalog(snapshot, cardAssetUrl) {
@@ -865,6 +796,8 @@ function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
     edgeRatio: playerUmbra.averageEdgeRatio,
     hitRate: umbraRuns.reduce((sum, run) => sum + safeNumber(behaviorOf(run).hitRate), 0) / Math.max(1, umbraRuns.length)
   };
+  const latestKnowledgeRun = umbraRuns.find((run) => safeNumber(knowledgeOf(run).totalPercent) > 0);
+  const playerKnowledge = latestKnowledgeRun ? knowledgeOf(latestKnowledgeRun) : {};
   const timeline = [...runs].reverse().map((run) => ({
     label: formatDate(run).slice(0, 10),
     score: safeNumber(run.score),
@@ -875,7 +808,7 @@ function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
     <span>LOSER</span>
     <div>
       <b>O Observatorio viu a gambiarra temporal.</b>
-      <p>Tentou dobrar a Ruptura no alicate, mas deixou impressao digital ate no eco do checkpoint. ${formatNumber(player.suspiciousRuns)} run(s) deste perfil foram marcadas como adulteradas e nao entram nos rankings.</p>
+      <p>Deixou impressao digital ate no eco do checkpoint. ${formatNumber(player.suspiciousRuns)} run(s) deste perfil foram marcadas como adulteradas e nao entram nos rankings.</p>
       <small>${escapeHtml(player.suspicionReasons.length ? `Motivos: ${player.suspicionReasons.join(", ")}` : "Motivo: protocolo competitivo recusado.")}</small>
     </div>
   </section>` : "";
@@ -894,8 +827,8 @@ function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
     </section>
     ${loserWarning}
     <section class="pulse-grid">
-      ${metric("Melhor score", `${formatNumber(player.best.score)} pts`, `v${textValue(player.best.version, "?")}`, "cyan", "SCR")}
-      ${metric("Melhor tempo", formatDuration(player.bestTime.durationSeconds), formatDate(player.bestTime), "amber", "TMP")}
+      ${metric("Melhor mérito", `${formatNumber(player.best.score)}`, `Não são moedas · v${textValue(player.best.version, "?")}`, "cyan", "SCR")}
+      ${metric("Maior duração", formatDuration(player.bestTime.durationSeconds), "Arquivo · não soma mérito", "amber", "TMP")}
       ${metric("Maior dano em boss", `${formatNumber(player.bestBoss.bossDamage)} dano`, phaseLabel(player.bestBoss), "magenta", "DMG")}
       ${metric("Maior progressao", phaseLabel(player.farthest), textValue(player.farthest.result, "Run"), "green", "PRG")}
     </section>
@@ -910,7 +843,7 @@ function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
         <dl>
           <div><dt>Build mais usada</dt><dd>${escapeHtml(player.favoriteBuild)} <small>${player.favoriteBuildRuns} runs</small></dd></div>
           <div><dt>Versao mais usada</dt><dd>v${escapeHtml(player.favoriteVersion)} <small>${player.favoriteVersionRuns} runs</small></dd></div>
-          <div><dt>Score medio</dt><dd>${formatNumber(player.averageScore)} pts</dd></div>
+          <div><dt>Mérito médio</dt><dd>${formatNumber(player.averageScore)}</dd></div>
           <div><dt>Dano medio recebido</dt><dd>${formatNumber(player.averageDamageTaken)} dano</dd></div>
           <div><dt>Dano total em boss</dt><dd>${formatNumber(player.totalBossDamage)} dano</dd></div>
         </dl>
@@ -918,11 +851,13 @@ function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
       <div class="terminal-panel span-12 facts-list">
         ${sectionHeader("Dossie UMBRA", "Memoria predatoria do operador", "A mente usa somente runs elegiveis para estimar como iniciar a luta contra este jogador.")}
         <dl>
-          <div><dt>Camada 1</dt><dd>${formatNumber(umbraRuns.length)} runs de treino <small>${formatNumber(umbraRejected)} descartadas; minimo de 5 minutos na Fase 1</small></dd></div>
+          <div><dt>Relatórios</dt><dd>${formatNumber(umbraRuns.length)} runs elegíveis para agregação <small>${formatNumber(umbraRejected)} descartadas; minimo de 5 minutos na Fase 1</small></dd></div>
           <div><dt>Camada 2</dt><dd>${escapeHtml(playerArchetype ? playerArchetype.label : "Sem leitura")} <small>${playerArchetype ? `${formatNumber(playerArchetype.count)} leitura(s) compativeis` : "Dados insuficientes"}</small></dd></div>
           <div><dt>Camada 3</dt><dd>${formatPercent(playerBehavior.hitRate)} precisao <small>${formatDecimal(playerBehavior.dashPerMinute, 1)} dash/min · ${formatPercent(playerBehavior.edgeRatio)} tempo em borda</small></dd></div>
           <div><dt>Fase 1 media</dt><dd>${formatDuration(playerBehavior.phase1Seconds)}</dd></div>
         </dl>
+        ${umbraKnowledgeBars(playerKnowledge)}
+        <p>Cobertura de observação, não aprendizado comprovado. <a href="/leaderboard/umbra">Entenda a arquitetura e acompanhe os resultados ↗</a></p>
       </div>
       <div class="terminal-panel span-12">
         ${sectionHeader("Deck recorrente", "Cartas mais usadas", "Cartas presentes nas runs deste operador.")}
@@ -944,72 +879,6 @@ function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
   });
 }
 
-function rankingTable(title, subtitle, runs, value, detail, tone) {
-  const max = Math.max(1, ...runs.map((run) => safeNumber(value(run))));
-  const rows = runs.slice(0, 12).map((run, index) => {
-    const raw = safeNumber(value(run));
-    const display = value(run, true);
-    return `<a href="${playerPath(run)}">
-      <b>#${index + 1}</b>
-      <div><strong>${escapeHtml(textValue(run.player, "Jogador"))}</strong><small>${escapeHtml(detail(run))}</small><i style="width:${Math.max(3, raw / max * 100)}%"></i></div>
-      <span>${escapeHtml(String(display))}</span>
-    </a>`;
-  }).join("");
-  return `<section class="ranking-column tone-${tone}">
-    ${sectionHeader(subtitle, title)}
-    <div class="ranking-list">${rows || emptyState("Sem ranking", "Aguardando runs suficientes para comparar.")}</div>
-  </section>`;
-}
-
-function renderRankings(snapshot) {
-  const analytics = aggregateSnapshot(snapshot);
-  const bestRuns = analytics.profiles.map((player) => player.best).sort((a, b) => safeNumber(b.score) - safeNumber(a.score));
-  const byTime = analytics.profiles.map((player) => player.bestTime).sort((a, b) => safeNumber(b.durationSeconds) - safeNumber(a.durationSeconds));
-  const byBoss = analytics.profiles.map((player) => player.bestBoss).sort((a, b) => safeNumber(b.bossDamage) - safeNumber(a.bossDamage));
-  const byProgress = analytics.profiles.map((player) => player.farthest).sort((a, b) => progressValue(b) - progressValue(a));
-  const bySpeedrun = analytics.profiles.map((player) => player.farthest).sort((a, b) => speedrunValue(b) - speedrunValue(a));
-  const scatter = bestRuns.slice(0, 48).map((run) => ({
-    player: textValue(run.player, "Jogador"),
-    time: safeNumber(run.durationSeconds),
-    boss: safeNumber(run.bossDamage),
-    score: safeNumber(run.score),
-    phase: safeNumber(run.phase)
-  }));
-  const phaseChart = analytics.phases.map((item) => ({ label: item.label, count: item.count }));
-  const content = `
-    <section class="terminal-panel chart-section">
-      ${sectionHeader("Plano cartesiano", "Sobrevivencia x dano em boss", "Cada ponto e a melhor run de um operador; o tamanho representa o score.")}
-      <div class="chart-wrap large"><canvas id="scatter-chart" aria-label="Plano cartesiano comparando tempo e dano em boss"></canvas></div>
-      <p class="data-note">Resumo textual: ${formatNumber(bestRuns.length)} operadores comparados, maior tempo ${formatDuration(byTime[0] && byTime[0].durationSeconds)}, maior dano em boss ${formatNumber(byBoss[0] && byBoss[0].bossDamage)}.</p>
-    </section>
-    <section class="rankings-layout">
-      ${rankingTable("Melhor score geral", "Indice final", bestRuns, (run, formatted) => formatted ? `${formatNumber(run.score)} pts` : run.score, (run) => `${textValue(run.manifestation, "?")} + ${textValue(run.spectrum, "?")} | v${textValue(run.version, "?")}`, "cyan")}
-      ${rankingTable("Maior tempo vivo", "Sobrevivencia", byTime, (run, formatted) => formatted ? formatDuration(run.durationSeconds) : run.durationSeconds, (run) => `${phaseLabel(run)} | v${textValue(run.version, "?")}`, "amber")}
-      ${rankingTable("Maior dano em boss", "Pressao ofensiva", byBoss, (run, formatted) => formatted ? `${formatNumber(run.bossDamage)} dano` : run.bossDamage, (run) => `${textValue(run.manifestation, "?")} + ${textValue(run.spectrum, "?")}`, "magenta")}
-      ${rankingTable("Maior progressao", "Avanco na campanha", byProgress, (run, formatted) => formatted ? phaseLabel(run) : progressValue(run), (run) => `${formatDuration(run.durationSeconds)} | ${textValue(run.result, "Run")}`, "green")}
-      ${rankingTable("Speedrun de progressao", "Longe em pouco tempo", bySpeedrun, (run, formatted) => formatted ? `${phaseLabel(run)} · ${formatDuration(run.durationSeconds)}` : speedrunValue(run), speedrunDetail, "violet")}
-    </section>
-    <section class="observatory-grid">
-      <div class="terminal-panel span-7">
-        ${sectionHeader("Distribuicao", "Progresso por fase", "Quantidade de runs registradas por fase final.")}
-        <div class="chart-wrap"><canvas id="phase-chart" aria-label="Grafico de distribuicao por fase"></canvas></div>
-      </div>
-      <div class="terminal-panel span-5">
-        ${sectionHeader("Formula", "Score auditavel", "O servidor recalcula e valida as runs antes do ranking.")}
-        <p class="formula-text">A build envia <b>leaderboard_score</b>, assinatura, sessao segura e checkpoints da run. A partir da v2.0.30c, o servidor recalcula o indice competitivo, compara o resultado final com o historico observado, rejeita protocolo legado sem sessao e tira da tabela qualquer ficha com saltos impossiveis de pontos, cartas, fase ou dano; tentativas repetidas ficam auditadas e podem bloquear temporariamente o envio daquele IP.</p>
-        ${signatureList(analytics.versions, "cyan")}
-      </div>
-    </section>`;
-  return pageShell({
-    title: "MATRIZ COMPETITIVA",
-    subtitle: "Comparacao entre sobrevivencia, ofensiva e progressao.",
-    active: "rankings",
-    analytics,
-    content,
-    script: scatterScript(scatter) + barChartScript("phase-chart", phaseChart),
-    pageClass: "rankings-page"
-  });
-}
 
 function enemyThreatTile(threat, publicAssetUrl, maxDamage) {
   const name = textValue(threat && threat.name, "Origem desconhecida");
@@ -1046,6 +915,7 @@ function renderRun(runId, snapshot, cardAssetUrl, publicAssetUrl) {
   };
   const bossRows = arrayOf(run.bossDetail).filter((row) => row && (row.reached || safeNumber(row.damage) > 0));
   const behavior = behaviorOf(run);
+  const knowledge = knowledgeOf(run);
   const umbraReasons = arrayOf(run.umbraTrainingReasons);
   const timeline = runTimelineReport(run);
   const currentIndex = analytics.latest.findIndex((item) => String(item.id) === String(run.id));
@@ -1066,7 +936,7 @@ function renderRun(runId, snapshot, cardAssetUrl, publicAssetUrl) {
       </div>
     </section>
     <section class="pulse-grid">
-      ${metric("Score calculado", `${formatNumber(run.score)} pts`, "indice recebido da build", "cyan", "SCR")}
+      ${metric("Mérito de expedição", `${formatNumber(run.score)}`, "Regra v2 calculada pelo servidor · não são moedas", "cyan", "SCR")}
       ${metric("Tempo vivo", formatDuration(run.durationSeconds), formatDate(run), "amber", "TMP")}
       ${metric("Dano em boss", `${formatNumber(run.bossDamage)} dano`, phaseLabel(run), "magenta", "BOS")}
       ${metric("Dano recebido", `${formatNumber(run.damageTaken)} dano`, `${formatNumber(arrayOf(run.damageEvents).length)} eventos mapeados`, "red", "HIT")}
@@ -1080,13 +950,14 @@ function renderRun(runId, snapshot, cardAssetUrl, publicAssetUrl) {
       </div>
       ${runTimelinePanel(run, timeline)}
       <div class="terminal-panel span-12 facts-list">
-        ${sectionHeader("UMBRA", "Elegibilidade para treino", "Essa leitura alimenta a atualizacao semanal da mente, sem exigir reinstalacao do jogo.")}
+        ${sectionHeader("UMBRA", "Elegibilidade para a mente", "Relatórios agregados não equivalem a treinamento neural. Consulte os critérios no observatório da Umbra.")}
         <dl>
-          <div><dt>Status</dt><dd>${run.umbraTrainingEligible ? "Usada no treino" : "Descartada"} <small>${run.umbraTrainingEligible ? "Sinal valido para a mente" : escapeHtml(umbraReasons.join(", ") || "sem sinal suficiente")}</small></dd></div>
+          <div><dt>Status</dt><dd>${run.umbraTrainingEligible ? "Elegível para agregação" : "Descartada"} <small>${run.umbraTrainingEligible ? "Sinal valido para a mente" : escapeHtml(umbraReasons.join(", ") || "sem sinal suficiente")}</small></dd></div>
           <div><dt>Camada 1</dt><dd>${formatDuration(behavior.phase1Seconds)} na Fase 1 <small>${formatNumber(behavior.distanceTraveled)} px percorridos</small></dd></div>
           <div><dt>Camada 2</dt><dd>${escapeHtml(classifyUmbraRun(run))} <small>${formatPercent(behavior.edgeRatio)} borda · ${formatPercent(behavior.cornerRatio)} canto</small></dd></div>
           <div><dt>Camada 3</dt><dd>${formatDecimal(behavior.dashPerMinute, 1)} dash/min <small>${formatDecimal(behavior.shotsPerMinute, 1)} tiros/min · ${formatPercent(behavior.hitRate)} acerto</small></dd></div>
         </dl>
+        ${umbraKnowledgeBars(knowledge)}
       </div>
       <div class="terminal-panel span-7">
         ${sectionHeader("Posicionamento", "Mapa de calor e dano", "Reconstrucao espacial da permanencia e dos pontos de impacto.", `<div class="phase-switch">${phases.map((phase, index) => `<button type="button" data-phase="${phase}" class="${index === 0 ? "active" : ""}">Fase ${phase}</button>`).join("")}</div>`)}
@@ -1108,6 +979,7 @@ function renderRun(runId, snapshot, cardAssetUrl, publicAssetUrl) {
         <dl>
           <div><dt>Fase alcancada</dt><dd>${escapeHtml(phaseLabel(run))}</dd></div>
           <div><dt>Resultado</dt><dd>${escapeHtml(textValue(run.result, "Run"))}</dd></div>
+          <div><dt>Causa da morte</dt><dd>${escapeHtml(textValue(run.deathCause, "Nao se aplica"))}${run.deathSource ? ` <small>${escapeHtml(run.deathSource)} · fase ${formatNumber(run.deathPhase || run.phase)}</small>` : ""}</dd></div>
           <div><dt>Pontos ganhos / gastos</dt><dd>${formatNumber(run.pointsEarned)} / ${formatNumber(run.pointsSpent)}</dd></div>
           <div><dt>Bosses encontrados</dt><dd>${bossRows.length ? bossRows.map((row) => `F${formatNumber(row.phase)}: ${formatNumber(row.damage)} dano em ${escapeHtml(textValue(row.duration, "--"))}`).join("<br>") : "Nenhum boss registrado"}</dd></div>
           <div><dt>Rede</dt><dd>${escapeHtml(run.network && typeof run.network === "object" ? Object.keys(run.network).slice(0, 4).join(", ") || "Sem telemetria" : "Sem telemetria")}</dd></div>
@@ -1144,10 +1016,16 @@ function renderNotFound(message, snapshot = {}) {
 }
 
 function renderLeaderboardSite({ pathname, snapshot, cardAssetUrl, publicAssetUrl }) {
-  if (pathname === "/leaderboard" || pathname === "/leaderboard/") return renderHome(snapshot, cardAssetUrl, publicAssetUrl);
+  if (["/leaderboard", "/leaderboard/", "/leaderboard/rankings"].includes(pathname)) {
+    const analytics=aggregateSnapshot(snapshot);
+    const rankings=pathname.endsWith("/rankings");
+    return pageShell({title:rankings?"MATRIZ COMPETITIVA":"CENTRAL DO OBSERVATORIO",subtitle:"Mérito de expedição · progresso, bosses e resistência. Nenhum ponto por tempo.",active:rankings?"rankings":"home",analytics,
+      content:meritPage(snapshot,{rankings,cards:analytics.cards.slice(0,4).map(card=>cardTile(card,cardAssetUrl,true)).join("")}),pageClass:"merit-page"});
+  }
+  if (pathname === "/leaderboard/umbra") return pageShell({title:"A MENTE DA UMBRA",subtitle:"Arquitetura aberta. Observação mensurável. Nenhuma promessa sem evidência.",active:"umbra",analytics:aggregateSnapshot(snapshot),content:umbraPage(snapshot.observatory),pageClass:"umbra-page"});
+  if (pathname === "/leaderboard/downloads") return pageShell({title:"DOWNLOADS",subtitle:"Escolha sua plataforma e atravesse a ruptura.",active:"downloads",analytics:aggregateSnapshot(snapshot),content:downloadsPage(snapshot.downloads),pageClass:"downloads-page"});
   if (pathname === "/leaderboard/historia") return renderStory(snapshot);
   if (pathname === "/leaderboard/catalogo") return renderCatalog(snapshot, cardAssetUrl);
-  if (pathname === "/leaderboard/rankings") return renderRankings(snapshot, publicAssetUrl);
   const playerMatch = pathname.match(/^\/leaderboard\/player\/([^/]+)$/);
   if (playerMatch) return renderPlayer(decodeURIComponent(playerMatch[1]), snapshot, cardAssetUrl, publicAssetUrl);
   const runMatch = pathname.match(/^\/leaderboard\/run\/([^/]+)$/);
@@ -1272,25 +1150,17 @@ function runTimelinePanel(run, timeline) {
 }
 
 function scoreBreakdown(run) {
-  const rows = [
-    ["Tempo vivo", `${formatNumber(run && run.durationSeconds)}s x 2`, Math.round(safeNumber(run && run.durationSeconds) * 2)],
-    ["Abates", `${formatNumber(run && run.kills)} x 20`, Math.floor(safeNumber(run && run.kills)) * 20],
-    ["Fase", `${formatNumber(run && run.phase)} x 250`, Math.floor(safeNumber(run && run.phase)) * 250],
-    ["Dano em boss", `${formatNumber(run && run.bossDamage)} / 12`, Math.round(safeNumber(run && run.bossDamage) / 12)],
-    ["Cartas", `${formatNumber(run && run.cardsTotal)} x 15`, Math.floor(safeNumber(run && run.cardsTotal)) * 15],
-    ["Vida restante", `${formatDecimal(statNumber(run && run.playerStats, ["hp"]), 1)} x 0,5`, Math.round(Math.max(0, statNumber(run && run.playerStats, ["hp"])) * 0.5)]
-  ];
-  if (String(run && run.result || "") === "Vitoria") rows.push(["Vitoria", "bonus fixo", 1500]);
-  const total = rows.reduce((sum, row) => sum + safeNumber(row[2]), 0);
-  return `
-    <div class="terminal-panel span-5 facts-list score-breakdown">
-      ${sectionHeader("Calculo", "Condicoes do score", "Formula competitiva recalculada pelo servidor.")}
-      <dl>
-        ${rows.map(([label, formula, value]) => `<div><dt>${escapeHtml(label)}<small>${escapeHtml(formula)}</small></dt><dd>${formatNumber(value)} pts</dd></div>`).join("")}
-        <div><dt>Total recalculado</dt><dd>${formatNumber(total)} pts</dd></div>
-        <div><dt>Score publicado</dt><dd>${formatNumber(run && run.score)} pts</dd></div>
-      </dl>
-    </div>`;
+  const score = run.ranking || scoreRun(run);
+  return `<div class="terminal-panel span-5 facts-list score-breakdown">
+    ${sectionHeader("Mérito de expedição", "Condicoes do score", "Regra v2. Não são moedas da loja. Tempo não soma pontos.")}
+    ${run.rankingWithdrawn ? `<p>Retirado da competição: ${escapeHtml(run.rankingWithdrawalReason)}</p>` : ""}
+    <dl>${score.parts.map(row => `<div><dt>${escapeHtml(row.label)}<small>${escapeHtml(row.rule)}</small></dt><dd>${formatNumber(row.points)} mérito</dd></div>`).join("")}
+      <div><dt>Total recalculado</dt><dd>${formatNumber(score.total)} mérito</dd></div>
+      <div><dt>Publicado ${run.rankEligible === false ? "(auditoria)" : ""}</dt><dd>${formatNumber(run.score)} mérito</dd></div></dl>
+    <p>${score.inferredBosses} boss(es) com conclusão inferida de progresso legado; ${score.unknownDamageBosses} boss(es) sem dano recebido registrado. Dado ausente não concede bônus de resistência.</p>
+    <details><summary>Evidência por boss</summary>${score.bosses.map(b => `<p>Boss ${b.phase}: ${b.defeated ? "superado" : "conclusão não comprovada"}; ${b.defeatEvidence === "legacy_progression_inference" ? "inferido de progresso" : b.defeatEvidence === "explicit" ? "registro explícito" : "sem confirmação"}; dano recebido ${b.damage === null ? "não registrado" : formatNumber(b.damage)}; bônus ${b.resilience}.</p>`).join("")}</details>
+    <a href="/leaderboard#regras">Regra completa e limitações ↗</a>
+  </div>`;
 }
 
 function baseClientScript() {
@@ -1562,7 +1432,7 @@ main{position:relative;width:min(var(--content-width),100%);margin:auto;padding:
 .hero-operator{align-self:stretch;display:grid;align-content:center;justify-items:center;text-align:center;padding:24px;border:1px solid rgba(255,255,255,.10);background:rgba(2,5,10,.32)}
 .hero-operator>span{font:800 11px var(--font-mono);color:var(--text-soft)}.hero-orbit{display:grid;place-items:center;width:178px;height:178px;margin:18px 0;border:1px solid var(--rupture-cyan);border-radius:50%;background:radial-gradient(circle,rgba(37,244,229,.14),transparent 64%);box-shadow:0 0 55px rgba(37,244,229,.15)}
 .hero-orbit img,.hero-orbit .asset-fallback{max-width:132px;max-height:132px;object-fit:contain;image-rendering:auto}.hero-operator h3{margin:0;font-size:28px}.hero-operator strong{margin-top:8px;color:var(--rupture-cyan);font:900 36px var(--font-mono)}.hero-operator p{color:var(--text-soft);line-height:1.45}.hero-operator a{color:var(--rupture-cyan);font-weight:800}
-.pulse-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:24px}.umbra-mind-block{margin-bottom:24px}.metric{position:relative;min-height:146px;padding:18px;border:1px solid var(--line);border-top:3px solid var(--tone);background:linear-gradient(180deg,var(--surface),rgba(5,10,17,.92));overflow:hidden}
+.pulse-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:24px}.umbra-mind-block{margin-bottom:24px}.umbra-collective-panel{margin-bottom:14px}.umbra-knowledge-bars{display:grid;gap:9px;margin-top:18px}.umbra-knowledge-row{display:grid;grid-template-columns:minmax(92px,150px) 1fr 48px;gap:12px;align-items:center;color:#e9d8dc;font-size:.78rem;text-transform:uppercase;letter-spacing:.08em}.umbra-knowledge-row i{display:block;height:8px;background:rgba(75,10,24,.7);border:1px solid rgba(255,57,92,.22);overflow:hidden}.umbra-knowledge-row i b{display:block;height:100%;background:linear-gradient(90deg,#681428,#ff234f);box-shadow:0 0 12px rgba(255,35,79,.36)}.umbra-knowledge-row strong{color:#ff728b;text-align:right}.metric{position:relative;min-height:146px;padding:18px;border:1px solid var(--line);border-top:3px solid var(--tone);background:linear-gradient(180deg,var(--surface),rgba(5,10,17,.92));overflow:hidden}
 .metric:before{content:"";position:absolute;right:-28px;bottom:-36px;width:110px;height:110px;border:18px solid var(--tone);opacity:.045;transform:rotate(24deg)}.metric span{color:var(--tone);font:800 11px var(--font-mono)}.metric b{display:block;margin:14px 0 4px;color:var(--text-main);font:900 clamp(23px,2.4vw,36px) var(--font-mono);overflow-wrap:anywhere}.metric strong{display:block;text-transform:uppercase;font-size:12px}.metric small{display:block;margin-top:7px;color:var(--text-soft);line-height:1.4}
 .tone-cyan{--tone:var(--rupture-cyan)}.tone-magenta{--tone:var(--rupture-magenta)}.tone-amber{--tone:var(--survival-yellow)}.tone-green{--tone:var(--progress-green)}.tone-red{--tone:var(--danger-red)}.tone-violet{--tone:var(--rupture-violet)}
 .observatory-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:22px}.span-12{grid-column:span 12}.span-8{grid-column:span 8}.span-7{grid-column:span 7}.span-5{grid-column:span 5}.span-4{grid-column:span 4}
@@ -1577,6 +1447,8 @@ main{position:relative;width:min(var(--content-width),100%);margin:auto;padding:
 .dual-signatures{display:grid;gap:18px}.dual-signatures h3{margin:0 0 8px;font-size:15px;text-transform:uppercase}.signature-list{display:grid;gap:8px}.signature-row{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}.signature-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.signature-row b{color:var(--tone)}.signature-row i{grid-column:1/-1;height:3px;background:var(--tone);box-shadow:0 0 12px var(--tone)}
 .lore-hero{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:22px;margin-bottom:24px;padding:30px;border:1px solid var(--line-strong);background:linear-gradient(115deg,rgba(37,244,229,.10),rgba(6,12,20,.94),rgba(85,239,139,.08));clip-path:polygon(18px 0,100% 0,100% calc(100% - 18px),calc(100% - 18px) 100%,0 100%,0 18px)}.lore-hero h2,.catalog-intro h2{margin:0 0 12px;font-family:var(--font-display);font-size:clamp(34px,5vw,72px);line-height:.96;text-transform:uppercase}.lore-hero p,.catalog-intro p{max-width:850px;color:#c5d5df;line-height:1.65}.lore-hero aside{display:grid;align-content:center;gap:6px;padding:20px;border:1px solid var(--line);background:rgba(2,5,10,.38)}.lore-hero aside b{color:var(--rupture-cyan);font:900 52px var(--font-mono)}.lore-hero aside span{text-transform:uppercase;font-weight:900}.lore-hero aside small{color:var(--text-soft);line-height:1.45}
 .story-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:24px}.story-grid article,.insight-grid article{padding:16px;border:1px solid var(--line);background:rgba(10,19,30,.76)}.story-grid span{color:var(--rupture-cyan);font:900 22px var(--font-mono)}.story-grid h3,.insight-grid b{display:block;margin:10px 0 8px;font-family:var(--font-display);font-size:22px;text-transform:uppercase}.story-grid p,.insight-grid small{color:var(--text-soft);line-height:1.52}.route-list{display:grid;gap:10px;margin:0;padding:0;list-style:none}.route-list li{display:grid;gap:3px;padding:12px;border-left:2px solid var(--rupture-cyan);background:rgba(255,255,255,.025)}.route-list span{color:var(--text-soft)}
+.story-hero{background:linear-gradient(115deg,rgba(187,137,84,.15),rgba(6,12,20,.96) 58%,rgba(92,255,143,.08))}.story-hero h2{max-width:800px;text-transform:none;line-height:1.02}.story-hero aside b{color:var(--survival-yellow)}.story-hero .button{margin:8px 8px 0 0}.story-chapter{margin:0 0 24px;border-left:3px solid var(--survival-yellow);scroll-margin-top:110px}.story-chapter h2,.story-conflict h2,.story-outro h2{margin:4px 0 18px;font-family:var(--font-display);font-size:clamp(28px,3.2vw,46px);line-height:1.08}.story-chapter p:not(.eyebrow),.story-conflict p:not(.eyebrow),.story-outro p:not(.eyebrow){max-width:850px;color:#c5d5df;font-size:15px;line-height:1.75}.story-conflict{margin-bottom:24px}.story-conflict article:first-child{border-top:3px solid var(--rupture-cyan)}.story-conflict article:last-child{border-top:3px solid var(--progress-green)}.story-reveal{margin-top:20px;padding:16px;border:1px solid var(--line-strong);background:rgba(92,255,143,.035)}.story-reveal summary{cursor:pointer;color:var(--progress-green);font-weight:800}.story-reveal summary:focus-visible{outline:2px solid var(--progress-green);outline-offset:4px}.story-reveal p{margin-bottom:0}.story-outro{padding:28px;border:1px solid var(--line-strong);background:linear-gradient(100deg,rgba(37,244,229,.08),rgba(10,19,30,.88) 55%,rgba(187,137,84,.1))}.story-outro .button{margin-top:14px}
+@media(max-width:760px){.story-chapter p:not(.eyebrow),.story-conflict p:not(.eyebrow),.story-outro p:not(.eyebrow){font-size:14px}.story-outro{padding:20px}}
 .catalog-intro{margin-bottom:24px;padding:26px;border-left:3px solid var(--rupture-magenta);background:linear-gradient(90deg,rgba(255,72,189,.09),rgba(10,19,30,.82))}.catalog-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-bottom:22px}.catalog-deck{grid-template-columns:repeat(3,minmax(0,1fr))}
 .insight-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}.insight-grid span{display:block;color:var(--rupture-cyan);font:900 19px var(--font-mono);overflow-wrap:anywhere}
 .operator-highlight{display:grid;align-content:start;gap:7px;min-height:196px;padding:18px;border:1px solid var(--line);background:var(--surface)}.operator-avatar{width:64px;height:64px}.operator-highlight>span{color:var(--text-soft);font-size:11px;text-transform:uppercase}.operator-highlight b{font-size:20px}.operator-highlight strong{color:var(--tone);font:900 26px var(--font-mono)}.operator-highlight small{color:var(--text-soft);line-height:1.4}

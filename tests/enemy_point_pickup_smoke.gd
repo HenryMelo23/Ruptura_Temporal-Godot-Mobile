@@ -88,7 +88,7 @@ func _run_orbita_radius() -> void:
 func _run_active_cap_merge() -> void:
 	_setup_solo()
 	for index in range(game.ENEMY_POINT_MAX_ACTIVE + 1):
-		game._spawn_enemy_point_drop(Vector2(100.0 + float(index % 16) * 40.0, 100.0 + float(index / 16) * 28.0), 1)
+		game._spawn_enemy_point_drop(Vector2(180.0 + float(index % 8) * 110.0, 140.0 + float(index / 8) * 110.0), 1)
 	var point_orbs: Array = game._enemy_point_orbs()
 	var total_value: int = 0
 	for orb in point_orbs:

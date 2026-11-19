@@ -1,0 +1,9 @@
+{
+  "protocol": "ruptura_umbra_rl",
+  "protocol_version": 2,
+  "seed": 731,
+  "max_steps": 96,
+  "step_seconds": 0.16,
+  "policy_mode": "fixed_action",
+  "fixed_action": "ATAQUE"
+}

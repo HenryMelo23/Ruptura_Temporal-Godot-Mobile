@@ -31,13 +31,18 @@ func _initialize() -> void:
 	_check(float(crepuscular["crepuscular_eclipse"]) > 0.0, "Crepuscular perfect teleport did not trigger Eclipse")
 	_check(AuraSystem.damage_multiplier(crepuscular) > 1.0 and AuraSystem.speed_multiplier(crepuscular) > 1.0, "Eclipse did not combine offensive and movement bonuses")
 
+	# Peregrino: andar num quadrado e voltar cruzando o proprio rastro fecha
+	# um laco e gera Territorio.
 	var peregrino := AuraSystem.create("Peregrino", 1)
-	for pos in [Vector2(20, 20), Vector2(340, 20), Vector2(660, 20), Vector2(980, 20), Vector2(1300, 20)]:
-		AuraSystem.update(peregrino, 0.1, {"player_pos": pos, "hp": 70.0, "hp_max": 100.0})
-	_check(float(peregrino["peregrino_journey"]) > 0.0, "Peregrino did not start Jornada after valid sectors")
-	var refuge_pos: Vector2 = peregrino["peregrino_refuge_pos"]
-	var events := AuraSystem.update(peregrino, 0.1, {"player_pos": refuge_pos, "hp": 70.0, "hp_max": 100.0})
-	_check(events.any(func(e): return String(e.get("text", "")) == "REFUGIO"), "Peregrino did not heal when returning to Refugio")
+	var loop_events: Array = []
+	var corners := [Vector2(205, 0), Vector2(205, 200), Vector2(100, 200), Vector2(100, -40)]
+	var walker := Vector2(-35, 0)
+	for corner in corners:
+		while walker.distance_to(corner) > 1.0:
+			walker = walker.move_toward(corner, 10.0)
+			loop_events.append_array(AuraSystem.update(peregrino, 0.05, {"player_pos": walker, "hp": 70.0, "hp_max": 100.0}))
+	_check(loop_events.any(func(e): return String(e.get("type", "")) == "peregrino_territory"), "Peregrino did not close a Territorio loop")
+	_check(AuraSystem.speed_multiplier(peregrino) > 1.1, "Peregrino Territorio did not grant speed")
 
 	var equilibrista := AuraSystem.create("Equilibrista", 1)
 	AuraSystem.update(equilibrista, 6.3, {"player_pos": Vector2.ZERO, "hp": 60.0, "hp_max": 100.0})
@@ -49,7 +54,9 @@ func _initialize() -> void:
 	AuraSystem.update(avarento, 0.1, {"player_pos": Vector2.ZERO, "score": 2000, "card_cost": 500, "hp_max": 450.0})
 	_check(float(avarento["avarento_lastro"]) > 2.0, "Avarento did not compute Lastro from stored points")
 	AuraSystem.on_points_spent(avarento, 500, 450.0)
-	_check(float(avarento["avarento_cofre"]) > 0.0 and AuraSystem.speed_multiplier(avarento) > 1.0, "Avarento spending did not rupture the Cofre")
+	_check(float(avarento["avarento_cofre"]) <= 0.0 and int(avarento["avarento_pending"]) == 500, "Avarento spending did not arm the Cofre for the return")
+	var cofre := AuraSystem.release_avarento_cofre(avarento, 450.0)
+	_check(not cofre.is_empty() and float(avarento["avarento_cofre"]) > 0.0 and AuraSystem.speed_multiplier(avarento) > 1.0, "Avarento did not rupture the Cofre on return")
 
 	var oportunista := AuraSystem.create("Oportunista", 3)
 	var target := _enemy(10)

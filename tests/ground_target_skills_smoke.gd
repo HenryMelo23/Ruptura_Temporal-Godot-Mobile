@@ -24,23 +24,25 @@ func _run() -> void:
 	game._update_button_layout(viewport)
 	game.time_alive = 100.0
 
+	# Parasitica HAB1 (Simbiose) nao usa mais alvo no chao: soltar o toque ativa direto.
 	game.manifestation_key = "parasitica"
+	_check(game._ground_target_profile(false).is_empty(), "parasitic Q still exposes a ground target")
 	var skill_center = game.buttons["skill"].get_center()
 	var drag_pos = skill_center + Vector2(-92.0, -58.0)
-	var expected = game._ground_target_world(drag_pos, viewport, false)
+	game.last_skill_time = -100.0
 	game.skill_touch_index = 7
 	game.skill_touch_pos = drag_pos
 	game._handle_touch_release(7, drag_pos, viewport)
-	_check(game.parasite_spit_zones.size() == 1, "parasitic Q did not launch after releasing the target gesture")
-	_check(Vector2(game.parasite_spit_zones[0]["target"]).distance_to(expected) < 0.1, "parasitic Q ignored the selected ground position")
-
-	var zones_before = game.parasite_spit_zones.size()
+	_check(game._parasitica().sym_active, "parasitic Q did not self-cast on release")
+	game._parasitica().clear_all()
 	var cooldown_before = game.last_skill_time
+	game.last_skill_time = -100.0
+	cooldown_before = game.last_skill_time
 	game.skill_touch_index = 8
 	game.skill_touch_pos = game._ability_cancel_center(viewport)
 	game._handle_touch_release(8, game.skill_touch_pos, viewport)
-	_check(game.parasite_spit_zones.size() == zones_before, "cancelled ground skill still spawned")
-	_check(game.last_skill_time == cooldown_before, "cancelled ground skill consumed its cooldown")
+	_check(not game._parasitica().sym_active, "cancelled skill still activated")
+	_check(game.last_skill_time == cooldown_before, "cancelled skill consumed its cooldown")
 
 	game.manifestation_key = "prismatica"
 	game.last_skill_time = -100.0
@@ -107,14 +109,7 @@ func _run() -> void:
 	game._use_secondary_skill(gravity_target)
 	_check(Vector2(game.manifestation_secondaries.back()["center"]).distance_to(gravity_target) < 0.1, "gravitante ultimate ignored its ground target")
 
-	game.manifestation_key = "ancorada"
-	game.last_secondary_time = -100.0
-	game.effects.clear()
-	var anchor_target = Vector2(610.0, 640.0)
-	game._use_secondary_skill(anchor_target)
-	_check(Vector2(game.manifestation_secondaries.back()["center"]).distance_to(game.player_pos) < 0.1, "anchored ultimate should be centered on the player")
-
-	print("GROUND_TARGET_SKILLS_SMOKE_OK parasitic_q=true prismatic_q=true tp_aim=true gravitante_e=true ancorada_e=true cancel=true")
+	print("GROUND_TARGET_SKILLS_SMOKE_OK parasitic_q=true prismatic_q=true tp_aim=true gravitante_e=true cancel=true")
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()

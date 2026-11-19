@@ -1,6 +1,7 @@
 extends RefCounted
 
 const RTPlayerProgressSync = preload("res://scripts/systems/player_progress_sync.gd")
+const ManifestationRosterSaveMigration = preload("res://scripts/systems/save/manifestation_roster_save_migration.gd")
 const INTERRUPTED_RUN_BINARY_MAGIC := "RTS2"
 const AUTOSAVE_TRANSIENT_FIELDS := {
 	"bullets": true,
@@ -19,7 +20,6 @@ const AUTOSAVE_TRANSIENT_FIELDS := {
 	"rain_splashes": true,
 	"snowflakes": true,
 	"tp_effects": true,
-	"acorrentada_visuals": true,
 	"devorador_effects": true,
 	"common_card_effects": true
 }
@@ -38,6 +38,8 @@ var retry_confirm_visible: bool = false
 var retry_confirm_new_run: bool = false
 var retry_return_timer: float = 0.0
 var card_unlock_save_thread: Thread = null
+var interrupted_run_save_thread: Thread = null
+var interrupted_run_pending_snapshot: Dictionary = {}
 
 func configure(p_core: Node) -> void:
 	core = p_core
@@ -99,8 +101,6 @@ func _ensure_card_unlock_defaults() -> void :
 			core.unlocked_card_ids[card_id] = true
 	for key in core.MANIFESTATION_UNLOCK_ALWAYS_AVAILABLE:
 		core.unlocked_manifestation_ids[String(key)] = true
-	if core.retornante_unlocked:
-		core.unlocked_manifestation_ids["retornante"] = true
 	for key in core.SPECTRUM_UNLOCK_ALWAYS_AVAILABLE:
 		core.unlocked_spectrum_ids[String(key)] = true
 	for aura in core.AURAS:
@@ -118,6 +118,8 @@ func _load_card_unlocks() -> void :
 	core._ensure_card_unlock_defaults()
 	core.player_progress_install_secret = core._load_or_create_player_progress_install_secret()
 	core.player_progress_pending_events.clear()
+	core.player_progress_pending_unlock_index.clear()
+	core.player_progress_deferred_unlock_progress.clear()
 	core.player_progress_sync_sent_event_ids.clear()
 	core.player_progress_quarantined_events.clear()
 	core.player_progress_event_sequence = 0
@@ -136,20 +138,26 @@ func _load_card_unlocks() -> void :
 		for entry in core.RTPlayerProgressSync.compact_quarantined_events(quarantined_events):
 			if entry is Dictionary:
 				core.player_progress_quarantined_events.append(entry.duplicate(true))
+		var deferred: Variant = cached.get("deferred_unlock_progress", {})
+		if deferred is Dictionary:
+			core.player_progress_deferred_unlock_progress = deferred.duplicate(true)
 		core._apply_player_progress_snapshot(cached.get("snapshot", {}), false)
+	core._rebuild_player_progress_pending_unlock_index()
 	core.card_unlocks_dirty = false
 	core.card_unlock_save_timer = 0.0
 
 func _build_card_unlock_cache_payload() -> Dictionary:
 	core._ensure_card_unlock_defaults()
 	core.player_progress_quarantined_events = RTPlayerProgressSync.compact_quarantined_events(core.player_progress_quarantined_events)
-	return RTPlayerProgressSync.build_cache_payload(
+	var payload := RTPlayerProgressSync.build_cache_payload(
 		core.player_profile_id,
 		core._card_unlock_snapshot(),
 		core.player_progress_pending_events,
 		core.player_progress_quarantined_events,
 		core.player_progress_event_sequence
 	)
+	payload["deferred_unlock_progress"] = core.player_progress_deferred_unlock_progress.duplicate(true)
+	return payload
 
 func _write_card_unlock_cache(payload: Dictionary, install_secret: String, final_path: String) -> bool:
 	var signed_payload: Dictionary = RTPlayerProgressSync.signed_cache(payload, install_secret)
@@ -170,6 +178,68 @@ func _write_card_unlock_cache(payload: Dictionary, install_secret: String, final
 		return false
 	return true
 
+static func _sorted_enabled_keys(source: Dictionary) -> Array:
+	var enabled: Array = []
+	for raw_key in source.keys():
+		if bool(source[raw_key]):
+			enabled.append(String(raw_key))
+	enabled.sort()
+	return enabled
+
+static func _build_card_unlock_cache_payload_from_state(state: Dictionary) -> Dictionary:
+	var source_progress: Dictionary = state.get("progress", {})
+	var progress: Dictionary = {}
+	for raw_key in source_progress.keys():
+		progress[String(raw_key)] = float(source_progress[raw_key])
+	var source_levels: Dictionary = state.get("specter_levels", {})
+	var saved_specter_levels: Dictionary = {}
+	var max_specter_level := maxi(1, int(state.get("max_specter_level", 1)))
+	for raw_key in source_levels.keys():
+		saved_specter_levels[String(raw_key)] = clampi(int(source_levels[raw_key]), 1, max_specter_level)
+	var snapshot := RTPlayerProgressSync.compact_snapshot({
+		"version": 2,
+		"unlocked": _sorted_enabled_keys(Dictionary(state.get("unlocked_card_ids", {}))),
+		"unlocked_manifestations": _sorted_enabled_keys(Dictionary(state.get("unlocked_manifestation_ids", {}))),
+		"unlocked_specters": _sorted_enabled_keys(Dictionary(state.get("unlocked_spectrum_ids", {}))),
+		"specter_levels": saved_specter_levels,
+		"content_unread": _sorted_enabled_keys(Dictionary(state.get("content_unread_ids", {}))),
+		"spectral_coins": maxi(0, int(state.get("persistent_spectral_coins", 0))),
+		"progress": progress,
+		"veteran_unlock_sync_version_code": int(state.get("card_unlock_veteran_synced_version_code", 0)),
+	})
+	var payload := RTPlayerProgressSync.build_cache_payload(
+		String(state.get("player_profile_id", "")),
+		snapshot,
+		Array(state.get("pending_events", [])),
+		Array(state.get("quarantined_events", [])),
+		int(state.get("event_sequence", 0))
+	)
+	payload["deferred_unlock_progress"] = Dictionary(state.get("deferred_unlock_progress", {})).duplicate(true)
+	return payload
+
+func _capture_card_unlock_cache_state() -> Dictionary:
+	return {
+		"player_profile_id": core.player_profile_id,
+		"unlocked_card_ids": core.unlocked_card_ids.duplicate(),
+		"unlocked_manifestation_ids": core.unlocked_manifestation_ids.duplicate(),
+		"unlocked_spectrum_ids": core.unlocked_spectrum_ids.duplicate(),
+		"specter_levels": core.specter_levels.duplicate(),
+		"content_unread_ids": core.content_unread_ids.duplicate(),
+		"persistent_spectral_coins": core.persistent_spectral_coins,
+		"progress": core.card_unlock_progress.duplicate(),
+		"card_unlock_veteran_synced_version_code": core.card_unlock_veteran_synced_version_code,
+		# Event dictionaries are copy-on-write; the worker owns these array
+		# snapshots while the runtime may replace entries on the main thread.
+		"pending_events": core.player_progress_pending_events.duplicate(),
+		"quarantined_events": core.player_progress_quarantined_events.duplicate(),
+		"event_sequence": core.player_progress_event_sequence,
+		"deferred_unlock_progress": core.player_progress_deferred_unlock_progress.duplicate(true),
+		"max_specter_level": core.AuraSystem.RUN_MAX_LEVEL,
+	}
+
+func _build_and_write_card_unlock_cache(state: Dictionary, install_secret: String, final_path: String) -> bool:
+	return _write_card_unlock_cache(_build_card_unlock_cache_payload_from_state(state), install_secret, final_path)
+
 func _poll_card_unlock_save(block := false) -> bool:
 	if card_unlock_save_thread == null:
 		return true
@@ -186,11 +256,11 @@ func _poll_card_unlock_save(block := false) -> bool:
 func _save_card_unlocks_async() -> void:
 	if not _poll_card_unlock_save(false):
 		return
-	var payload: Dictionary = _build_card_unlock_cache_payload()
+	var state := _capture_card_unlock_cache_state()
 	var install_secret: String = String(core._player_progress_install_secret())
 	var final_path: String = ProjectSettings.globalize_path(core.PLAYER_PROGRESS_CACHE_PATH)
 	card_unlock_save_thread = Thread.new()
-	var start_error := card_unlock_save_thread.start(_write_card_unlock_cache.bind(payload, install_secret, final_path))
+	var start_error := card_unlock_save_thread.start(_build_and_write_card_unlock_cache.bind(state, install_secret, final_path), Thread.PRIORITY_LOW)
 	if start_error != OK:
 		card_unlock_save_thread = null
 		core.card_unlocks_dirty = true
@@ -222,7 +292,6 @@ func _flush_card_unlocks_if_dirty() -> void :
 
 func _load_config() -> void :
 
-	core.retornante_unlocked = false
 	core.online_mode_unlocked = false
 	core.qa_streaming_unlocked = false
 	core.qa_streaming_enabled = false
@@ -265,8 +334,7 @@ func _load_config() -> void :
 				elif k == "hud_coagulum_scale": core.hud_coagulum_scale = clamp(float(v), core.HUD_PANEL_SCALE_MIN, core.HUD_PANEL_SCALE_MAX)
 				elif k == "analog_fixed": core.analog_fixed = v != "false"
 				elif k == "analog_mode": core.analog_fixed = v != "dinamico"
-				elif k == "shop_auto_enabled": core.shop_auto_enabled = v != "false"
-				elif k == "shop_auto_interval": core.shop_auto_interval = clamp(float(v), 180.0, 480.0)
+				elif k == "shop_auto_enabled" or k == "shop_auto_interval": pass # loja manual aposentada: sempre Fenda/automatica
 				elif k == "auto_target_priority": core.auto_target_priority = core._sanitize_target_priority(v)
 				elif k == "haptics_enabled": core.haptics_enabled = v != "false"
 				elif k == "show_fps_counter": core.show_fps_counter = v == "true"
@@ -310,6 +378,7 @@ func _load_config() -> void :
 				elif k == "gfx_shadows": core.gfx_shadows = v == "true"
 
 				elif k == "gfx_screen_shake": core.gfx_screen_shake = v == "true"
+				elif k == "camera_comfort_enabled": core.camera_comfort_enabled = v == "true"
 				elif k == "gfx_health_warning_start": core.gfx_health_warning_start = clampf(float(v), 0.35, 0.7)
 				elif k == "gfx_health_warning_strength": core.gfx_health_warning_strength = clampf(float(v), 0.0, 1.35)
 				elif k == "gfx_low_resource": core.gfx_low_resource = v == "true"
@@ -318,6 +387,8 @@ func _load_config() -> void :
 				elif k == "damage_text_scale": core.damage_text_scale = core._sanitize_damage_text_scale(float(v))
 				elif k == "interface_text_scale": core.interface_text_scale = clamp(float(v), 0.9, 1.6)
 				elif k == "geovana_bark_scale": core.geovana_bark_scale = clampf(float(v), 0.5, 1.5)
+				elif k == "auto_attack_range_color": core.auto_attack_range_color_index = int(v)
+				elif k == "auto_attack_range_opacity": core.auto_attack_range_opacity = float(v)
 				elif k == "vol_master": core.vol_master = float(v)
 				elif k == "vol_music": core.vol_music = float(v)
 				elif k == "vol_sfx": core.vol_sfx = float(v)
@@ -325,6 +396,7 @@ func _load_config() -> void :
 				elif k == "gfx_particles": core.gfx_particles = v == "true"
 				elif k == "gfx_shadows": core.gfx_shadows = v == "true"
 				elif k == "gfx_screen_shake": core.gfx_screen_shake = v == "true"
+				elif k == "camera_comfort_enabled": core.camera_comfort_enabled = v == "true"
 				elif k == "gfx_low_resource": core.gfx_low_resource = v == "true"
 				elif k == "gfx_memory_saver": core.gfx_memory_saver = v == "true"
 				elif k == "damage_text_scale": core.damage_text_scale = core._sanitize_damage_text_scale(float(v))
@@ -335,6 +407,8 @@ func _load_config() -> void :
 	core.desktop_teleport_mode = core._sanitize_desktop_teleport_mode(core.desktop_teleport_mode)
 	core.desktop_attack_aim_mode = core._sanitize_desktop_attack_aim_mode(core.desktop_attack_aim_mode)
 	core.desktop_hud_scale = core._sanitize_desktop_hud_scale(core.desktop_hud_scale)
+	core.auto_attack_range_color_index = core.RangedAttackRange.sanitize_indicator_color_index(core.auto_attack_range_color_index)
+	core.auto_attack_range_opacity = core.RangedAttackRange.sanitize_indicator_opacity(core.auto_attack_range_opacity)
 	core.forced_initial_phase = core._sanitize_forced_initial_phase(core.forced_initial_phase)
 	core.force_phase6_start = core.forced_initial_phase == 6
 	core.forced_shop_enabled = core.shop_auto_enabled
@@ -377,8 +451,6 @@ func _save_config() -> void :
 		file.store_string("hud_coagulum_scale=" + str(core.hud_coagulum_scale) + "\n")
 		file.store_string("analog_mode=" + ("fixo" if core.analog_fixed else "dinamico") + "\n")
 		file.store_string("analog_fixed=" + ("true" if core.analog_fixed else "false") + "\n")
-		file.store_string("shop_auto_enabled=" + ("true" if core.shop_auto_enabled else "false") + "\n")
-		file.store_string("shop_auto_interval=" + str(core.shop_auto_interval) + "\n")
 		file.store_string("auto_target_priority=" + core.auto_target_priority + "\n")
 		file.store_string("haptics_enabled=" + ("true" if core.haptics_enabled else "false") + "\n")
 		file.store_string("show_fps_counter=" + ("true" if core.show_fps_counter else "false") + "\n")
@@ -417,6 +489,7 @@ func _save_config() -> void :
 		file.store_string("gfx_shadows=" + ("true" if core.gfx_shadows else "false") + "\n")
 
 		file.store_string("gfx_screen_shake=" + ("true" if core.gfx_screen_shake else "false") + "\n")
+		file.store_string("camera_comfort_enabled=" + ("true" if core.camera_comfort_enabled else "false") + "\n")
 		file.store_string("gfx_health_warning_start=" + str(core.gfx_health_warning_start) + "\n")
 		file.store_string("gfx_health_warning_strength=" + str(core.gfx_health_warning_strength) + "\n")
 		file.store_string("gfx_low_resource=" + ("true" if core.gfx_low_resource else "false") + "\n")
@@ -425,6 +498,8 @@ func _save_config() -> void :
 		file.store_string("damage_text_scale=" + str(core.damage_text_scale) + "\n")
 		file.store_string("interface_text_scale=" + str(core.interface_text_scale) + "\n")
 		file.store_string("geovana_bark_scale=" + str(core.geovana_bark_scale) + "\n")
+		file.store_string("auto_attack_range_color=" + str(core.RangedAttackRange.sanitize_indicator_color_index(core.auto_attack_range_color_index)) + "\n")
+		file.store_string("auto_attack_range_opacity=" + str(core.RangedAttackRange.sanitize_indicator_opacity(core.auto_attack_range_opacity)) + "\n")
 		file.store_string("vol_master=" + str(core.vol_master) + "\n")
 		file.store_string("vol_music=" + str(core.vol_music) + "\n")
 		file.store_string("vol_sfx=" + str(core.vol_sfx) + "\n")
@@ -432,39 +507,40 @@ func _save_config() -> void :
 		file.store_string("gfx_particles=" + ("true" if core.gfx_particles else "false") + "\n")
 		file.store_string("gfx_shadows=" + ("true" if core.gfx_shadows else "false") + "\n")
 		file.store_string("gfx_screen_shake=" + ("true" if core.gfx_screen_shake else "false") + "\n")
+		file.store_string("camera_comfort_enabled=" + ("true" if core.camera_comfort_enabled else "false") + "\n")
 		file.store_string("gfx_low_resource=" + ("true" if core.gfx_low_resource else "false") + "\n")
 		file.store_string("gfx_memory_saver=" + ("true" if core.gfx_memory_saver else "false") + "\n")
 		file.store_string("damage_text_scale=" + str(core.damage_text_scale) + "\n")
 		file.close()
 
 func _interrupted_run_field_names() -> Array:
-	return [
+	var names: Array = [
 		"shop_paid_rerolls_this_visit", "manifest_evolution_fragment_claim_count", "cinzas_card_bonuses",
-		"mode", "current_phase", "pending_phase", "phase_started_at", "game_time", "time_alive", "elapsed_unpaused", "run_initial_phase", "run_phase6_completed", "dimension_route_queue", "dimension_route_farm_cycles", "dimension_route_completed_count", "dimension_route_last_phase", "run_extracted",
+		"mode", "current_phase", "pending_phase", "phase_started_at", "game_time", "time_alive", "elapsed_unpaused", "run_initial_phase", "run_phase6_completed", "dimension_route_queue", "dimension_route_farm_cycles", "dimension_route_completed_count", "dimension_route_last_phase", "run_extracted", "experimental_boss_altar_pos", "experimental_boss_altar_discovered", "experimental_boss_altar_used",
 		"run_pacing_profile", "run_pacing_valid_runs_at_start", "run_valid_duration_recorded", "run_pacing_larapio_first_time", "run_pacing_arauto_first_time", "run_pacing_first_special_enemy_time", "run_pacing_first_special_enemy_kind",
 		"active_character_key", "selected_run_mode", "selected_manifestation", "selected_aura", "selected_mutation", "selected_effect", "manifestation_key", "mutation_key", "effect_key", "aura_state", "manifest_evolution_state",
-		"player_pos", "player_hp", "player_hp_max", "player_speed", "player_damage", "player_attack_interval", "player_dash_cooldown", "player_defense", "player_crit_chance", "player_lifesteal",
+		"player_pos", "player_hp", "player_hp_max", "player_speed", "player_damage", "player_run_level", "player_run_xp", "player_attack_interval", "player_dash_cooldown", "player_defense", "player_crit_chance", "player_lifesteal",
 		"score", "score_total", "run_points_earned", "run_points_spent", "card_cost", "cards_bought", "combo_kills", "enemies_killed", "enemy_base_hp", "enemy_speed_base", "enemy_close_damage", "enemy_far_damage", "spawn_timer",
 		"last_attack_time", "last_dash_time", "last_skill_time", "last_secondary_time", "last_damage_time", "forced_shop_timer", "forced_shop_triggered", "next_forced_shop_time", "shop_auto_elapsed", "shop_opening_timer", "shop_opening_forced", "shop_opening_manual_already_tracked", "shop_return_timer",
-		"shop_cards", "shop_selected", "shop_rerolls", "shop_purchase_anim_timer", "shop_purchase_pending_card", "shop_purchase_pending_can_continue", "shop_purchase_pending_price", "shop_reserved_card_id", "shop_locked_slots", "shop_recent_common_ids", "shop_slot_intents", "shop_generation_profile", "shop_generation_index", "shop_visit_index", "shop_reroll_index", "shop_recent_generation_ids", "shop_current_visit_eligible_cinzas", "shop_last_generation_telemetry", "shop_seed", "shop_endurance_discount", "bargain_capsule", "bargain_capsule_next_check_time", "bargain_capsule_event_sequence", "bargain_capsule_pending_discount", "bargain_capsule_last_result", "shop_bargain_discount_session", "shop_last_manual_open_time", "shop_recent_manual_open_count", "shop_purchases_this_visit", "shop_last_exit_had_purchase", "shop_last_exit_time", "shop_abuse_penalty_count", "shop_manual_cooldown_until", "shop_manual_grace_until", "shop_manual_grace_reopen_available", "shop_manual_visit_active", "shop_manual_visit_grace_on_close", "shop_manual_cooldown_pulse",
-		"enemies", "bullets", "enemy_bullets", "larapio_coin_drops", "shockwaves", "effects", "heal_orbs", "slashes", "anchors", "prisms", "orbitals", "seed_links", "parasite_spit_zones", "return_bullets", "manifestation_secondaries", "henry_attack_combo", "henry_attack_visual_stage", "henry_skill_cast_active", "henry_skill_cast_elapsed", "henry_skill_cast_direction", "henry_skill_damage_applied", "henry_flame_cones", "henry_ultimate_cast_active", "henry_ultimate_cast_elapsed", "henry_ultimate_center", "henry_ultimate_event_id", "henry_heat_waves", "henry_boss_burn_state", "henry_friction", "henry_friction_release_timer", "henry_incandescence_active_timer", "henry_incandescence_tick_timer", "henry_incandescence_intensity", "henry_incandescence_target_dwell", "henry_incandescence_zones",
+		"shop_cards", "shop_selected", "shop_rerolls", "shop_purchase_anim_timer", "shop_purchase_pending_card", "shop_purchase_pending_can_continue", "shop_purchase_pending_price", "shop_reserved_card_id", "shop_locked_slots", "shop_recent_common_ids", "shop_slot_intents", "shop_generation_profile", "shop_generation_index", "shop_visit_index", "shop_reroll_index", "shop_recent_generation_ids", "shop_current_visit_eligible_cinzas", "shop_last_generation_telemetry", "shop_seed", "shop_endurance_discount", "bargain_capsule", "bargain_capsule_next_check_time", "bargain_capsule_event_sequence", "bargain_capsule_pending_discount", "bargain_capsule_last_result", "shop_rift", "shop_rift_kills", "shop_rift_fragments", "shop_rift_next_allowed_time", "shop_bargain_discount_session", "shop_last_manual_open_time", "shop_recent_manual_open_count", "shop_purchases_this_visit", "shop_last_exit_had_purchase", "shop_last_exit_time", "shop_abuse_penalty_count", "shop_manual_cooldown_until", "shop_manual_grace_until", "shop_manual_grace_reopen_available", "shop_manual_visit_active", "shop_manual_visit_grace_on_close", "shop_manual_cooldown_pulse",
+		"enemies", "bullets", "enemy_bullets", "larapio_coin_drops", "shockwaves", "effects", "heal_orbs", "slashes", "prisms", "orbitals", "seed_links", "parasite_spit_zones", "manifestation_secondaries", "henry_attack_combo", "henry_attack_visual_stage", "henry_skill_cast_active", "henry_skill_cast_elapsed", "henry_skill_cast_direction", "henry_skill_damage_applied", "henry_flame_cones", "henry_ultimate_cast_active", "henry_ultimate_cast_elapsed", "henry_ultimate_center", "henry_ultimate_event_id", "henry_heat_waves", "henry_boss_burn_state", "henry_friction", "henry_friction_release_timer", "henry_incandescence_active_timer", "henry_incandescence_tick_timer", "henry_incandescence_intensity", "henry_incandescence_target_dwell", "henry_incandescence_zones",
 		"trembo_charges", "trembo_pos", "trembo_side", "trembo_heal_timer", "trembo_anim_time", "trembo_facing", "trembo_invulnerability", "petro_active", "petro_pos", "petro_fire_timer", "petro_hp", "petro_hp_max", "petro_defense", "petro_damage", "petro_evolution", "petro_anim_time", "petro_facing",
 		"boss_ready", "boss_call_timer", "boss_active", "boss_dead", "boss_hp", "boss_hp_max", "boss_pos", "boss_phase", "boss_attack_timer", "boss_entry_timer", "boss_stage_timer", "boss_stage_approaching", "boss_stage_60_done", "boss_stage_40_done", "boss_stage_30_done", "boss_stage_safe_angle", "boss_attacks", "boss_transition_waves", "boss_name", "boss_title_color", "boss_empurrou_player",
-		"boss_poison_timer", "boss_poison_tick", "boss_parasite_seeds", "boss_parasite_mark_time", "miasma_eel_slow_timer", "miasma_eel_slow_stacks", "pustule_spit_slow_timer", "pustule_spit_slow_grace_timer", "boss_tp_stun_timer", "boss_wave_slow_timer", "player_stun_timer", "player_silence_timer", "revive_heal_penalty_timer", "player_freeze_visual_timer", "player_freeze_visual_duration",
+		"boss_poison_timer", "boss_poison_tick", "boss_parasite_seeds", "boss_parasite_mark_time", "miasma_eel_slow_timer", "miasma_eel_slow_stacks", "pustule_spit_slow_timer", "pustule_spit_slow_grace_timer", "boss_tp_stun_timer", "boss_wave_slow_timer", "boss6_heal_cut_timer", "player_frost_stacks", "player_frost_timer", "player_ice_slip_timer", "player_stun_timer", "player_silence_timer", "revive_heal_penalty_timer", "player_freeze_visual_timer", "player_freeze_visual_duration",
 		"boss1_rewind_cooldown", "boss1_rewind_history", "boss1_rewind_sample_timer", "boss1_rewind_sequence", "boss1_rewind_visual_projectiles", "boss1_rewind_vibration_timer", "boss1_rewind_clock_tick", "boss1_absorb_cooldown", "boss1_absorb_timer", "boss1_absorb_damage", "boss1_absorb_retaliate_timer", "boss1_absorb_bursts_fired", "boss1_time_wave",
 		"arauto", "arauto_spawned", "arauto_rays", "arauto_echo_breaks", "arauto_card_drops", "arauto_evolution_fragment", "manifest_evolution_fragment_claimed_this_run", "manifest_evolution_fragment_claim_source",
 		"boss2_ice_shards", "boss2_snow_zones", "boss2_frost_particles", "phase2_fire_walls", "phase2_fire_wall_hit_cd", "sineiro_boreal_state", "sineiro_echo_marks", "sineiro_visual_events", "boss2_state", "boss2_action_timer", "boss2_target_position", "boss2_last_attack", "boss2_repeat_count", "boss2_facing_dir", "boss2_walk_speed", "boss2_anim_timer", "boss2_anim_frame", "boss2_breath_dir", "boss2_ultimate_cooldown", "boss2_ultimate_timer", "boss2_ultimate_center", "boss2_ultimate_orbit_angle", "boss2_ultimate_spit_timer", "boss2_ultimate_wind_timer", "boss2_ultimate_wind_active", "boss2_ultimate_wind_dir", "boss2_ultimate_hail_timer", "boss2_ultimate_fan_timer", "boss2_ultimate_blizzard_tick", "boss2_ultimate_blizzard_exposure", "boss2_ultimate_hit_gate", "boss2_ultimate_used", "boss2_hunt_sequence", "boss2_hunt_last_target_peer_id", "boss2_hunt_target_grace",
 		"phase3_miasma_zones", "phase3_cheeses", "phase6_pustule_pools", "phase6_pustule_pheromone_timer", "amber_suturer_state", "amber_sutures", "amber_suturer_visual_events", "boss6_lodarian_pools", "boss6_state", "boss6_current_ability", "boss6_state_timer", "boss6_wait_timer", "boss6_ability_cooldowns", "boss6_last_abilities", "boss6_carapace_plates", "boss6_carapace_timer", "boss6_vulnerability_timer", "boss6_core_exposed_timer", "boss6_core_permanent_bonus", "boss6_event_80_triggered", "boss6_event_60_triggered", "boss6_event_40_triggered", "boss6_event_30_triggered", "boss6_event_15_triggered", "boss6_special_event_id", "boss6_special_timer", "boss6_organs", "boss6_final_mutation", "boss6_final_birth_timer", "boss6_fossil_era_timer", "boss6_fossil_shield", "boss6_rib_prison", "boss6_tail_channels", "boss6_reflux_objects", "boss6_cracked_heart", "sanguessuga_parasite_timer", "sanguessuga_bleed_tick_timer", "boss6_shielded", "boss6_entry_particles", "boss6_relocating", "boss6_relocate_from", "boss6_relocate_to", "boss6_relocate_age", "boss6_relocate_duration", "boss6_miasma_ult_timer", "boss6_miasma_ult_cooldown", "boss6_miasma_ult_angle", "boss6_miasma_ult_pustule_timer", "boss6_miasma_slow_timer", "boss6_miasma_slow_stacks", "boss6_miasma_slow_tick", "boss6_carnage_slow_timer", "boss3_faith", "boss3_stage", "boss3_stun_timer", "boss3_rain_timer", "boss3_spit_timer", "boss3_tail_timer", "boss3_charge_timer", "boss3_cheese_timer", "boss3_dialogue_timer", "boss3_events", "boss3_consume_uid", "boss3_consume_timer", "boss3_ritual_timer", "boss3_ritual_destroyed", "boss3_is_moving", "boss3_miasma_cooldown", "boss3_miasma_timer", "boss3_miasma_variant", "boss3_miasma_clone_timer", "boss3_miasma_clone_positions", "boss3_miasma_spit_timer", "boss3_miasma_qte_required", "boss3_miasma_qte_taps", "boss3_miasma_qte_time_left", "boss3_miasma_qte_idle", "boss3_miasma_qte_tutorial", "boss3_miasma_qte_elapsed", "boss3_miasma_qte_lid_contacts", "boss3_miasma_qte_lids_touching", "boss3_miasma_qte_overtime_timer", "boss3_miasma_qte_overtime_stage", "boss3_miasma_tutorial_seen", "boss3_faith_test_cooldown", "boss3_faith_test_active", "boss3_faith_test_pulses_left", "boss3_faith_test_pulse_timer", "boss3_faith_link_timer", "boss3_faith_link_damage_done", "boss3_sector_ritual_cooldown", "boss3_sector_ritual_sequence",
-		"phase4_planets", "phase4_null_zones", "phase4_enemy_hazards", "phase4_player_history", "phase4_history_sample_timer", "boss4_attack_timer", "boss4_attack_pose_timer", "boss4_anim_time", "boss4_entry_target", "boss4_instability", "boss4_stage", "boss4_no_hit_timer", "boss4_gravity_timer", "boss4_gravity_dir", "boss4_vampire_timer", "boss4_prison", "boss4_clone", "boss4_fragment_timer", "boss4_ultimate_active", "boss4_ultimate_timer", "boss4_ultimate_used", "boss4_ultimate_laser_timer", "boss4_ultimate_gravity_timer", "boss4_rupture_anchors", "boss4_ultimate_destroyed", "boss4_secondary_timer", "boss4_secondary_active", "boss4_secondary_elapsed", "boss4_ultimate_cooldown", "boss4_ultimate_ray_index", "boss4_strike_sequence", "boss4_meteorites", "boss4_meteor_event_timer", "boss4_meteor_event_started", "boss4_meteor_damage_bonus", "boss4_stun_timer", "boss4_vulnerable_timer", "boss4_column_barrage_timer", "boss4_drag_wave_timer", "boss4_sonic_used",
+		"phase4_planets", "phase4_null_zones", "phase4_enemy_hazards", "phase4_player_history", "phase4_history_sample_timer", "boss4_attack_timer", "boss4_attack_pose_timer", "boss4_anim_time", "boss4_entry_target", "boss4_instability", "boss4_stage", "boss4_no_hit_timer", "boss4_gravity_timer", "boss4_gravity_dir", "boss4_vampire_timer", "boss4_prison", "boss4_clone", "boss4_fragment_timer", "boss4_ultimate_active", "boss4_ultimate_timer", "boss4_ultimate_used", "boss4_ultimate_laser_timer", "boss4_ultimate_gravity_timer", "boss4_rupture_anchors", "boss4_ultimate_destroyed", "boss4_secondary_timer", "boss4_secondary_active", "boss4_secondary_elapsed", "boss4_ultimate_cooldown", "boss4_ultimate_ray_index", "boss4_strike_sequence", "boss4_meteorites", "boss4_meteor_event_timer", "boss4_meteor_event_started", "boss4_meteor_damage_bonus", "boss4_stun_timer", "boss4_vulnerable_timer", "boss4_column_barrage_timer", "boss4_drag_wave_timer", "boss4_sonic_used", "boss4_ai_state", "boss4_last_attack", "boss4_visual_state", "boss4_visual_state_elapsed", "boss4_hit_timer", "boss4_hit_duration", "boss4_death_timer", "boss4_death_duration", "boss4_death_pos", "boss4_ultimate_outcome", "boss4_ultimate_outcome_timer",
 		"phase5_player_history", "phase5_history_sample_timer", "phase5_hazards", "phase5_rats", "phase5_telegraphs", "boss5_action_timer", "boss5_decision_timer", "boss5_current_action", "boss5_dimension", "boss5_last_dimension", "boss5_mental_state", "boss5_velocity", "boss5_target", "boss5_siphon_timer", "boss5_siphon_cooldown", "boss5_teleport_cooldown", "boss5_transmute_cooldown", "boss5_ability_cooldowns", "boss5_mobile_weights", "boss5_predatory_mods", "boss5_profile_confidence", "boss5_last_reward_action",
 		"phase_transition_timer", "phase_fragment", "larapio_spawned", "next_larapio_spawn_time", "fusion_check_timer", "event_alert_text", "event_alert_timer", "alert_stalker_done", "alert_projector_done", "alert_crystal_done", "alert_agglomerator_done", "alert_curater_done",
 		"weather_kind", "weather_rain_intro_timer", "boss1_rain_active", "raindrops", "puddles", "rain_splashes", "snowflakes",
 		"paradox_charge_hits", "paradox_ready", "paradox_active_timer", "paradox_echo_queue", "paradox_flash",
 		"fratura_cronal_cooldown", "fratura_cronal_armed", "pulso_desestabilizador_cooldown", "pulso_desestabilizador_armed", "boss_fragilidade_cronal_timer", "boss_fragilidade_cronal_bonus", "ferrolho_ruptura_cooldown", "ferrolho_ruptura_armed", "desvio_probabilidade_charges", "boss_ferrolho_slow_timer", "boss_ferrolho_slow_ratio", "boss_choque_source_category", "boss_choque_source_until", "boss_choque_cooldown_until", "boss_limiar_mask", "boss_limiar_phase", "common_card_effects", "rare_card_effects", "tregua_regenerativa_timer", "tregua_regenerativa_active", "tregua_regenerativa_pulse", "cinzas_burn_marks", "reserva_pulso_stored", "reserva_pulso_releasing", "reserva_pulso_pulse", "casulo_hit_times", "casulo_reativo_timer", "casulo_reativo_cooldown", "passagem_intangivel_timer", "ancora_vital_state", "estase_reparadora_timer", "estase_reparadora_tick", "estase_reparadora_pause", "estase_reparadora_anchor", "estase_reparadora_active", "estase_reparadora_pulse", "manto_impulso_shield", "manto_impulso_timer", "manto_impulso_pulse", "recusa_dano_pulse", "sutura_gradual_pending", "sutura_gradual_timer", "sutura_gradual_tick", "sutura_gradual_pulse", "egide_hemofaga_shield", "egide_hemofaga_full_timer", "egide_hemofaga_pulse", "mandamento_skill_uses", "mandamento_empowered_until", "mandamento_empowered_scale", "mandamento_invulnerability", "mandamento_break_flash", "carta_zero_applied_multiplier", "rastro_vestiges", "rastro_spawn_timer", "rastro_last_spawn_pos", "rastro_speed_timer", "rastro_speed_bonus", "impulso_ready_times", "impulso_charges", "impulso_bonus", "impulso_timer", "impulso_size_bonus", "eco_counters", "zona_charge", "zona_cooldown", "zona_flash", "folego_target_key", "folego_charge", "folego_prev_distance", "folego_damage_window", "folego_damage_bonus", "folego_last_move_dir", "margem_window_timer", "margem_debt", "margem_debt_total", "margem_debt_timer", "margem_debt_duration", "margem_debt_tick", "margem_safety_timer", "ressonancia_symbols", "ressonancia_window_timer", "ressonancia_ready_timer", "ressonancia_ready_action", "ressonancia_speed_timer", "ressonancia_speed_bonus", "ressonancia_preresonance_used", "necro_kill_counter", "active_necro_specters", "antimatter_charge", "antimatter_armed", "antimatter_flash", "stored_excess", "excess_discharge_kind", "excess_discharge_uid", "excess_discharge_flash", "devorador_mark_timer", "devorador_mark_kind", "devorador_mark_uid", "devorador_marked_max_hp", "devorador_mark_pos", "devorador_boss_mark_start_hp", "devorador_boss_mark_max_hp", "devorador_destiny_shield", "devorador_shield_timer", "devorador_effects",
-		"cartographic_coords", "cartographic_route_timer", "cartographic_boss_displacement", "mnesic_trick_timer", "mnesic_trick_origin", "mnesic_boss_vulnerability", "resonant_perfect_streak", "resonant_noise", "resonant_next_perfect", "resonant_speed_timer", "resonant_sinfonia_buff_timer", "resonant_note_index", "boss_resonant_notes", "boss_contract_clause", "boss_contract_infractions", "boss_contract_vulnerability", "contractual_notifications", "contractual_penalty_timer", "contractual_order", "contractual_order_rewards", "contractual_order_penalties",
-		"lacerante_combo", "lacerante_combo_visual", "lacerante_preparing", "lacerante_prepare_stage", "lacerante_prepare_frame", "lacerante_prepare_timer", "lacerante_prepare_dir", "lacerante_coagula", "lacerante_empowered_ready", "last_lacerante_empower_time", "lacerante_coagulum_pulse", "lacerante_tp_charges", "lacerante_tp_chain_timer", "lacerante_tp_cooldown_until", "retornante_memoria_pending", "retornante_tp_origin", "retornante_tp_window", "eletrica_shot_counter", "tp_effects", "necronada_vestiges", "necronada_remnants", "necronada_requiem", "necronada_pente_history", "necronada_attack_counter", "necronada_empowered_ready", "necronada_empower_until", "necronada_empower_cooldown_until", "necronada_horde_progress",
-		"acorrentada_combo_step", "acorrentada_combo_reset_timer", "acorrentada_tension", "acorrentada_last_hit_timer", "acorrentada_overcharge_ready", "acorrentada_force_next_attack_3", "acorrentada_links", "acorrentada_visuals", "acorrentada_worn_chains", "acorrentada_last_player_pos", "acorrentada_boss_elos", "acorrentada_boss_elo_timer", "acorrentada_boss_crack_timer", "acorrentada_boss_containment_charges"
+		"lacerante_combo", "lacerante_combo_visual", "lacerante_preparing", "lacerante_prepare_stage", "lacerante_prepare_frame", "lacerante_prepare_timer", "lacerante_prepare_dir", "lacerante_coagula", "lacerante_empowered_ready", "last_lacerante_empower_time", "lacerante_coagulum_pulse", "lacerante_tp_charges", "lacerante_tp_chain_timer", "lacerante_tp_cooldown_until", "eletrica_shot_counter", "tp_effects"
 	]
+	names.append_array(["boss6_stage", "boss6_move_phase", "boss6_ai_state", "parasitica_ability_state", "quantum_chip_state", "merchant_dimension_state", "umbra_base_skill_state", "umbra_phase_observer_state", "dimension_rupture_state"])
+	return names
 
 func _run_report_state_field_names() -> Array:
 	return [
@@ -532,8 +608,7 @@ func _build_interrupted_run_snapshot(compact_autosave := false) -> Dictionary:
 		"fields": fields
 	}
 
-func _write_interrupted_run_snapshot(snapshot: Dictionary) -> bool:
-	var final_path := ProjectSettings.globalize_path(core.INTERRUPTED_RUN_SAVE_PATH)
+static func _write_interrupted_run_snapshot_at_path(snapshot: Dictionary, final_path: String) -> bool:
 	var temporary_path := final_path + ".tmp"
 	var payload := var_to_bytes(snapshot)
 	var file := FileAccess.open(temporary_path, FileAccess.WRITE)
@@ -553,9 +628,40 @@ func _write_interrupted_run_snapshot(snapshot: Dictionary) -> bool:
 		return false
 	return true
 
+func _write_interrupted_run_snapshot(snapshot: Dictionary) -> bool:
+	return _write_interrupted_run_snapshot_at_path(snapshot, ProjectSettings.globalize_path(core.INTERRUPTED_RUN_SAVE_PATH))
+
+func _poll_interrupted_run_save(block := false) -> bool:
+	if interrupted_run_save_thread == null:
+		return true
+	if interrupted_run_save_thread.is_alive() and not block:
+		return false
+	var success := bool(interrupted_run_save_thread.wait_to_finish())
+	interrupted_run_save_thread = null
+	if success and not interrupted_run_pending_snapshot.is_empty() and core != null:
+		interrupted_run_available = true
+		interrupted_run_summary = _interrupted_run_summary_from_snapshot(interrupted_run_pending_snapshot)
+	interrupted_run_pending_snapshot.clear()
+	return true
+
+func _save_interrupted_run_async() -> bool:
+	if not _poll_interrupted_run_save(false):
+		return false
+	var snapshot := _build_interrupted_run_snapshot(true)
+	var final_path := ProjectSettings.globalize_path(core.INTERRUPTED_RUN_SAVE_PATH)
+	interrupted_run_pending_snapshot = snapshot
+	interrupted_run_save_thread = Thread.new()
+	var start_error := interrupted_run_save_thread.start(_write_interrupted_run_snapshot_at_path.bind(snapshot, final_path), Thread.PRIORITY_LOW)
+	if start_error != OK:
+		interrupted_run_save_thread = null
+		interrupted_run_pending_snapshot.clear()
+		return false
+	return true
+
 func _save_interrupted_run(force: = false, compact_autosave := false) -> void :
 	if not _run_can_be_saved():
 		return
+	_poll_interrupted_run_save(true)
 	if not force:
 		interrupted_run_autosave_timer -= core.get_process_delta_time()
 		if interrupted_run_autosave_timer > 0.0:
@@ -568,6 +674,7 @@ func _save_interrupted_run(force: = false, compact_autosave := false) -> void :
 	interrupted_run_summary = _interrupted_run_summary_from_snapshot(snapshot)
 
 func _clear_interrupted_run_save() -> void :
+	_poll_interrupted_run_save(true)
 	interrupted_run_available = false
 	interrupted_run_summary.clear()
 	interrupted_run_autosave_timer = core.INTERRUPTED_RUN_AUTOSAVE_INTERVAL
@@ -603,7 +710,8 @@ func _load_interrupted_run_summary() -> void :
 func _interrupted_run_summary_from_snapshot(snapshot: Dictionary) -> Dictionary:
 	if snapshot.is_empty():
 		return {}
-	var fields: Dictionary = snapshot.get("fields", {})
+	var fields: Dictionary = Dictionary(snapshot.get("fields", {})).duplicate(true)
+	ManifestationRosterSaveMigration.normalize_snapshot_fields(fields, core.CHARACTER_GEOVANA, core.CHARACTER_HENRY, core.HENRY_SELECTION_INDEX)
 	var phase: = int(fields.get("current_phase", 1))
 	var total_seconds: = int(max(0.0, float(fields.get("time_alive", 0.0))))
 	var is_henry: bool = String(fields.get("active_character_key", core.CHARACTER_GEOVANA)) == core.CHARACTER_HENRY
@@ -647,6 +755,7 @@ func _resume_interrupted_run() -> bool:
 		_clear_interrupted_run_save()
 		return false
 	var fields: Dictionary = snapshot.get("fields", {})
+	ManifestationRosterSaveMigration.normalize_snapshot_fields(fields, core.CHARACTER_GEOVANA, core.CHARACTER_HENRY, core.HENRY_SELECTION_INDEX)
 	core._set_run_mode_local(String(fields.get("selected_run_mode", core.RUN_MODE_SHOP)))
 	core.active_character_key = String(fields.get("active_character_key", core.CHARACTER_GEOVANA))
 	core.selected_manifestation = core.HENRY_SELECTION_INDEX if core.active_character_key == core.CHARACTER_HENRY else clampi(int(fields.get("selected_manifestation", core.selected_manifestation)), 0, core.MANIFESTATIONS.size() - 1)
@@ -658,10 +767,13 @@ func _resume_interrupted_run() -> bool:
 		var key: = String(field)
 		if fields.has(key):
 			core.set(key, fields[key])
+	core.experimental_phase_controller.restore_after_snapshot()
 	_post_resume_interrupted_run()
 	return true
 
 func _post_resume_interrupted_run() -> void :
+	core._player_run_level_controller().normalize()
+	core._sanitize_legacy_cinzas_rarity_state()
 	core.mode = _interrupted_run_saved_mode() if _interrupted_run_saved_mode() != "" else "game"
 	if core.mode in ["settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "pause_deck"]:
 		core.mode = "paused"
@@ -724,6 +836,7 @@ func _use_run_retry() -> bool:
 	var fields: Dictionary = retry_run_snapshot.get("fields", {})
 	if fields.is_empty():
 		return false
+	ManifestationRosterSaveMigration.normalize_snapshot_fields(fields, core.CHARACTER_GEOVANA, core.CHARACTER_HENRY, core.HENRY_SELECTION_INDEX)
 	retry_charges_used += 1
 	core.active_character_key = String(fields.get("active_character_key", core.CHARACTER_GEOVANA))
 	core.selected_manifestation = core.HENRY_SELECTION_INDEX if core.active_character_key == core.CHARACTER_HENRY else clampi(int(fields.get("selected_manifestation", core.selected_manifestation)), 0, core.MANIFESTATIONS.size() - 1)
@@ -735,6 +848,8 @@ func _use_run_retry() -> bool:
 		var key: = String(field)
 		if fields.has(key):
 			core.set(key, fields[key])
+	core.experimental_phase_controller.restore_after_snapshot()
+	core._player_run_level_controller().normalize()
 	core.is_dead = false
 	core.partner_is_dead = false
 	retry_confirm_visible = false
@@ -811,9 +926,14 @@ func _retry_confirm_lines() -> Array[String]:
 	]
 
 func _update_interrupted_run_autosave(delta: float) -> void :
+	_poll_interrupted_run_save(false)
 	if _run_can_be_saved():
 		interrupted_run_autosave_timer -= delta
 		if interrupted_run_autosave_timer <= 0.0:
-			_save_interrupted_run(true, true)
+			interrupted_run_autosave_timer = core.INTERRUPTED_RUN_AUTOSAVE_INTERVAL if _save_interrupted_run_async() else 0.5
 	else:
 		interrupted_run_autosave_timer = min(interrupted_run_autosave_timer, core.INTERRUPTED_RUN_AUTOSAVE_INTERVAL)
+
+func shutdown() -> void:
+	_poll_interrupted_run_save(true)
+	_poll_card_unlock_save(true)

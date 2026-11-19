@@ -3,8 +3,11 @@ extends SceneTree
 const ObservationSchema = preload("res://scripts/systems/umbra_observation_schema.gd")
 const MultiheadPolicy = preload("res://scripts/systems/umbra_multihead_policy.gd")
 const PROTOCOL := "ruptura_umbra_rl"
-const PROTOCOL_VERSION := 1
-const CURRICULUM_PATH := "res://tools/config/umbra_rl_curriculum_v1.json"
+const PROTOCOL_VERSION := 2
+const FIXED_DT := 1.0 / 60.0
+const ACTIONS = ObservationSchema.TRAINING_ACTIONS
+const ApoloObservation = preload("res://tools/apolo_observation.gd")
+const CURRICULUM_PATH := "res://tools/config/umbra_rl_curriculum_v2.json"
 
 var game: Node
 
@@ -27,7 +30,8 @@ func _run() -> void:
 		return
 	var seed := int(request.get("seed", 1))
 	var max_steps := clampi(int(request.get("max_steps", 24)), 1, 240)
-	var step_seconds := clampf(float(request.get("step_seconds", 0.16)), 0.04, 0.5)
+	var substeps := maxi(1, int(round(clampf(float(request.get("step_seconds", 0.16)), 0.04, 0.5) / FIXED_DT)))
+	var step_seconds := substeps * FIXED_DT
 	var curriculum := _load_curriculum()
 	var scenario := _scenario_from_request(request, curriculum)
 	if scenario.is_empty():
@@ -36,78 +40,167 @@ func _run() -> void:
 		return
 	var sampling_rng := RandomNumberGenerator.new()
 	sampling_rng.seed = seed ^ 0x51A7
-	game = load("res://scenes/Main.tscn").instantiate()
+	RTUmbraMind.training_mode = true
+	game = load("res://tools/umbra_rl_scene.tscn").instantiate()
 	root.add_child(game)
-	_configure_episode(seed, scenario)
+	game.set_process(false)
+	game.set_physics_process(false)
+	var setup_error := _configure_episode(seed, scenario, request)
+	if setup_error != "":
+		_write_response(response_path, {"ok": false, "error": setup_error})
+		await _cleanup()
+		quit(2)
+		return
 	var policy = _load_policy(request)
 	if String(request.get("policy_mode", "legal_cycle")) == "model" and policy == null:
 		_write_response(response_path, {"ok": false, "error": "model policy rejected"})
-		_cleanup()
+		await _cleanup()
 		quit(2)
 		return
 	var reward_state := _new_reward_state()
 	var transitions: Array = []
 	for step in range(max_steps):
-		var observation := ObservationSchema.build_from_runtime(game)
-		var action_mask := _action_mask()
+		var observation := ObservationSchema.build_training(game)
+		var action_mask := _action_mask(step_seconds)
 		var target_mask: Array = Array(observation.get("valid_player_mask", []))
 		var command := _command_for_step(request, policy, observation, action_mask, target_mask, step, sampling_rng)
+		if command.has("error"):
+			_write_response(response_path, {"ok": false, "error": command["error"]})
+			await _cleanup()
+			quit(2)
+			return
 		var validated := _validate_command(command, action_mask, target_mask)
 		var hp_before := float(game.player_hp)
 		var boss_before := float(game.boss_hp)
-		_move_reference_player(step, step_seconds, Dictionary(scenario.get("movement", {})))
-		game._spawn_umbra_action(String(validated.get("action", "ATAQUE")))
-		# Prevent the legacy chooser from injecting a second action during this
-		# externally controlled transition. The normal ability executor still runs.
-		game.boss5_action_timer = 999.0
-		game.boss5_decision_timer = 999.0
-		game._update_boss_phase5(step_seconds)
-		var player_damage := maxf(0.0, hp_before - float(game.player_hp))
-		var boss_damage := maxf(0.0, boss_before - float(game.boss_hp))
-		var done := bool(game.is_dead) or bool(game.boss_dead) or step == max_steps - 1
+		var event_start: int = game.damage_events.size()
+		var command_start: int = game.applied_commands.size()
+		var tick_start: int = game.training_tick
+		var time_start: float = game.time_alive
+		game.external_command = validated.duplicate(true)
+		for _tick in range(substeps):
+			game.advance_training_tick(FIXED_DT)
+			if _terminated():
+				break
+			if game.mode != "game":
+				_write_response(response_path, {"ok": false, "error": "unexpected paused/non-combat mode: " + String(game.mode)})
+				await _cleanup()
+				quit(2)
+				return
+		var events: Array = game.damage_events.slice(event_start)
+		if not _terminated() and absf(float(game.time_alive) - time_start - substeps * FIXED_DT) > 0.00001:
+			_write_response(response_path, {"ok": false, "error": "world paused or failed to advance fixed simulation time"})
+			await _cleanup()
+			quit(2)
+			return
+		var executed: Array = game.applied_commands.slice(command_start)
+		var player_damage := 0.0
+		var boss_damage := 0.0
+		for event in events:
+			if event["recipient"] == "player":
+				player_damage += float(event["amount"])
+			else:
+				boss_damage += float(event["amount"])
+		var terminated := _terminated()
+		var truncated := step == max_steps - 1 and not terminated
+		var done := terminated or truncated
+		validated["effect_started"] = not executed.is_empty()
+		validated["decision_opportunity"] = action_mask.count(1.0) > 1
 		var reward_result := _reward_for_transition(curriculum, reward_state, validated, player_damage, boss_damage, done)
 		var reward := float(reward_result.get("total", 0.0))
+		var next_observation := ObservationSchema.build_training(game)
+		var perception := ApoloObservation.build(game)
+		if not bool(perception["coverage_complete"]):
+			_write_response(response_path, {"ok": false, "error": "unknown Apolo threat", "perception": perception})
+			await _cleanup()
+			quit(2)
+			return
 		transitions.append({
-			"observation": observation.get("values", []), "action_mask": action_mask, "target_mask": target_mask,
-			"action": validated, "reward": snappedf(reward, 0.000001), "done": done,
-			"info": {"player_damage": player_damage, "boss_damage": boss_damage, "executor_action": validated.get("action", "ATAQUE"), "target_slot": validated.get("target_slot", 0), "space": validated.get("space", {}), "opponent": "scripted_reference", "target_space_binding": "validated_for_contract_not_yet_bound_to_ability_executor", "reward": reward_result, "anti_exploit": Dictionary(reward_result.get("anti_exploit", {}))}
+			"observation": observation.get("values", []), "next_observation": next_observation["values"],
+			"action_mask": action_mask, "target_mask": target_mask, "action": validated,
+			"reward": snappedf(reward, 0.000001), "done": done, "terminated": terminated, "truncated": truncated,
+			"info": {"player_damage": player_damage, "boss_damage": boss_damage, "damage_events": events,
+				"player_healing": maxf(0.0, float(game.player_hp) - hp_before + player_damage),
+				"boss_healing": maxf(0.0, float(game.boss_hp) - boss_before + boss_damage),
+				"executor_action": String(executed.back()["action"]) if not executed.is_empty() else "NENHUMA",
+				"executed_commands": executed, "target_slot": validated.get("target_slot", 0), "space": validated.get("space", {}),
+				"opponent": game.opponent_mode, "target_space_binding": "bound_by_real_ability_executor_solo_target",
+				"simulation_tick": game.training_tick, "simulation_time": game.time_alive, "ticks_advanced": game.training_tick - tick_start,
+				"player_pos": [game.player_pos.x, game.player_pos.y], "boss_pos": [game.boss_pos.x, game.boss_pos.y],
+				"enemy_projectiles": game.enemy_bullets.size(), "player_projectiles": game.bullets.size(),
+				"apolo_perception": perception, "reward": reward_result, "anti_exploit": reward_result.get("anti_exploit", {})}
 		})
 		if done:
 			break
 	var total_reward := 0.0
 	for transition in transitions:
 		total_reward += float(Dictionary(transition).get("reward", 0.0))
-	_write_response(response_path, {"ok": true, "protocol": PROTOCOL, "protocol_version": PROTOCOL_VERSION, "seed": seed, "transitions": transitions, "summary": {"steps": transitions.size(), "total_reward": snappedf(total_reward, 0.000001), "terminal": bool(Dictionary(transitions.back()).get("done", false)), "policy_mode": String(request.get("policy_mode", "legal_cycle")), "scenario_id": String(scenario.get("id", "")), "scenario_split": String(scenario.get("split", "")), "curriculum_version": int(curriculum.get("curriculum_version", 0)), "reward_version": int(curriculum.get("reward_version", 0)), "reward_shaping_total": snappedf(float(reward_state.get("episode_shaping", 0.0)), 0.000001)}})
-	_cleanup()
+	_write_response(response_path, {"ok": true, "protocol": PROTOCOL, "protocol_version": PROTOCOL_VERSION, "seed": seed, "transitions": transitions, "summary": {"steps": transitions.size(), "total_reward": snappedf(total_reward, 0.000001), "terminal": _terminated(), "truncated": not _terminated(), "simulation_ticks": game.training_tick, "step_seconds": step_seconds, "fixed_tick_seconds": FIXED_DT, "observation_schema_version": 3, "action_schema_version": 3, "policy_mode": String(request.get("policy_mode", "legal_cycle")), "scenario_id": String(scenario.get("id", "")), "scenario_split": String(scenario.get("split", "")), "curriculum_version": int(curriculum.get("curriculum_version", 0)), "reward_version": int(curriculum.get("reward_version", 0)), "reward_shaping_total": snappedf(float(reward_state.get("episode_shaping", 0.0)), 0.000001)}})
+	await _cleanup()
 	quit(0)
 
 
-func _configure_episode(seed: int, scenario: Dictionary) -> void:
-	game._start_game()
-	game.rng.seed = seed
+func _terminated() -> bool:
+	return bool(game.is_dead) or bool(game.boss_dead) or float(game.player_hp) <= 0.0 or float(game.boss_hp) <= 0.0
+
+
+func _configure_episode(seed: int, scenario: Dictionary, request: Dictionary) -> String:
 	_apply_scenario_player(scenario)
-	game._advance_to_phase(5)
-	game.mode = "game"
-	game.current_phase = 5
-	game.boss_active = true
-	game.boss_dead = false
-	game.boss_entry_timer = 0.0
-	var difficulty: Dictionary = Dictionary(scenario.get("difficulty", {}))
-	var player: Dictionary = Dictionary(scenario.get("player", {}))
+	game.rng.seed = seed
+	game.start_apolo_phase5_exhibition(game.selected_manifestation)
+	game.rng.seed = seed
+	if game._tutorial_active():
+		game._finish_tutorial(false)
+	game.shop_auto_enabled = false
+	game.run_report_sent = true
+	game.boss5_multihead_policy = null
+	game.boss5_dqn_weights.clear()
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
+	var difficulty: Dictionary = scenario.get("difficulty", {})
+	var player: Dictionary = scenario.get("player", {})
 	game.boss_hp_max = float(difficulty.get("boss_hp", 22000.0))
 	game.boss_hp = game.boss_hp_max
 	game.boss5_cadence_bonus = clampf(float(difficulty.get("cadence_bonus", 0.0)), 0.0, 0.25)
-	game.boss_pos = Vector2(1050, 430)
-	game.player_pos = Vector2(620, 450)
-	game.player_hp_max = float(player.get("hp", 1000.0))
+	var center: Vector2 = game.experimental_phase_controller.boss_encounter_center()
+	game.reference_center = center
+	game.boss_pos = center + Vector2(180, -40)
+	game.player_pos = center + Vector2(-280, 80)
+	game.phase5_player_history.clear()
+	for _i in range(10):
+		game.phase5_player_history.append(game.player_pos)
+	game.boss5_authoritative_decision.clear()
+	game.player_hp_max = int(player.get("hp", 1000.0))
 	game.player_hp = game.player_hp_max
 	game.player_damage = float(player.get("damage", game.player_damage))
 	game.player_speed = float(player.get("speed", game.player_speed))
 	game.player_defense = 0.0
+	game.cards_bought.clear()
+	for card_name in Dictionary(scenario.get("cards", {})):
+		var found := false
+		for card in game.CARDS:
+			if String(card.get("name", "")) == card_name:
+				found = true
+				for _copy in range(int(scenario["cards"][card_name])):
+					game._apply_card(card)
+				break
+		if not found:
+			return "unknown scenario card: " + String(card_name)
+	game.player_hp = game.player_hp_max
+	game.reference_movement = Dictionary(scenario.get("movement", {})).duplicate()
+	game.opponent_mode = String(request.get("opponent", "scripted_reference"))
+	if game.opponent_mode not in ["scripted_reference", "heuristic_reference"]:
+		return "unsupported opponent"
+	game.player_auto_attack = bool(request.get("player_auto_attack", true))
 	game.phase5_hazards.clear()
 	game.phase5_rats.clear()
 	game.phase5_telegraphs.clear()
-	game._load_umbra_mobile_memory()
+	game.bullets.clear()
+	game.enemy_bullets.clear()
+	game._umbra_base_skills().reset_encounter()
+	game._umbra_mind().begin_encounter()
+	game.damage_events.clear()
+	game.applied_commands.clear()
+	return ""
 
 
 func _apply_scenario_player(scenario: Dictionary) -> void:
@@ -170,11 +263,13 @@ func _reward_for_transition(curriculum: Dictionary, state: Dictionary, command: 
 	var action := String(command.get("action", "ATAQUE"))
 	var no_effect_threshold := float(shaping_config.get("no_effect_damage_threshold", 0.5))
 	var no_effect := player_damage < no_effect_threshold and boss_damage < no_effect_threshold
+	var opportunity := bool(command.get("decision_opportunity", true))
+	var ineffective_attempt := no_effect and opportunity and not bool(command.get("effect_started", false))
 	state["same_action_steps"] = int(state.get("same_action_steps", 0)) + 1 if action == String(state.get("last_action", "")) else 1
-	state["no_effect_steps"] = int(state.get("no_effect_steps", 0)) + 1 if no_effect else 0
+	state["no_effect_steps"] = int(state.get("no_effect_steps", 0)) + 1 if ineffective_attempt else 0
 	state["last_action"] = action
-	var repeat_without_effect := no_effect and int(state["same_action_steps"]) >= int(shaping_config.get("repeat_window", 3))
-	var passive_streak := no_effect and int(state["no_effect_steps"]) >= int(shaping_config.get("passive_window", 8))
+	var repeat_without_effect := ineffective_attempt and int(state["same_action_steps"]) >= int(shaping_config.get("repeat_window", 3))
+	var passive_streak := ineffective_attempt and int(state["no_effect_steps"]) >= int(shaping_config.get("passive_window", 8))
 	var shaping_components := {
 		"player_damage": player_damage / maxf(1.0, float(game.player_hp_max)) * float(shaping_config.get("player_damage_ratio", 0.0)),
 		"umbra_damage": -boss_damage / maxf(1.0, float(game.boss_hp_max)) * absf(float(shaping_config.get("umbra_damage_ratio", 0.0))),
@@ -193,10 +288,10 @@ func _reward_for_transition(curriculum: Dictionary, state: Dictionary, command: 
 	var outcome := "ongoing"
 	var principal := 0.0
 	if done:
-		if bool(game.is_dead):
+		if bool(game.is_dead) or float(game.player_hp) <= 0.0:
 			outcome = "umbra_win"
 			principal = float(principal_config.get("player_eliminated", 1.0))
-		elif bool(game.boss_dead):
+		elif bool(game.boss_dead) or float(game.boss_hp) <= 0.0:
 			outcome = "umbra_loss"
 			principal = float(principal_config.get("umbra_eliminated", -1.0))
 		else:
@@ -207,9 +302,11 @@ func _reward_for_transition(curriculum: Dictionary, state: Dictionary, command: 
 
 func _command_for_step(request: Dictionary, policy, observation: Dictionary, action_mask: Array, target_mask: Array, step: int, sampling_rng: RandomNumberGenerator) -> Dictionary:
 	if String(request.get("policy_mode", "legal_cycle")) == "fixed_action":
-		return {"action_index": ObservationSchema.ACTIONS.find(String(request.get("fixed_action", "ATAQUE"))), "target_slot": 0, "space": {}}
+		return {"action_index": ACTIONS.find(String(request.get("fixed_action", "ATAQUE"))), "target_slot": 0, "space": Dictionary(request.get("space", {}))}
 	if String(request.get("policy_mode", "legal_cycle")) == "model":
 		var decision: Dictionary = policy.step(observation, action_mask, target_mask)
+		if decision.has("error"):
+			return {"error": "policy inference failed: " + String(decision["error"])}
 		if not decision.has("error"):
 			var action_index := int(decision.get("action_index", 0))
 			var target_slot := int(decision.get("target_slot", 0))
@@ -218,13 +315,13 @@ func _command_for_step(request: Dictionary, policy, observation: Dictionary, act
 				var target_logits: PackedFloat32Array = decision.get("target_logits", PackedFloat32Array())
 				action_index = _sample_masked_logits(action_logits, action_mask, sampling_rng)
 				target_slot = _sample_masked_logits(target_logits, target_mask, sampling_rng)
-			return {"action_index": action_index, "target_slot": target_slot, "space": Dictionary(decision.get("spatial", {}))}
+			return {"action_index": action_index, "target_slot": target_slot, "space": Dictionary(decision.get("spatial", {})) if bool(request.get("use_spatial_head", false)) else {}}
 	var valid: Array = []
 	for index in range(action_mask.size()):
 		if float(action_mask[index]) > 0.0:
 			valid.append(index)
 	var action_index := int(valid[step % valid.size()]) if not valid.is_empty() else 4
-	return {"action_index": action_index, "target_slot": 0, "space": {"x": 0.5, "y": 0.5, "direction_x": -1.0, "direction_y": 0.0}}
+	return {"action_index": action_index, "target_slot": 0, "space": {}}
 
 
 func _sample_masked_logits(logits: PackedFloat32Array, mask: Array, sampling_rng: RandomNumberGenerator) -> int:
@@ -249,50 +346,29 @@ func _sample_masked_logits(logits: PackedFloat32Array, mask: Array, sampling_rng
 
 
 func _validate_command(command: Dictionary, action_mask: Array, target_mask: Array) -> Dictionary:
-	var action_index := clampi(int(command.get("action_index", 4)), 0, ObservationSchema.ACTIONS.size() - 1)
-	if action_index >= action_mask.size() or float(action_mask[action_index]) <= 0.0:
-		action_index = ObservationSchema.ACTIONS.find("ATAQUE")
-	var target_slot := clampi(int(command.get("target_slot", 0)), 0, MultiheadPolicy.TARGET_SCHEMA.size() - 1)
-	if target_slot >= target_mask.size() or float(target_mask[target_slot]) <= 0.0:
-		target_slot = 0
-	var space: Dictionary = Dictionary(command.get("space", {}))
-	return {"action_index": action_index, "action": String(ObservationSchema.ACTIONS[action_index]), "target_slot": target_slot, "space": {"x": clampf(float(space.get("x", 0.5)), 0.0, 1.0), "y": clampf(float(space.get("y", 0.5)), 0.0, 1.0), "direction_x": clampf(float(space.get("direction_x", 0.0)), -1.0, 1.0), "direction_y": clampf(float(space.get("direction_y", 0.0)), -1.0, 1.0)}}
+	var requested_index := int(command.get("action_index", -1))
+	var index := requested_index
+	var rejected := ""
+	if index < 0 or index >= ACTIONS.size():
+		rejected = "unknown_action"
+	elif index >= action_mask.size() or float(action_mask[index]) <= 0.0:
+		rejected = "not_legal_or_cadence_wait"
+	if rejected != "":
+		index = ACTIONS.find("NENHUMA")
+	var space: Dictionary = command.get("space", {})
+	var default_point: Vector2 = game.player_pos / game.WORLD_SIZE
+	return {"action_index": index, "action": String(ACTIONS[index]), "requested_action_index": requested_index,
+		"rejection_reason": rejected, "target_slot": 0,
+		"space": {"x": clampf(float(space.get("x", default_point.x)), 0.0, 1.0), "y": clampf(float(space.get("y", default_point.y)), 0.0, 1.0),
+			"direction_x": clampf(float(space.get("direction_x", 0.0)), -1.0, 1.0), "direction_y": clampf(float(space.get("direction_y", 0.0)), -1.0, 1.0)}}
 
 
-func _action_mask() -> Array:
-	var available: Array = game._umbra_available_actions()
+func _action_mask(horizon: float) -> Array:
+	var available: Array = game._umbra_available_actions() if game.command_ready_within(horizon) else []
 	var mask: Array = []
-	for action in ObservationSchema.ACTIONS:
-		mask.append(1.0 if available.has(action) else 0.0)
+	for action in ACTIONS:
+		mask.append(1.0 if action == "NENHUMA" or available.has(action) else 0.0)
 	return mask
-
-
-func _move_reference_player(step: int, delta: float, movement_config: Dictionary) -> void:
-	var style := String(movement_config.get("style", "orbit"))
-	var radius := float(movement_config.get("radius", 260.0))
-	var angular_speed := float(movement_config.get("angular_speed", 0.66))
-	var t := float(step) * angular_speed * delta
-	var desired: Vector2 = game.player_pos
-	match style:
-		"strafe":
-			desired = Vector2(800.0 + sin(t * 3.1) * radius, 450.0 + cos(t * 1.2) * radius * 0.32)
-		"edge_weave":
-			desired = Vector2(100.0 + fposmod(t * 160.0, 1400.0), 130.0 + absf(sin(t * 1.7)) * 640.0)
-		"zigzag":
-			desired = Vector2(800.0 + sin(t * 4.4) * radius, 450.0 + sin(t * 2.0) * radius * 0.55)
-		"anchor_pulse":
-			desired = Vector2(760.0 + cos(t * 1.2) * radius * 0.32, 450.0 + sin(t * 1.2) * radius * 0.32)
-		"feint":
-			desired = Vector2(800.0 + signf(sin(t * 2.2)) * radius * 0.72, 450.0 + sin(t * 3.7) * radius * 0.42)
-		"breakout":
-			desired = Vector2(800.0 + cos(t * 0.8) * radius, 450.0 + sin(t * 1.9) * radius * 0.5)
-		_:
-			desired = Vector2(800.0 + cos(t) * radius, 450.0 + sin(t * 1.37) * radius * 0.62)
-	var distance: float = game.player_pos.distance_to(desired)
-	var advance := minf(distance, maxf(1.0, float(game.player_speed) * delta))
-	if distance > 0.01:
-		game.player_pos += game.player_pos.direction_to(desired) * advance
-	game.player_pos = game.player_pos.clamp(Vector2(60, 60), game.WORLD_SIZE - Vector2(60, 60))
 
 
 func _read_json(path: String) -> Dictionary:
@@ -327,13 +403,17 @@ func _argument(flag: String) -> String:
 func _load_policy(request: Dictionary):
 	var path := String(request.get("policy_model", ""))
 	var model := _read_json(path)
-	return MultiheadPolicy.create(model) if not model.is_empty() else null
+	return MultiheadPolicy.create(model, 3) if not model.is_empty() else null
 
 
 func _cleanup() -> void:
 	if game == null:
 		return
 	game._cleanup_runtime_resources()
+	game.textures.clear()
+	game.audio_streams.clear()
 	root.remove_child(game)
 	game.free()
 	game = null
+	for _i in range(4):
+		await process_frame

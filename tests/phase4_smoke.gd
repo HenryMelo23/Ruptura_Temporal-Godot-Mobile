@@ -14,8 +14,8 @@ func _run() -> void:
 	game._advance_to_phase(4)
 	assert(game.current_phase == 4)
 	assert(game._current_map_texture() != null)
-	assert(game.boss_name == "NEXO DA RUPTURA")
-	assert(game._enemy_limit() == game.PHASE4_LIMIT_EARLY)
+	assert(game.boss_name == "NEXO ANFIBIO")
+	assert(game.enemy_manager.get_enemy_limit(true) == game.PHASE4_LIMIT_EARLY + game._multiplayer_enemy_limit_bonus())
 	assert(game.enemies.size() == 2)
 	assert(game._enemy_texture(game.enemies[0]) != null)
 	var phase4_kinds = [game.ENEMY_NEXUS_CARTOGRAPHER, game.ENEMY_NEXUS_CHRONOPHAGE, game.ENEMY_NEXUS_REFRACTOR, game.ENEMY_NEXUS_WEAVER, game.ENEMY_NEXUS_ECHO]
@@ -41,6 +41,7 @@ func _run() -> void:
 	game.boss_hp_max = 14500.0
 	game.boss_hp = game.boss_hp_max
 	game.boss_pos = game.boss4_entry_target
+	game.player_pos = Vector2(120, 120)
 	game.phase4_planets.clear()
 	game._spawn_boss4_planet()
 	assert(game.phase4_planets.size() == 1)
@@ -77,12 +78,13 @@ func _run() -> void:
 	assert(game.boss_hp < boss_hp_before)
 	assert(game.petro_hp < game.petro_hp_max)
 
-	game.current_phase = 3
+	game._advance_to_phase(3)
 	game.boss_active = true
 	game.boss_dead = false
 	game.boss_hp = 1.0
+	var expected_phase_after_three: int = game._next_phase_after_boss(3)
 	game._damage_boss(999999.0, "eletrica")
-	assert(int(game.phase_fragment.get("next_phase", 0)) == 4)
+	assert(int(game.phase_fragment.get("next_phase", 0)) == expected_phase_after_three)
 	game._advance_to_phase(4)
 	game.boss_active = true
 	game.boss_dead = false

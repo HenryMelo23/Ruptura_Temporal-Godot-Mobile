@@ -28,7 +28,7 @@ func _initialize() -> void:
 			external_server = true
 		elif arg.begins_with("--result-dir="):
 			result_dir = arg.trim_prefix("--result-dir=")
-	if role not in ["server", "host", "client"] or scenario not in ["ready", "spectator"]:
+	if role not in ["server", "host", "client"] or scenario not in ["ready", "spectator", "owner_leave"]:
 		_fail("invalid arguments")
 		return
 	game = load("res://scenes/Main.tscn").instantiate()
@@ -70,6 +70,13 @@ func _run() -> void:
 
 
 func _run_client_step() -> void:
+	if scenario == "owner_leave":
+		if game.online_connected and game.online_lobby_connected_count == 2 and not action_sent:
+			action_sent = true
+			game._set_lobby_ready(true)
+		if action_sent and game.mode == "multiplayer_menu" and "HOST SAIU" in game.multiplayer_notice:
+			_write_result(role)
+		return
 	if not game.online_connected:
 		return
 	if not action_sent:
@@ -89,6 +96,12 @@ func _run_client_step() -> void:
 func _run_host_step() -> void:
 	if not game.online_connected or game.online_lobby_connected_count != 2:
 		return
+	if scenario == "owner_leave":
+		if not action_sent and game.online_lobby_ready_count == 1:
+			action_sent = true
+			game._leave_multiplayer()
+			_write_result(role)
+		return
 	if scenario == "ready":
 		if game.online_lobby_active_player_count == 2 and game.online_lobby_ready_count == 1 and game.online_lobby_client_ready and game._online_client_ready() and game.active_character_key == game.CHARACTER_GEOVANA:
 			_write_result(role)
@@ -98,6 +111,10 @@ func _run_host_step() -> void:
 
 
 func _run_server_step() -> void:
+	if scenario == "owner_leave":
+		if game.dedicated_room_shutdown_pending and game.dedicated_room_owner_peer_id == 0:
+			_write_result(role)
+		return
 	if scenario == "ready":
 		server_state_valid = game.dedicated_room_owner_peer_id != 0 and game._dedicated_active_peer_ids().size() == 2 and game._dedicated_clients_ready()
 	else:

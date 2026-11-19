@@ -147,6 +147,20 @@ func cast_ultimate() -> bool:
 	return true
 
 
+## Reapertar a ultimate durante a carga ou a tempestade encerra a habilidade.
+func cancel_storm() -> bool:
+	if not storm_windup_active and not storm_active:
+		return false
+	storm_windup_active = false
+	storm_active = false
+	storm_elapsed = 0.0
+	storm_event_id = ""
+	core.henry_ultimate_cast_active = false
+	core.henry_ultimate_cast_elapsed = 0.0
+	core.henry_ultimate_event_id = ""
+	return true
+
+
 func update(delta: float) -> void:
 	if not is_configured():
 		return
@@ -344,7 +358,7 @@ func _inside_corridor(position: Vector2, origin: Vector2) -> bool:
 func _fire_nimbo_copy() -> void:
 	var origin := nimbo_position()
 	var target := _nearest_target_position(origin, {}, "", 780.0)
-	var direction: Vector2 = core._aim_direction()
+	var direction: Vector2 = core._ability_aim_direction()
 	if target != Vector2.INF:
 		direction = (target - origin).normalized()
 	if direction.length() <= 0.01:
@@ -406,7 +420,7 @@ func _nearest_target_position(origin: Vector2, ignored_hits: Dictionary, ignored
 
 
 func _target_direction(target_world) -> Vector2:
-	var direction: Vector2 = core._aim_direction()
+	var direction: Vector2 = core._ability_aim_direction()
 	if target_world is Vector2:
 		direction = Vector2(target_world) - core.player_pos
 	if direction.length_squared() <= 0.001:

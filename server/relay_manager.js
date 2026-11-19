@@ -6,8 +6,14 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 const { renderLeaderboardSite } = require("./leaderboard_site");
+const { projectRun, compareRuns, policy: rankingPolicy } = require("./ranking_score");
+const { createObservatory } = require("./umbra_observatory");
+const { normalizeUmbraCombat, createCollective, summarizeCombat } = require("./umbra_collective");
 
 const MANAGER_PORT = numberEnv("PORT", 8090);
+// Staging/canary bind to loopback so an isolated instance never answers the
+// public interface. Production keeps the historical 0.0.0.0 default.
+const MANAGER_BIND = process.env.MANAGER_BIND || "0.0.0.0";
 const ROOM_HOST = process.env.ROOM_HOST || "72.61.217.238";
 const ROOM_PORT_START = numberEnv("ROOM_PORT_START", 4522);
 const ROOM_PORT_END = numberEnv("ROOM_PORT_END", 4599);
@@ -15,7 +21,7 @@ const GODOT_BIN = process.env.GODOT_BIN || "/opt/godot/Godot_v4.7-stable_linux.x
 const PROJECT_PATH = process.env.PROJECT_PATH || "/opt/ruptura/Ruptura_Temporal-Godot-Mobile";
 const ROOM_IDLE_MS = numberEnv("ROOM_IDLE_MS", 30 * 60 * 1000);
 const ROOM_OWNER_CONNECT_TIMEOUT_MS = numberEnv("ROOM_OWNER_CONNECT_TIMEOUT_MS", 45 * 1000);
-const ROOM_OWNER_HEARTBEAT_TIMEOUT_MS = numberEnv("ROOM_OWNER_HEARTBEAT_TIMEOUT_MS", 75 * 1000);
+const ROOM_OWNER_HEARTBEAT_TIMEOUT_MS = numberEnv("ROOM_OWNER_HEARTBEAT_TIMEOUT_MS", 35 * 1000);
 const ROOM_EVENT_LIMIT = numberEnv("ROOM_EVENT_LIMIT", 80);
 const WARM_STANDBY_ROOMS = numberEnv("WARM_STANDBY_ROOMS", 2, true);
 const WARM_STANDBY_REFILL_MS = numberEnv("WARM_STANDBY_REFILL_MS", 1500);
@@ -38,6 +44,18 @@ const STREAM_FRAME_BUFFER_MS = numberEnv("STREAM_FRAME_BUFFER_MS", 100);
 const RUN_REPORT_MAX_BYTES = numberEnv("RUN_REPORT_MAX_BYTES", 512 * 1024);
 const LEADERBOARD_PATH = process.env.LEADERBOARD_PATH || path.join(__dirname, "leaderboard_runs.json");
 const LEADERBOARD_MAX_RUNS = numberEnv("LEADERBOARD_MAX_RUNS", 500);
+const umbraObservatory = createObservatory(process.env.UMBRA_OBSERVATORY_PATH || `${LEADERBOARD_PATH}.umbra_observatory.json`);
+// Mente coletiva da UMBRA: acumulador persistente (nao gira com o ranking).
+const umbraCollective = createCollective(process.env.UMBRA_COLLECTIVE_PATH || `${LEADERBOARD_PATH}.umbra_collective.json`);
+let observatoryErrorReported = false;
+function observeUmbra(runs) {
+  try { const result = umbraObservatory.update(runs); observatoryErrorReported = false; return result; }
+  catch (error) {
+    if (!observatoryErrorReported) console.error("Umbra observatory unavailable; historical file preserved:", error.message);
+    observatoryErrorReported = true;
+    return { available: false, reason: "historical_store_unavailable", evasionAvailable: false };
+  }
+}
 const PLAYER_PROGRESS_PATH = process.env.PLAYER_PROGRESS_PATH || path.join(__dirname, "player_progress.json");
 const PLAYER_PROGRESS_SCHEMA_VERSION = 2;
 const PLAYER_PROGRESS_EVENT_VERSION = 2;
@@ -324,6 +342,28 @@ function updatePublic(platform = "android", currentVersionCode = 0) {
 
 function androidUpdatePublic(currentVersionCode = 0) {
   return updatePublic("android", currentVersionCode);
+}
+
+function downloadCatalog() {
+  return ["windows", "linux", "android"].map((platform) => {
+    const config = updateConfig(platform);
+    const update = readUpdateManifest(platform);
+    if (!update) return { platform, available: false };
+    return {
+      platform,
+      available: true,
+      version: update.version,
+      versionCode: update.versionCode,
+      filename: update.filename,
+      size: update.size,
+      sha256: update.sha256,
+      notes: update.notes,
+      mandatory: update.mandatory,
+      publishedAt: update.publishedAt,
+      // Relative links keep browser downloads on the verified public domain.
+      downloadUrl: `${config.downloadPath}${encodeURIComponent(update.filename)}`
+    };
+  });
 }
 
 function contentUpdatePublic(currentContentVersionCode = 0, gameVersionCode = 0, platform = "") {
@@ -1148,6 +1188,7 @@ function startRoom(ownerName, options = {}) {
     lastHeartbeatAt: 0,
     ownerHeartbeatAt: 0,
     ownerWatchdogTimer: null,
+    ownerExitBuffer: "",
     events: []
   };
   rooms.set(code, room);
@@ -1159,6 +1200,10 @@ function startRoom(ownerName, options = {}) {
       room.ready = true;
     }
     process.stdout.write(`[${code}] ${chunk}`);
+    room.ownerExitBuffer = (room.ownerExitBuffer + text).slice(-128);
+    if (!room.standby && !room.stopping && /(?:^|\r?\n)ONLINE ROOM OWNER LEFT\r?\n/.test(room.ownerExitBuffer)) {
+      stopRoom(code, "owner disconnected", 3000);
+    }
   });
   child.stderr.on("data", (chunk) => process.stderr.write(`[${code}] ${chunk}`));
   child.on("error", (error) => {
@@ -1198,7 +1243,7 @@ function scheduleRoomStop(room) {
   }, delayMs);
 }
 
-function stopRoom(code, reason) {
+function stopRoom(code, reason, graceMs = 0) {
   const room = rooms.get(code);
   if (!room) {
     return false;
@@ -1215,12 +1260,18 @@ function stopRoom(code, reason) {
   room.child.once("exit", () => {
     exited = true;
   });
-  room.child.kill("SIGTERM");
+  if (graceMs > 0) {
+    setTimeout(() => {
+      if (!exited) room.child.kill("SIGTERM");
+    }, graceMs).unref();
+  } else {
+    room.child.kill("SIGTERM");
+  }
   setTimeout(() => {
     if (!exited) {
       room.child.kill("SIGKILL");
     }
-  }, 5000).unref();
+  }, graceMs + 5000).unref();
   return true;
 }
 
@@ -1495,21 +1546,11 @@ const PLAYER_PROGRESS_RULES = {
     "coracao_antimateria": { metric: "boss_kills", target: 4 },
     "cofre_excesso": { metric: "boss_kills", target: 4 }
   },
-  manifestations: {
-    lacerante: { metric: "enemy_kills", target: 250 },
-    prismatica: { metric: "boss_kills", target: 1 },
-    retornante: { metric: "teleports_used", target: 100, all: [{ metric: "survive_seconds", target: 900 }] },
-    parasitica: { metric: "phase_reached", target: 6 },
-    gravitante: { metric: "phase_reached", target: 4 },
-    ancorada: { metric: "stationary_seconds", target: 180, all: [{ metric: "survive_seconds", target: 900 }] },
-    cartografica: { metric: "phase_reached", target: 4 },
-    mnesica: { metric: "boss_kills", target: 3 },
-    ressonante: { metric: "abilities_used", target: 180, all: [{ metric: "survive_seconds", target: 900 }] },
-    contratual: { metric: "shop_purchases", target: 35 },
-    acorrentada: { metric: "damage_taken_events", target: 55, all: [{ metric: "phase_reached", target: 2 }] },
-    eclipsada: { metric: "phase_reached", target: 7 },
-    bombastica: { metric: "enemy_kills", target: 550 },
-    necronada: { metric: "enemy_kills", target: 700, all: [{ metric: "phase_reached", target: 3 }] }
+	manifestations: {
+		lacerante: { metric: "enemy_kills", target: 250 },
+		prismatica: { metric: "boss_kills", target: 1 },
+		parasitica: { metric: "phase_reached", target: 6 },
+		gravitante: { metric: "phase_reached", target: 4 }
   },
   specters: {
     racional: { metric: "stationary_seconds", target: 150, all: [{ metric: "survive_seconds", target: 900 }] },
@@ -2119,6 +2160,10 @@ function behaviorForRun(run) {
   return normalizeBehaviorMetrics(run && (run.behaviorMetrics || run.behavior_metrics));
 }
 
+function knowledgeForRun(run) {
+  return normalizeUmbraKnowledge(run && (run.umbraKnowledge || run.umbra_knowledge));
+}
+
 function mean(values) {
   const clean = values.map(Number).filter(Number.isFinite);
   return clean.length ? clean.reduce((sum, value) => sum + value, 0) / clean.length : 0;
@@ -2154,14 +2199,25 @@ function profileForArchetype(archetype, confidence = 0.45, secondary = "INDEFINI
 
 function buildUmbraDossier(key, player, runs) {
   const eligibleRuns = runs.filter(runTrainingEligible);
-  const archetype = classifyUmbraArchetypeFromRuns(eligibleRuns);
+  const knowledgeRows = eligibleRuns.map(knowledgeForRun).filter((row) => row.sampleSeconds >= 30 && row.totalPercent > 0);
+  const learnedArchetype = knowledgeRows.length ? knowledgeRows[knowledgeRows.length - 1].archetype : "INDEFINIDO";
+  const archetype = learnedArchetype !== "INDEFINIDO" ? learnedArchetype : classifyUmbraArchetypeFromRuns(eligibleRuns);
   const behaviors = eligibleRuns.map(behaviorForRun);
-  const confidence = Math.min(0.92, 0.35 + eligibleRuns.length * 0.08);
+  const reportedConfidence = mean(knowledgeRows.map((row) => row.totalPercent / 100));
+  const confidence = Math.min(0.92, Math.max(0.18, reportedConfidence * 0.72 + Math.min(0.28, eligibleRuns.length * 0.04)));
+  const knowledgeCategories = {};
+  for (const category of ["movement", "shooting", "choices", "preferences", "weaknesses"]) {
+    knowledgeCategories[category] = Math.round(mean(knowledgeRows.map((row) => row.categories[category].percent)));
+  }
   return {
-    player,
-    profile_key: key,
     runs: eligibleRuns.length,
     perfil_jogador: profileForArchetype(archetype, confidence),
+    knowledge: {
+      schema_version: 1,
+      total_percent: Math.round(mean(knowledgeRows.map((row) => row.totalPercent))),
+      categories: knowledgeCategories,
+      evidence_runs: knowledgeRows.length
+    },
     behavior: {
       edge_ratio: Number(mean(behaviors.map((b) => b.edgeRatio)).toFixed(4)),
       corner_ratio: Number(mean(behaviors.map((b) => b.cornerRatio)).toFixed(4)),
@@ -2186,16 +2242,28 @@ function buildUmbraMind(snapshot, query = new URLSearchParams()) {
   }
   const dossiers = {};
   for (const [key, playerRuns] of grouped.entries()) {
-    dossiers[key] = buildUmbraDossier(key, String(playerRuns[0].player || "Jogador"), playerRuns);
-    dossiers[String(playerRuns[0].player || "").toLowerCase()] = dossiers[key];
+    dossiers[key] = buildUmbraDossier(key, "", playerRuns);
   }
   const globalArchetype = classifyUmbraArchetypeFromRuns(eligible);
-  const versionSeed = `${Math.floor(Date.now() / (UMBRA_MIND_REFRESH_DAYS * 24 * 60 * 60 * 1000))}-${eligible.length}-${grouped.size}`;
+  // A mente coletiva muda a cada partida que chega na UMBRA.
+  const collective = umbraCollective.build();
+  const versionSeed = `${Math.floor(Date.now() / (UMBRA_MIND_REFRESH_DAYS * 24 * 60 * 60 * 1000))}-${eligible.length}-${grouped.size}-${collective.collective_version}`;
   const mindVersion = `umbra-week-${crypto.createHash("sha1").update(versionSeed).digest("hex").slice(0, 10)}`;
   const profileId = String(query.get("profile_id") || "").trim();
-  const player = String(query.get("player") || "").trim().toLowerCase();
   const current = String(query.get("current") || "").trim();
-  const selected = dossiers[profileId] || dossiers[player] || null;
+  const selected = dossiers[profileId] || null;
+  const cohorts = {};
+  for (const dossier of Object.values(dossiers)) {
+    const archetype = String(dossier && dossier.perfil_jogador && dossier.perfil_jogador.arquetipo_principal || "INDEFINIDO");
+    if (!cohorts[archetype]) cohorts[archetype] = { archetype, players: 0, runs: 0, knowledge_total: 0 };
+    cohorts[archetype].players += 1;
+    cohorts[archetype].runs += Math.max(0, Math.floor(safeNumber(dossier.runs)));
+    cohorts[archetype].knowledge_total += Math.max(0, Math.min(100, safeNumber(dossier.knowledge && dossier.knowledge.total_percent)));
+  }
+  for (const cohort of Object.values(cohorts)) {
+    cohort.knowledge_percent = Math.round(cohort.knowledge_total / Math.max(1, cohort.players));
+    delete cohort.knowledge_total;
+  }
   const files = {
     "umbra_global_profile.json": {
       mind_version: mindVersion,
@@ -2216,11 +2284,14 @@ function buildUmbraMind(snapshot, query = new URLSearchParams()) {
         SOBREVIVENTE_ADAPTATIVO: ["RESPEITAR_ADAPTATIVO", 0.1]
       }
     },
+    "umbra_collective_mind.json": { ...collective, mind_version: mindVersion },
     "umbra_player_dossiers.json": {
       mind_version: mindVersion,
-      selected_profile: profileId || player,
+      schema_version: 2,
+      selected_profile: profileId,
       selected: selected || null,
-      players: dossiers
+      cohort_count: Object.keys(cohorts).length,
+      cohorts
     }
   };
   return {
@@ -2231,6 +2302,8 @@ function buildUmbraMind(snapshot, query = new URLSearchParams()) {
     trained_runs: eligible.length,
     trained_players: grouped.size,
     rejected_runs: runs.length - eligible.length,
+    collective_runs: collective.runs,
+    collective_samples: collective.samples,
     files
   };
 }
@@ -2239,18 +2312,8 @@ const MANIFESTATION_UNLOCK_ALIASES = {
   eletrica: "eletrica",
   lacerante: "lacerante",
   prismatica: "prismatica",
-  retornante: "retornante",
   parasitica: "parasitica",
-  gravitante: "gravitante",
-  ancorada: "ancorada",
-  cartografica: "cartografica",
-  mnesica: "mnesica",
-  ressonante: "ressonante",
-  contratual: "contratual",
-  acorrentada: "acorrentada",
-  eclipsada: "eclipsada",
-  bombastica: "bombastica",
-  necronada: "necronada"
+  gravitante: "gravitante"
 };
 
 const SPECTER_UNLOCK_ALIASES = {
@@ -2411,6 +2474,38 @@ function normalizeBehaviorMetrics(value) {
   };
 }
 
+function normalizeUmbraKnowledge(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const categorySource = source.categories && typeof source.categories === "object" ? source.categories : {};
+  const categories = {};
+  for (const key of ["movement", "shooting", "choices", "preferences", "weaknesses"]) {
+    const row = categorySource[key] && typeof categorySource[key] === "object" ? categorySource[key] : {};
+    categories[key] = {
+      percent: Math.max(0, Math.min(100, Math.round(safeNumber(row.percent)))),
+      insight: String(row.insight || "").slice(0, 96)
+    };
+  }
+  const vectorSource = source.behavior_vector && typeof source.behavior_vector === "object" ? source.behavior_vector : (source.behaviorVector && typeof source.behaviorVector === "object" ? source.behaviorVector : {});
+  return {
+    schemaVersion: Math.max(1, Math.min(1, Math.floor(safeNumber(source.schema_version, source.schemaVersion || 1)))),
+    totalPercent: Math.max(0, Math.min(100, Math.round(safeNumber(source.total_percent, source.totalPercent || 0)))),
+    archetype: String(source.archetype || "INDEFINIDO").replace(/[^A-Z0-9_]/g, "").slice(0, 48) || "INDEFINIDO",
+    sampleSeconds: Math.max(0, Math.min(6 * 60 * 60, safeNumber(source.sample_seconds, source.sampleSeconds || 0))),
+    phasesObserved: Math.max(0, Math.min(7, Math.floor(safeNumber(source.phases_observed, source.phasesObserved || 0)))),
+    categories,
+    behaviorVector: {
+      edgeRatio: Math.max(0, Math.min(1, safeNumber(vectorSource.edge_ratio, vectorSource.edgeRatio || 0))),
+      cornerRatio: Math.max(0, Math.min(1, safeNumber(vectorSource.corner_ratio, vectorSource.cornerRatio || 0))),
+      centerRatio: Math.max(0, Math.min(1, safeNumber(vectorSource.center_ratio, vectorSource.centerRatio || 0))),
+      stationaryRatio: Math.max(0, Math.min(1, safeNumber(vectorSource.stationary_ratio, vectorSource.stationaryRatio || 0))),
+      dashPerMinute: Math.max(0, Math.min(180, safeNumber(vectorSource.dash_per_minute, vectorSource.dashPerMinute || 0))),
+      shotsPerMinute: Math.max(0, Math.min(1200, safeNumber(vectorSource.shots_per_minute, vectorSource.shotsPerMinute || 0))),
+      hitRate: Math.max(0, Math.min(1, safeNumber(vectorSource.hit_rate, vectorSource.hitRate || 0))),
+      damageTakenPerMinute: Math.max(0, Math.min(20000, safeNumber(vectorSource.damage_taken_per_minute, vectorSource.damageTakenPerMinute || 0)))
+    }
+  };
+}
+
 function umbraTrainingEligibility(payload, durationSeconds, rankEligible) {
   const behavior = normalizeBehaviorMetrics(payload && payload.behavior_metrics);
   const reasons = [];
@@ -2554,6 +2649,9 @@ function normalizeRunPayload(payload, ip = "") {
     platform: String(payload.platform || "").slice(0, 32),
     role: String(payload.role || "solo").slice(0, 16),
     result: String(payload.result || "").slice(0, 32),
+    deathCause: String(payload.death_cause || "").trim().slice(0, 160),
+    deathSource: String(payload.death_source || "").trim().slice(0, 96),
+    deathPhase: Math.max(0, Math.floor(safeNumber(payload.death_phase))),
     date: String(payload.date || new Date().toISOString()).slice(0, 48),
     startedUnix: Math.max(0, Math.floor(safeNumber(payload.started_unix))),
     endedUnix,
@@ -2580,6 +2678,8 @@ function normalizeRunPayload(payload, ip = "") {
     damageEvents: normalizeDamageEvents(payload.damage_events),
     heatmap: normalizeHeatmap(payload.position_heatmap),
     behaviorMetrics: umbraTraining.behavior,
+    umbraKnowledge: normalizeUmbraKnowledge(payload.umbra_knowledge),
+    umbraCombat: normalizeUmbraCombat(payload.umbra_combat),
     umbraTrainingEligible: umbraTraining.eligible,
     umbraTrainingReasons: umbraTraining.reasons,
     manifestation: String(payload.manifestation || "").slice(0, 64),
@@ -2606,7 +2706,7 @@ function normalizeRunPayload(payload, ip = "") {
 
 function recordRun(payload, ip = "") {
   const store = loadLeaderboardStore();
-  const run = normalizeRunPayload(payload, ip);
+  const run = projectRun(normalizeRunPayload(payload, ip));
   const profileKey = profileKeyForRun(run);
   const existingProfile = store.profiles[profileKey] || {};
   const canonicalPlayer = String(existingProfile.player || run.player || "Jogador").slice(0, 32);
@@ -2617,12 +2717,17 @@ function recordRun(payload, ip = "") {
     profileId: run.profileId,
     firstSeen: existingProfile.firstSeen || run.endedUnix,
     lastSeen: run.endedUnix,
-    bestScore: Math.max(safeNumber(existingProfile.bestScore), run.score),
+    bestScore: Math.max(0, ...store.runs.filter(r => profileKeyForRun(r) === profileKey && r.rankEligible !== false).map(r => projectRun(r)).filter(r => !r.rankingWithdrawn).map(r => r.score), run.score),
     runs: Math.max(0, Math.floor(safeNumber(existingProfile.runs))) + 1
   };
+  // A UMBRA aprende com a partida antes de o run virar so resumo no ranking.
+  try { umbraCollective.ingest(run); } catch (error) { console.error("Umbra collective ingest failed:", error.message); }
+  run.umbraCombat = summarizeCombat(run.umbraCombat);
   store.runs.unshift(run);
+  // Preserve encounter evidence before the bounded ranking archive rotates.
+  observeUmbra(store.runs.map(projectRun));
   store.runs = store.runs
-    .sort((left, right) => safeNumber(right.score) - safeNumber(left.score) || safeNumber(right.durationSeconds) - safeNumber(left.durationSeconds) || safeNumber(right.endedUnix) - safeNumber(left.endedUnix))
+    .map(projectRun).sort(compareRuns)
     .slice(0, LEADERBOARD_MAX_RUNS);
   saveLeaderboardStore(store);
   return run;
@@ -2682,7 +2787,7 @@ function repairBenignLeaderboardAudits() {
   }
   if (repaired <= 0) return 0;
   store.runs = store.runs
-    .sort((left, right) => safeNumber(right.score) - safeNumber(left.score) || safeNumber(right.durationSeconds) - safeNumber(left.durationSeconds) || safeNumber(right.endedUnix) - safeNumber(left.endedUnix))
+    .map(projectRun).sort(compareRuns)
     .slice(0, LEADERBOARD_MAX_RUNS);
   rebuildLeaderboardProfiles(store);
   saveLeaderboardStore(store);
@@ -2692,7 +2797,8 @@ function repairBenignLeaderboardAudits() {
 
 function leaderboardSnapshot() {
   const store = loadLeaderboardStore();
-  const eligibleRuns = store.runs.filter((run) => run.rankEligible !== false);
+  const auditedRuns = store.runs.map(projectRun).sort(compareRuns);
+  const eligibleRuns = auditedRuns.filter((run) => run.rankEligible !== false && !run.rankingWithdrawn);
   const bestByProfile = new Map();
   for (const run of eligibleRuns) {
     const key = profileKeyForRun(run);
@@ -2702,9 +2808,11 @@ function leaderboardSnapshot() {
     }
   }
   const players = Array.from(bestByProfile.values())
-    .sort((left, right) => safeNumber(right.score) - safeNumber(left.score))
+    .sort(compareRuns)
     .slice(0, 30);
-  return { players, recent: store.runs.slice(0, 60), runs: eligibleRuns, auditedRuns: store.runs, profiles: store.profiles };
+  const profiles = Object.fromEntries(Object.entries(store.profiles).map(([key, value]) => [key, { ...value, bestScore: bestByProfile.get(key)?.score || 0 }]));
+  return { players, recent: [...auditedRuns].sort((a,b) => safeNumber(b.endedUnix)-safeNumber(a.endedUnix)).slice(0,60), runs: eligibleRuns, auditedRuns, profiles,
+    rankingPolicy, observatory: observeUmbra(auditedRuns), downloads: downloadCatalog() };
 }
 
 let cardCatalogIndex = null;
@@ -2716,18 +2824,31 @@ function normalizedCatalogKey(value) {
 function loadCardCatalogIndex() {
   if (cardCatalogIndex) return cardCatalogIndex;
   cardCatalogIndex = new Map();
+  const indexCard = (icon, values) => {
+    if (!icon) return;
+    for (const value of values) {
+      const key = normalizedCatalogKey(value);
+      if (key) cardCatalogIndex.set(key, icon);
+    }
+  };
   try {
-    const source = fs.readFileSync(path.join(PROJECT_PATH, "scripts", "main.gd"), "utf8");
-    for (const line of source.split(/\r?\n/)) {
-      if (!line.includes('"icon": "Deck/')) continue;
-      const icon = line.match(/"icon"\s*:\s*"([^"]+)"/);
-      const name = line.match(/"name"\s*:\s*"([^"]+)"/);
-      const id = line.match(/"id"\s*:\s*"([^"]+)"/);
-      const nick = line.match(/"nick"\s*:\s*"([^"]+)"/);
-      if (!icon) continue;
-      for (const value of [name && name[1], id && id[1], nick && nick[1]]) {
-        const key = normalizedCatalogKey(value);
-        if (key) cardCatalogIndex.set(key, icon[1]);
+    const jsonCatalog = JSON.parse(fs.readFileSync(path.join(PROJECT_PATH, "cartas_loja.json"), "utf8"));
+    for (const card of Array.isArray(jsonCatalog) ? jsonCatalog : []) {
+      indexCard(card.icone, [card.id, card.nome, card.subtitulo]);
+    }
+    const gdscriptCatalogs = [
+      path.join(PROJECT_PATH, "scripts", "main_runtime_state.gd"),
+      path.join(PROJECT_PATH, "scripts", "catalog", "card_catalog_definitions.gd")
+    ];
+    for (const catalogPath of gdscriptCatalogs) {
+      const source = fs.readFileSync(catalogPath, "utf8");
+      for (const line of source.split(/\r?\n/)) {
+        if (!line.includes('"icon": "Deck/')) continue;
+        const icon = line.match(/"icon"\s*:\s*"([^"]+)"/);
+        const name = line.match(/"name"\s*:\s*"([^"]+)"/);
+        const id = line.match(/"id"\s*:\s*"([^"]+)"/);
+        const nick = line.match(/"nick"\s*:\s*"([^"]+)"/);
+        indexCard(icon && icon[1], [name && name[1], id && id[1], nick && nick[1]]);
       }
     }
   } catch (error) {
@@ -3083,6 +3204,12 @@ async function route(req, res) {
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/umbra/observatory/latest") {
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    sendJson(res, 200, leaderboardSnapshot().observatory);
+    return;
+  }
+
   const androidApkMatch = url.pathname.match(/^\/updates\/android\/download\/([^/]+)$/);
   if ((req.method === "GET" || req.method === "HEAD") && androidApkMatch) {
     sendAndroidApk(req, res, androidApkMatch[1]);
@@ -3363,6 +3490,7 @@ async function route(req, res) {
   }
 
   if (req.method === "GET" && url.pathname === "/rooms") {
+    res.setHeader("Cache-Control", "no-store, max-age=0");
     sendJson(res, 200, { rooms: listAvailableRooms() });
     return;
   }
@@ -3460,9 +3588,10 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(MANAGER_PORT, "0.0.0.0", () => {
+server.listen(MANAGER_PORT, MANAGER_BIND, () => {
   console.log(`ruptura relay manager listening on :${MANAGER_PORT}`);
   console.log(`rooms will advertise ${ROOM_HOST}:${ROOM_PORT_START}-${ROOM_PORT_END}`);
   repairBenignLeaderboardAudits();
+  leaderboardSnapshot(); // Fix the baseline before accepting new reports.
   ensureWarmStandby();
 });

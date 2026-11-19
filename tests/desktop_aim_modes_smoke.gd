@@ -25,16 +25,6 @@ func _run() -> void:
 	game._update_button_layout(viewport)
 	game.get_viewport().warp_mouse(Vector2(760, 360))
 
-	game.manifestation_key = "bombastica"
-	game.bombastica_bombs.clear()
-	game.bombastica_q_recharges = [0.0, 0.0, 0.0]
-	game._try_cast_bombastica_q()
-	_check(game.bombastica_bombs.size() == 1, "dry Bombastica Q did not create exactly one bomb")
-	_check(Vector2(game.bombastica_bombs[0]["target"]).distance_to(game.player_pos) < 1.0, "dry Bombastica Q was not placed on the player")
-	game._try_cast_bombastica_q(game.player_pos + Vector2(180, 0))
-	_check(game.bombastica_bombs.size() == 2, "second Bombastica Q should add one bomb, not unload all charges")
-	_check(game._bombastica_ready_charges() == 1, "Bombastica Q consumed more than one charge per cast")
-
 	game.manifestation_key = "eletrica"
 	game.desktop_aim_mode = game.DESKTOP_AIM_CONFIRM
 	game.keyboard_bindings["skill"] = game._key_input_binding(KEY_Q)
@@ -88,6 +78,13 @@ func _run() -> void:
 	_check(game._desktop_teleport_mode_label() == "ULTIMA DIRECAO", "last-direction teleport label is not exposed in settings")
 	_check(game._sanitize_desktop_teleport_mode("last_direction") == game.DESKTOP_TELEPORT_LAST_DIRECTION, "last-direction teleport mode was not accepted by config sanitization")
 
+	# Com ataque automatico (sem mouse) o teleporte nao pode usar o cursor.
+	game.desktop_attack_aim_mode = game.DESKTOP_ATTACK_AIM_AUTO
+	game.desktop_teleport_mode = game.DESKTOP_AIM_CONFIRM
+	_check(game.player_control_controller.desktop_dash_mode() == game.DESKTOP_TELEPORT_LAST_DIRECTION, "auto attack allowed cursor teleport")
+	game._cycle_desktop_teleport_mode(1)
+	_check(game.desktop_teleport_mode in [game.DESKTOP_TELEPORT_LAST_DIRECTION, game.DESKTOP_TELEPORT_AUTO], "settings cycle offered cursor teleport with auto attack")
+	game.desktop_attack_aim_mode = game.DESKTOP_ATTACK_AIM_CURSOR
 	game.desktop_teleport_mode = game.DESKTOP_AIM_CONFIRM
 	game.last_dash_time = -999.0
 	game.desktop_action_gate_msec.clear()
@@ -98,7 +95,7 @@ func _run() -> void:
 	game._cancel_desktop_aim_feedback()
 	_check(game.desktop_aim_action == "" and not game.teleport_dragging, "right-click style cancel did not clear teleport aim")
 
-	print("DESKTOP_AIM_MODES_SMOKE_OK bombastica_single=true aim_confirm=true aim_hold=true teleport_auto=true teleport_last_direction=true")
+	print("DESKTOP_AIM_MODES_SMOKE_OK aim_confirm=true aim_hold=true teleport_auto=true teleport_last_direction=true")
 	game.boss_active = false
 	game.boss_hp = 0.0
 	game.manifestation_secondaries.clear()

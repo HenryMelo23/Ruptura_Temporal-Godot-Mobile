@@ -40,7 +40,9 @@ static func merge_pending_unlock_progress(
 		var item: Variant = pending_events[index]
 		if not item is Dictionary:
 			continue
-		var event: Dictionary = item
+		# Pending event dictionaries are treated as immutable snapshots so the
+		# background cache writer can safely hold a shallow copy of the array.
+		var event: Dictionary = item.duplicate(true)
 		if String(event.get("type", "")) != "unlock_progress" \
 			or String(event.get("metric", "")) != metric \
 			or bool(event.get("max_mode", false)) != max_mode:
@@ -149,7 +151,7 @@ static func compact_quarantined_events(events: Array) -> Array:
 		var entry: Dictionary = raw_entry
 		var event_value: Variant = entry.get("event", {})
 		var reason := String(entry.get("reason", ""))
-		if not event_value is Dictionary or reason not in ["queue_capacity", "queue_capacity_compacted"]:
+		if not event_value is Dictionary:
 			compacted.append(entry.duplicate(true))
 			continue
 		var event: Dictionary = event_value
@@ -161,7 +163,7 @@ static func compact_quarantined_events(events: Array) -> Array:
 			compacted.append(entry.duplicate(true))
 			continue
 		var max_mode := bool(event.get("max_mode", false))
-		var aggregate_key := "%s|%s|%s" % [metric, str(max_mode), String(event.get("device_id", ""))]
+		var aggregate_key := "%s|%s|%s|%s" % [reason, metric, str(max_mode), String(event.get("device_id", ""))]
 		var incoming_count := maxi(1, int(entry.get("aggregate_count", event.get("aggregate_count", 1))))
 		if not aggregate_index_by_key.has(aggregate_key):
 			var aggregate_event := event.duplicate(true)
@@ -172,7 +174,7 @@ static func compact_quarantined_events(events: Array) -> Array:
 			aggregate_event["last_client_sequence"] = int(event.get("last_client_sequence", event.get("client_sequence", 0)))
 			var aggregate_entry := {
 				"event": aggregate_event,
-				"reason": "queue_capacity_compacted",
+				"reason": "queue_capacity_compacted" if reason in ["queue_capacity", "queue_capacity_compacted"] else reason,
 				"at": int(entry.get("at", 0)),
 				"aggregate_count": incoming_count,
 			}

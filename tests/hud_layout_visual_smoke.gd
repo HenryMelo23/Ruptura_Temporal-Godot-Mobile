@@ -36,6 +36,8 @@ func _run() -> void:
 	game.card_cost = 500
 	game.player_hp = 450
 	game.player_hp_max = 450
+	game.player_run_level = 8
+	game.player_run_xp = 420
 	game.mode = "game"
 
 	game.ui_platform_override = game.UI_PLATFORM_DESKTOP
@@ -56,7 +58,7 @@ func _run() -> void:
 	game.ui_platform_override = game.UI_PLATFORM_ANDROID
 	await _capture_profile(Vector2i(800, 450), "hud_boss_name_mobile_800x450.png")
 
-	print("HUD_LAYOUT_VISUAL_OK captures=%d desktop=true mobile=true boss_name=true no_overlap=true basic_fire_frames=2" % captures.size())
+	print("HUD_LAYOUT_VISUAL_OK captures=%d desktop=true mobile=true boss_name=true run_level=true no_overlap=true basic_fire_frames=2" % captures.size())
 	game.queue_free()
 	await process_frame
 	await create_timer(0.6).timeout
@@ -87,8 +89,6 @@ func _check_no_overlap(viewport: Vector2) -> void:
 	var action_keys: Array[String] = ["attack", "skill", "secondary", "dash"]
 	if game.buttons.has("lacerante_empower"):
 		action_keys.append("lacerante_empower")
-	if game.buttons.has("bombastica_detonator"):
-		action_keys.append("bombastica_detonator")
 	for key in action_keys:
 		var rect: Rect2 = game.buttons[key]
 		_check(rect.position.x >= -0.5 and rect.position.y >= -0.5, key + " left/top clipped")

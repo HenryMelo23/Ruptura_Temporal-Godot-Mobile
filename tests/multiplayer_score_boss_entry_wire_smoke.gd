@@ -7,6 +7,8 @@ var requested_reward := false
 
 
 func _result_path(result_role: String) -> String:
+	if result_dir != "":
+		return result_dir.path_join("%s_result.txt" % result_role)
 	return "res://.agent_logs/score_boss_wire_%d_%s.txt" % [port, result_role]
 
 

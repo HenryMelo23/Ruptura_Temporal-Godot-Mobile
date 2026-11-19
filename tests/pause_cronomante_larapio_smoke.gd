@@ -1,6 +1,7 @@
 extends SceneTree
 
 var game: Node
+var failed := false
 
 
 func _initialize() -> void:
@@ -13,7 +14,7 @@ func _expect(ok: bool, message: String) -> void:
 	if ok:
 		return
 	printerr("PAUSE_CRONOMANTE_LARAPIO_SMOKE_FAIL " + message)
-	quit(1)
+	failed = true
 
 
 func _run() -> void:
@@ -25,15 +26,25 @@ func _run() -> void:
 		game.music_player.play()
 	game.music_player.seek(6.0)
 	var paused_at: float = game.music_player.get_playback_position()
+	_expect(paused_at >= 5.5, "test_music_seek_failed")
 	game._begin_pause_music_fade_out()
 	_expect(game.music_paused_by_pause, "music_not_marked_paused")
 	_expect(game.music_player.stream_paused, "stream_not_paused")
+	_expect(game.music_player.get_playback_position() >= paused_at - 0.30, "music_position_lost_during_pause")
 	game._begin_pause_music_fade_in()
 	_expect(game.music_pause_fade_mode == "in", "fade_in_not_started")
 	_expect(not game.music_player.stream_paused, "stream_still_paused")
 	_expect(game.music_player.get_playback_position() >= paused_at - 0.30, "music_resume_restarted_track")
 	game._update_music_pause_fade(3.1)
 	_expect(game.music_pause_fade_mode == "", "fade_in_not_finished")
+	for cycle in range(2):
+		var before_cycle: float = game.music_player.get_playback_position()
+		game._apply_pause_state(true)
+		_expect(game.mode == "paused" and game.music_player.stream_paused, "pause_cycle_%d_failed" % cycle)
+		game._apply_pause_state(false)
+		_expect(game.mode == "game", "resume_cycle_%d_failed" % cycle)
+		_expect(game.music_player.get_playback_position() >= before_cycle - 0.30, "music_restart_on_pause_cycle_%d" % cycle)
+		game._update_music_pause_fade(3.1)
 
 	game.boss_active = true
 	game.boss_hp = game.boss_hp_max * 0.25
@@ -92,5 +103,6 @@ func _run() -> void:
 	var new_corner_pos: Vector2 = corner_larapio["pos"]
 	_expect(new_corner_pos.x > old_corner_pos.x and new_corner_pos.y > old_corner_pos.y, "larapio_did_not_leave_corner")
 
-	print("PAUSE_CRONOMANTE_LARAPIO_SMOKE_OK fade=true rewind_feedback=true larapio_steal_loot=true")
-	quit(0)
+	if not failed:
+		print("PAUSE_CRONOMANTE_LARAPIO_SMOKE_OK fade=true rewind_feedback=true larapio_steal_loot=true")
+	quit(1 if failed else 0)

@@ -1,0 +1,11 @@
+[
+  "/usr/bin/python3",
+  "tools/umbra_mind_fit.py",
+  "/home/hermes/Documentos/GitHub/Ruptura_Temporal-Godot-Mobile/.agent_logs/umbra_evidence/20261116_fit_v2/training.jsonl",
+  "--out",
+  "/home/hermes/Documentos/GitHub/Ruptura_Temporal-Godot-Mobile/.agent_logs/umbra_evidence/20261116_fit_v2/candidate.json",
+  "--blend",
+  "0.5",
+  "--min-samples",
+  "25"
+]

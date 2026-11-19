@@ -1,15 +1,14 @@
 {
-  "version": "2.0.53",
-  "version_code": 25300,
-  "filename": "Ruptura_Temporal_2.0.53.x86_64",
-  "sha256": "85dd3cd84dcafb6c919b52dba8e31c4b423e9412bea9f41aac92e4ce430b4b0a",
-  "size": 924514464,
+  "version": "2.1.3",
+  "version_code": 27300,
+  "filename": "Ruptura_Temporal_2.1.3.x86_64",
+  "sha256": "12ac949b7dfe4585af863e73a27e48ddcf7288fcb8633581841916a59d776c93",
+  "size": 1024221320,
   "notes": [
-    "Nova categoria de cartas incomuns, com identidade azul e efeitos aprimorados.",
-    "Ferrolho de Ruptura, Rastro de Retorno, Eco de Impacto e Zona de Descompressao foram promovidas.",
-    "No multiplayer, host e terceiro jogador usam Geovana; o segundo jogador usa Henry.",
-    "Corrigidos a ordem de entrada, a preparacao e o inicio da partida multiplayer."
+    "Sertao e Cripta de Seda entram no ciclo e funcionam em equipe.",
+    "Escolhas pos-chefe e Chips Quanticos sao compartilhados pelo grupo.",
+    "Lobby, loja e combate receberam correcoes de estabilidade."
   ],
-  "mandatory": false,
-  "published_at": "2026-10-19T23:55:48.5180549Z"
+  "mandatory": true,
+  "published_at": "2026-11-18T15:53:53Z"
 }

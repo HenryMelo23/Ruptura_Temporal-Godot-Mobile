@@ -53,5 +53,21 @@ func _run() -> void:
 	DirAccess.make_dir_absolute(ProjectSettings.globalize_path("res://.codex"))
 	var output := "res://.codex/app_update_popup_1280x720.png"
 	_check(image.save_png(output) == OK, "save failed")
-	print("APP_UPDATE_VISUAL_OK " + ProjectSettings.globalize_path(output))
+
+	root.size = Vector2i(960, 540)
+	game.app_update_status = "downloading"
+	game.app_update_download_resume_offset = int(payload["size"]) / 3
+	viewport = Vector2(960, 540)
+	panel = game._app_update_panel_rect(viewport)
+	actions = game._app_update_button_rects(viewport)
+	_check(Rect2(Vector2.ZERO, viewport).encloses(panel), "resume panel escaped mobile landscape viewport")
+	_check(actions.size() == 1 and panel.encloses(actions[0]), "resume action escaped mobile landscape panel")
+	game.queue_redraw()
+	await process_frame
+	await process_frame
+	image = root.get_texture().get_image()
+	_check(image != null and image.get_width() == 960 and image.get_height() == 540, "invalid resume capture")
+	var resume_output := "res://.codex/app_update_resume_960x540.png"
+	_check(image.save_png(resume_output) == OK, "resume capture save failed")
+	print("APP_UPDATE_VISUAL_OK available=" + ProjectSettings.globalize_path(output) + " resume=" + ProjectSettings.globalize_path(resume_output))
 	quit(0)

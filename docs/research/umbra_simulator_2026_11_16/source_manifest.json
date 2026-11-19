@@ -1,0 +1,27 @@
+{
+  "git_commit": "63d0ac59920fae8e9cef1cc37e3dfa7f08dbdb44",
+  "godot": "4.7.2.stable.official.ed1daf0bf",
+  "source_sha256": {
+    "scripts/systems/umbra_observation_schema.gd": "86ac4996ea706f9890f2814356a9f0f12d80e41c2ccbd65fb901a1be7c94e676",
+    "scripts/systems/umbra_multihead_policy.gd": "638052d49bb93017b3c325f663d61b0d0271821b3cf008a8c89315274e0362e0",
+    "tools/umbra_rl_rollout.gd": "d103a9524771f9fc23c7e50a99591a1594193cef6210742f354f84b8f18539bc",
+    "tools/umbra_rl_runtime.gd": "760142c411e2af8652f9e8737c486fd183e36a64cddedce2d9908af5d7d6744d",
+    "tools/umbra_rl_scene.tscn": "099d71b06f0aac3b56311d112ad4921b35653c569e9d34be278287f5eabec03a",
+    "tools/apolo_observation.gd": "c04a2856427cf90dcbe24558e40fd2494e65b00ac1e48ec3c23e2a81c2a6564a",
+    "tools/umbra_rl_contract.gd": "ff7dcf4af7094b273e18d9568cf71d52cca7d531faef2655ef9082c8d6d256fe",
+    "tools/umbra_rl_curriculum.py": "3a21916d13669320bd040d0dedc0b30b32ba1dc9814d150b2a48021dd3c35fcf",
+    "tools/config/umbra_rl_curriculum_v2.json": "9dc60ef9dd233a581e8b527a6a82f8844ba9196305d7835060fe6c4739482d49",
+    "tools/train_umbra_ppo.py": "db688b7b779bbe51e31288b9daaaee589785f115f127fdc2e771e6d452daeaf0",
+    "tests/umbra_training_environment_smoke.gd": "610543ad23a884dc26af9b007e50cc529b1a7d45c7ffd8e1d2861b30993902eb",
+    "tools/umbra_rl_protocol_smoke.py": "4ae594bd214cdd54858d616fb7f6d52c925d2dcce562d18b8465b28d02b21add",
+    "tools/umbra_rl_curriculum_smoke.py": "9ab71a3c62296387dd941d5cb196eb1dab91a7084e8c95b66de66b34d5ddabeb",
+    "scripts/main_runtime_core.gd": "4f42b65e90e65fe1de62bd5b229808a1ecb34e8aca1a68acfa4a8314bce69f1d",
+    "scripts/main_runtime_state.gd": "4ed295238719d76fb8db6411564beedb002484b5077a229674083a8b3cb4af0a"
+  },
+  "production_base_sha256": "f30fd5fa6d326516e0ee0a496602c55eae7f56eae18dd0edfc5975c39bd06c3e",
+  "protocol": 2,
+  "observation_schema": 3,
+  "action_schema": 3,
+  "gradient_training_executed": false,
+  "multiplayer_sessions_executed": false
+}

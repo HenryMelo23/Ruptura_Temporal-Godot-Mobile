@@ -67,7 +67,12 @@ func _run() -> void:
 						center_luminance += a.get_luminance()
 					brightness_delta += b.get_luminance() - a.get_luminance()
 					samples += 1
-			_check(moving > 15, "phase %d is static (low=%s)" % [phase, low_resource])
+			if low_resource:
+				_check(moving == 0, "phase %d low-resource map still spends GPU time animating" % phase)
+				_check(layer.material == layer.static_material, "phase %d low-resource map did not use the opaque static material" % phase)
+			else:
+				_check(moving > 15, "phase %d is static (low=%s)" % [phase, low_resource])
+				_check(layer.material == layer.life_material, "phase %d full-quality map lost its shader material" % phase)
 			_check(center_changed == 0, "central masonry moves in phase %d" % phase)
 			# Sparse stone bevels are acceptable; broad luminous areas are not.
 			_check(float(center_bright) / center_samples < 0.02 and center_luminance / center_samples < 0.40, "central hotspot in phase %d" % phase)

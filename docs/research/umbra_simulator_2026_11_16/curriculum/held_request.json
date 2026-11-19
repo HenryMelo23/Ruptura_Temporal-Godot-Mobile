@@ -1,0 +1,12 @@
+{
+  "protocol": "ruptura_umbra_rl",
+  "protocol_version": 2,
+  "curriculum_version": 2,
+  "reward_version": 2,
+  "scenario_id": "prismatica_devota_heldout",
+  "seed": 919,
+  "max_steps": 8,
+  "step_seconds": 0.12,
+  "policy_mode": "legal_cycle",
+  "sample_actions": true
+}

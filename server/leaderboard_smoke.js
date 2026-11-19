@@ -14,15 +14,18 @@ const storePath = path.join(logDir, "leaderboard_smoke_runs.json");
 const securityStorePath = path.join(logDir, "leaderboard_smoke_security.json");
 const updateRoot = path.join(logDir, "android_update_smoke");
 const windowsUpdateRoot = path.join(logDir, "windows_update_smoke");
+const linuxUpdateRoot = path.join(logDir, "linux_update_smoke");
 const contentUpdateRoot = path.join(logDir, "content_update_smoke");
 fs.mkdirSync(logDir, { recursive: true });
 if (fs.existsSync(storePath)) fs.rmSync(storePath, { force: true });
 if (fs.existsSync(securityStorePath)) fs.rmSync(securityStorePath, { force: true });
 fs.rmSync(updateRoot, { recursive: true, force: true });
 fs.rmSync(windowsUpdateRoot, { recursive: true, force: true });
+fs.rmSync(linuxUpdateRoot, { recursive: true, force: true });
 fs.rmSync(contentUpdateRoot, { recursive: true, force: true });
 fs.mkdirSync(updateRoot, { recursive: true });
 fs.mkdirSync(windowsUpdateRoot, { recursive: true });
+fs.mkdirSync(linuxUpdateRoot, { recursive: true });
 fs.mkdirSync(contentUpdateRoot, { recursive: true });
 const fakeApk = Buffer.from("RUPTURA_ANDROID_UPDATE_SMOKE");
 const fakeApkName = "ruptura_temporal_2.0.27_smoke.apk";
@@ -48,6 +51,14 @@ fs.writeFileSync(path.join(windowsUpdateRoot, "latest.json"), JSON.stringify({
   mandatory: false,
   published_at: "2026-07-16T12:00:00Z"
 }));
+const fakeLinux = Buffer.from("RUPTURA_LINUX_UPDATE_SMOKE");
+const fakeLinuxName = "Ruptura_Temporal_2.0.27_smoke.x86_64";
+fs.writeFileSync(path.join(linuxUpdateRoot, fakeLinuxName), fakeLinux);
+fs.writeFileSync(path.join(linuxUpdateRoot, "latest.json"), JSON.stringify({
+  version: "2.0.27", version_code: 227, filename: fakeLinuxName,
+  sha256: crypto.createHash("sha256").update(fakeLinux).digest("hex"), notes: ["Linux smoke"], mandatory: false,
+  published_at: "2026-07-16T12:00:00Z"
+}));
 const fakeContentPack = Buffer.from("RUPTURA_CONTENT_UPDATE_SMOKE");
 const fakeContentPackName = "ruptura_content_2.0.27_smoke.pck";
 fs.writeFileSync(path.join(contentUpdateRoot, fakeContentPackName), fakeContentPack);
@@ -57,7 +68,8 @@ fs.writeFileSync(path.join(contentUpdateRoot, "latest.json"), JSON.stringify({
   packs: [{
     filename: fakeContentPackName,
     sha256: crypto.createHash("sha256").update(fakeContentPack).digest("hex"),
-    required_game_version_code: 227
+    required_game_version_code: 227,
+    signature: Buffer.from("RUPTURA_CONTENT_SIGNATURE_SMOKE").toString("base64")
   }],
   notes: ["Conteudo incremental smoke"],
   published_at: "2026-07-16T12:00:00Z"
@@ -146,6 +158,7 @@ async function run() {
       RUN_SECURITY_PATH: securityStorePath,
       ANDROID_UPDATE_ROOT: updateRoot,
       WINDOWS_UPDATE_ROOT: windowsUpdateRoot,
+      LINUX_UPDATE_ROOT: linuxUpdateRoot,
       CONTENT_UPDATE_ROOT: contentUpdateRoot,
       STREAM_MANAGER_PUBLIC_BASE_URL: `http://127.0.0.1:${port}`,
       ALLOW_LOCAL_PUBLIC_BASE_URL: "1"
@@ -164,7 +177,7 @@ async function run() {
     assert.strictEqual(removedStream.status, 410, "removed stream endpoint should return 410");
     assert(JSON.parse(removedStream.body.toString("utf8")).error.includes("streaming disabled"), "removed stream response should explain the disabled state");
     const emptyHome = (await request("GET", "/leaderboard")).body.toString("utf8");
-    assert(emptyHome.includes("CENTRAL DO OBSERVATORIO") && emptyHome.includes("NENHUMA EXPEDICAO SINCRONIZADA"), "empty dashboard state missing");
+    assert(emptyHome.includes("CENTRAL DO OBSERVATORIO") && emptyHome.includes("Aguardando expedições com mérito."), "empty dashboard state missing");
     assertCleanHtml("empty home", emptyHome);
     const nowUnix = Math.floor(Date.now() / 1000);
     const payload = {
@@ -173,6 +186,9 @@ async function run() {
       version: "2.0.27",
       platform: "Windows",
       result: "Derrota",
+      death_cause: "Espreitador — contato",
+      death_source: "espreitador",
+      death_phase: 3,
       started_unix: nowUnix - 333,
       ended_unix: nowUnix,
       duration_seconds: 333,
@@ -182,7 +198,7 @@ async function run() {
       boss_damage_total: 4232,
       enemy_damage_total: 14000,
       damage_taken_total: 870,
-      manifestation: "Ancorada",
+      manifestation: "Gravitante",
       spectrum: "Sanguinaria",
       cards_total: 2,
       cards_detail: [{ id: "Porcao", name: "Porcao", count: 1 }, { id: "Defesa", name: "Defesa", count: 1 }],
@@ -208,12 +224,29 @@ async function run() {
         hit_rate: 0.5077,
         stationary_ratio: 0.18
       },
+      umbra_knowledge: {
+        schema_version: 1,
+        total_percent: 68,
+        archetype: "SOBREVIVENTE_ADAPTATIVO",
+        sample_seconds: 333,
+        phases_observed: 3,
+        categories: {
+          movement: { percent: 82, insight: "Mantem deslocamento frequente" },
+          shooting: { percent: 71, insight: "Prioriza disparos confirmados" },
+          choices: { percent: 64, insight: "Concentra compras em poucos efeitos" },
+          preferences: { percent: 73, insight: "Prioriza pressao ofensiva" },
+          weaknesses: { percent: 50, insight: "Maior exposicao: Espreitador" }
+        },
+        behavior_vector: { edge_ratio: 0.1261, corner_ratio: 0.012, center_ratio: 0.2733, stationary_ratio: 0.18, dash_per_minute: 3.96, shots_per_minute: 46.8, hit_rate: 0.5077, damage_taken_per_minute: 156.75 }
+      },
       boss_detail: [{ phase: 1, reached: true, duration: "00:20", damage: 4232 }]
     };
     const created = await request("POST", "/runs", payload);
     assert.strictEqual(created.status, 202, "legacy unsigned run should be stored only for audit");
     const createdPayload = JSON.parse(created.body.toString("utf8"));
     const stored = createdPayload.run;
+    assert.strictEqual(stored.deathCause, "Espreitador — contato", "death cause should be stored");
+    assert.strictEqual(stored.deathSource, "espreitador", "death source should be stored");
     assert.strictEqual(stored.rankEligible, false, "legacy unsigned run should not be competitive");
     assert(stored.suspicionReasons.includes("legacy_unsigned_protocol_closed"), "legacy audit reason missing");
     assert.strictEqual(createdPayload.runUrl, `http://127.0.0.1:${port}/leaderboard/run/${stored.id}`, "run URL should point to the exact run");
@@ -319,7 +352,7 @@ async function run() {
     assert.strictEqual(signedCreated.status, 201, "signed 2.0.30c session-backed run was not accepted");
     const signedStored = JSON.parse(signedCreated.body.toString("utf8")).run;
     assert.strictEqual(signedStored.rankEligible, true, "signed run should remain eligible");
-    assert(signedStored.serverScore > 0 && signedStored.score === signedStored.serverScore, "server score was not applied to signed run");
+    assert(signedStored.serverScore > 0 && signedStored.ranking.version === 2 && signedStored.score === signedStored.ranking.total, "legacy signature score and competitive merit must be independent");
     assert(Array.isArray(signedStored.timeline) && signedStored.timeline.length >= 2, "signed run timeline was not preserved");
     assert.strictEqual(signedStored.timeline[0].source, "initial", "signed run initial baseline was not preserved");
     assert.strictEqual(signedStored.analysisCalculable, true, "signed run should be calculable after the 2 minute checkpoint");
@@ -449,20 +482,36 @@ async function run() {
     const catalog = (await request("GET", "/leaderboard/catalogo")).body.toString("utf8");
     const summary = (await request("GET", `/leaderboard/run/${signedStored.id}`)).body.toString("utf8");
     const missing = (await request("GET", "/leaderboard/linha-inexistente")).body.toString("utf8");
-    assert(home.includes("CENTRAL DO OBSERVATORIO") && home.includes("Maior dano em boss") && home.includes("36.000"), "dashboard metrics missing");
-    assert(home.includes("OPERADOR EM DESTAQUE") && home.includes("Expedicoes recentes") && home.includes("Buscar operador"), "dashboard observatory shell missing");
-    assert(profile.includes("DOSSIE DO OPERADOR") && profile.includes("Build mais usada") && profile.includes("Ancorada + Sanguinaria"), "player profile missing");
+    const downloads = (await request("GET", "/leaderboard/downloads")).body.toString("utf8");
+    assert(home.includes("CENTRAL DO OBSERVATORIO") && home.includes("Mérito de expedição") && home.includes("pontos por tempo"), "merit dashboard missing");
+    assert(home.includes("EXPEDIÇÃO EM DESTAQUE") && home.includes("Expedições recentes") && home.includes("Buscar operador"), "dashboard observatory shell missing");
+    assert(profile.includes("DOSSIE DO OPERADOR") && profile.includes("Build mais usada") && profile.includes("Gravitante + Sanguinaria"), "player profile missing");
     assert(loserProfile.includes("LOSER") && loserProfile.includes("Observatorio viu a gambiarra temporal"), "tampered player profile loser warning missing");
-    assert(rankings.includes("MATRIZ COMPETITIVA") && rankings.includes("Plano cartesiano") && rankings.includes("Maior progressao") && rankings.includes("Speedrun de progressao"), "ranking charts missing");
-    assert(story.includes("ARQUIVO NARRATIVO") && story.includes("ramificacao inicial"), "story page missing");
+    assert(rankings.includes("MATRIZ COMPETITIVA") && rankings.includes("Resistir ao confronto") && !rankings.includes("Speedrun de progressao"), "merit rules missing or time competition retained");
+    assert(story.includes("A HISTÓRIA DA RUPTURA") && story.includes("Até onde você iria por quem ama?") && story.includes("O DESFECHO PERTENCE AO JOGADOR"), "story page missing");
+    assert(!story.includes("ramificacao inicial") && !story.includes("céus caem"), "story must not retain old map order or reveal an ending");
     assert(catalog.includes("CATALOGO HISTORICO") && catalog.includes("Cartas mais presentes"), "catalog page missing");
     assert(summary.includes("RELATORIO DE EXPEDICAO") && summary.includes("Mapa de calor e dano") && summary.includes("Espreitador"), "run summary telemetry missing");
+    assert(summary.includes("Causa da morte") && summary.includes("Espreitador — contato"), "run death cause feedback missing");
     assert(summary.includes("Grafico da partida") && summary.includes("Pontos/min") && summary.includes("Vida dos inimigos") && summary.includes("Condicoes do score"), "run numeric timeline analysis missing");
-    assert(home.includes("Mente da UMBRA") && home.includes("Camadas 1, 2 e 3"), "UMBRA dashboard layer panel missing");
+    assert(home.includes("Mente da UMBRA") && home.includes("/leaderboard/umbra"), "UMBRA observatory link missing");
+    assert(home.includes("Baixar o jogo") && home.includes("/leaderboard/downloads"), "download call to action missing");
+    assert(home.includes("<span class=\"nav-sync\"><i></i>v2.0.27"), "active build should come from the published update manifests");
+    assert(downloads.includes("<span class=\"nav-sync\"><i></i>v2.0.27"), "downloads header should use the published active build");
+    assert(downloads.includes("Baixar para Windows") && downloads.includes("Baixar para Linux") && downloads.includes("Baixar APK Android"), "download platforms missing");
+    assert(downloads.includes(fakeExeName) && downloads.includes(fakeLinuxName) && downloads.includes(fakeApkName), "download page did not use live manifests");
+    assert(!downloads.includes(`http://127.0.0.1:${port}/updates/`), "download page must preserve the browser's verified host");
+    assert(downloads.includes("https://rupturatemporal.cloud") && downloads.includes("SHA-256"), "download trust guidance missing");
+    const observatoryPage = await request("GET", "/leaderboard/umbra");
+    assert.strictEqual(observatoryPage.status, 200);
+    assert(observatoryPage.body.toString("utf8").includes("Esquivas da Umbra: ainda sem medição verificável."));
+    const observatory = JSON.parse((await request("GET", "/umbra/observatory/latest")).body.toString("utf8"));
+    assert.strictEqual(observatory.evasionAvailable, false);
+    assert(observatory.baselineAt);
     assert(profile.includes("Dossie UMBRA") && profile.includes("Memoria predatoria do operador"), "player UMBRA dossier missing");
-    assert(summary.includes("Elegibilidade para treino") && summary.includes("Usada no treino"), "run UMBRA training section missing");
+    assert(summary.includes("Elegibilidade para a mente") && summary.includes("Elegível para agregação"), "run UMBRA aggregation section missing");
     assert(missing.includes("LINHA TEMPORAL NAO LOCALIZADA") && missing.includes("Voltar ao observatorio"), "not found page missing");
-    for (const [label, html] of [["home", home], ["profile", profile], ["loser profile", loserProfile], ["rankings", rankings], ["story", story], ["catalog", catalog], ["summary", summary], ["missing", missing]]) {
+    for (const [label, html] of [["home", home], ["downloads", downloads], ["profile", profile], ["loser profile", loserProfile], ["rankings", rankings], ["story", story], ["catalog", catalog], ["summary", summary], ["missing", missing]]) {
       assertCleanHtml(label, html);
     }
     const cardMatch = home.match(/src="([^"]*carta_por1\.png)"/i);
@@ -477,7 +526,12 @@ async function run() {
     assert.strictEqual(mindPayload.refresh_days, 7, "UMBRA mind should advertise weekly refresh");
     assert.strictEqual(mindPayload.trained_runs, 1, "only the valid signed run should train UMBRA");
     assert(mindPayload.files && mindPayload.files["umbra_global_profile.json"], "UMBRA global profile file missing");
-    assert(mindPayload.files["umbra_player_dossiers.json"].players[signedStored.profileKey], "signed player dossier missing from UMBRA payload");
+    const privateDossierPayload = mindPayload.files["umbra_player_dossiers.json"];
+    assert(privateDossierPayload.selected, "signed player dossier missing from UMBRA payload");
+    assert.strictEqual(privateDossierPayload.players, undefined, "UMBRA payload leaked the complete player dossier map");
+    assert.strictEqual(privateDossierPayload.selected.player, undefined, "UMBRA selected dossier leaked player identity");
+    assert(privateDossierPayload.cohorts && Object.keys(privateDossierPayload.cohorts).length > 0, "UMBRA anonymous cohorts missing");
+    assert(privateDossierPayload.selected.knowledge.total_percent > 0, "UMBRA knowledge categories were not aggregated");
     const update = await request("GET", "/updates/android/latest?version_code=226");
     assert.strictEqual(update.status, 200, "update manifest endpoint failed");
     const updatePayload = JSON.parse(update.body.toString("utf8"));
@@ -513,6 +567,13 @@ async function run() {
     });
     assert.strictEqual(windowsRanged.status, 206, "EXE range download was not honored");
     assert.strictEqual(windowsRanged.body.length, 8, "EXE range returned the wrong byte count");
+    const linuxUpdate = JSON.parse((await request("GET", "/updates/linux/latest?version_code=226")).body.toString("utf8"));
+    assert.strictEqual(linuxUpdate.available, true, "newer Linux version was not offered");
+    assert(linuxUpdate.linux_url.endsWith(encodeURIComponent(fakeLinuxName)), "Linux manifest did not expose linux_url");
+    const linuxHead = await request("HEAD", new URL(linuxUpdate.linux_url).pathname);
+    assert.strictEqual(linuxHead.status, 200, "Linux HEAD download failed");
+    assert.strictEqual(linuxHead.headers["accept-ranges"], "bytes", "Linux download did not advertise resume support");
+    assert(String(linuxHead.headers["content-disposition"]).includes(fakeLinuxName), "Linux filename header missing");
     const contentUpdate = await request("GET", "/updates/content/latest?version_code=227&content_version_code=226");
     assert.strictEqual(contentUpdate.status, 200, "content update manifest endpoint failed");
     const contentPayload = JSON.parse(contentUpdate.body.toString("utf8"));

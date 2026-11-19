@@ -140,7 +140,8 @@ static func draw_local(game: Node2D, camera: Vector2, owner: RefCounted) -> void
 	_draw_remote_swings(game, camera)
 	if owner == null:
 		return
-	var center: Vector2 = Vector2(game.player_pos) - camera
+	_draw_decals(game, camera, owner.impact_decals)
+	var center: Vector2 = Vector2(game.player_pos) - camera + Vector2(0.0, -owner.leap_visual_height())
 	if owner.mutation_active() and not game.is_dead and game.player_freeze_visual_timer <= 0.0 and not game.henry_skill_cast_active and not game.henry_ultimate_cast_active and game._player_attack_pose_active():
 		_draw_swing(game, center, game.player_attack_visual_dir, game.henry_attack_visual_stage, (game.time_alive - game.last_attack_time) / (game.PLAYER_FIRE_FRAME_SECONDS * 2.0), owner.giant_active, 1.0)
 	if owner.transforming or owner.shrinking:
@@ -151,10 +152,14 @@ static func draw_local(game: Node2D, camera: Vector2, owner: RefCounted) -> void
 		_draw_impact_armor(game, center, owner, 1.0)
 	if owner.giant_active:
 		_draw_giant_status(game, center, owner, 1.0)
+	if owner.flask_active:
+		_draw_flask(game, center, owner.flask_elapsed / owner.FLASK_DURATION, 1.0)
 	if owner.guard_active:
 		_draw_guard(game, center, owner.guard_direction, owner.guard_elapsed / owner.GUARD_WINDOW, 1.0)
 	if owner.charge_active:
 		_draw_charge(game, owner.charge_origin - camera, game.player_pos - camera, owner.charge_direction, owner.charge_elapsed / owner.CHARGE_DURATION, 1.0)
+	if owner.leap_active:
+		_draw_leap(game, owner.leap_origin - camera, owner.leap_target - camera, owner.leap_elapsed / owner.LEAP_DURATION, 1.0)
 	_draw_lastro_marks(game, camera, owner)
 
 
@@ -190,7 +195,9 @@ static func draw_remote(game: Node2D, visual: Dictionary, camera: Vector2, actio
 			direction = Vector2.RIGHT
 		# Classify from the original path: distance remaining shrinks during a
 		# charge and must never turn its last half into a guard animation.
-		if origin.distance_to(target) > 120.0:
+		if origin.distance_to(target) <= 1.0:
+			_draw_flask(game, center, progress, fade)
+		elif origin.distance_to(target) > 120.0:
 			_draw_charge(game, Vector2(visual.get("origin", world_pos)) - camera, center, direction, progress, fade)
 		else:
 			_draw_guard(game, center, direction, progress, fade)
@@ -204,6 +211,10 @@ static func draw_remote(game: Node2D, visual: Dictionary, camera: Vector2, actio
 			_draw_growth(game, center, 1.0 - (elapsed - (maximum - windup)) / windup, fade)
 		else:
 			game.draw_arc(center + Vector2(0, 38), 46.0, 0.0, TAU, 42, Color(WEIGHT.r, WEIGHT.g, WEIGHT.b, 0.3 * fade), 2.0, true)
+	elif action == game.NET_ABILITY_TELEPORT and float(visual.get("extra", 0.0)) >= 100.0:
+		_draw_leap(game, Vector2(visual.get("origin", world_pos)) - camera, Vector2(visual.get("target", world_pos)) - camera, progress, fade)
+	elif action == game.NET_ABILITY_SECONDARY_END:
+		game.draw_arc(center, 42.0 + sin(progress * PI) * 18.0, 0.0, TAU, 40, Color(1.0, 0.52, 0.12, fade * (1.0 - progress)), 4.0, true)
 
 
 static func _draw_growth(game: Node2D, center: Vector2, progress: float, alpha: float) -> void:
@@ -223,6 +234,19 @@ static func _draw_growth(game: Node2D, center: Vector2, progress: float, alpha: 
 			_shape(game, 0, foot, Vector2(75.0 + release * 56.0, 22.0 + release * 18.0), index * TAU / 3.0, Color(IMPACT, sin(release * PI) * alpha * 0.6))
 
 
+## Topo da cabeca do Henry na tela (relativo ao centro), seguindo a altura real do
+## sprite: base em +40 (PLAYER_DRAW_BOX) e a arte comeca ~18/256 abaixo do topo da celula.
+## Antes as barras eram fixas em -66..-86 e o gigante (157 px) ficava com elas no rosto.
+static func _head_top(game: Node2D, owner: RefCounted) -> float:
+	var height: float = float(game.HENRY_IDLE_DRAW_HEIGHT) * float(owner.visual_height_multiplier())
+	return float(game.PLAYER_DRAW_BOX_SIZE.y) * 0.5 - height * (1.0 - 18.0 / 256.0)
+
+
+## Barras empilhadas acima da cabeca: 0 = mais baixa (impacto), 1 = vida temporaria, 2 = armadura.
+static func _bar_y(game: Node2D, owner: RefCounted, slot: int) -> float:
+	return _head_top(game, owner) - 10.0 - float(slot) * 7.0
+
+
 static func _draw_giant_status(game: Node2D, center: Vector2, owner: RefCounted, alpha: float) -> void:
 	var ratio := clampf(1.0 - owner.giant_elapsed / owner.GIANT_DURATION, 0.0, 1.0)
 	var foot := center + Vector2(0, 42)
@@ -233,8 +257,41 @@ static func _draw_giant_status(game: Node2D, center: Vector2, owner: RefCounted,
 		_shape(game, 1, pos, Vector2(3.8, 2.0), 0.0, Color(tint, alpha * 0.6))
 	if owner.giant_temp_hp > 0.0:
 		var guard_ratio := clampf(owner.giant_temp_hp / maxf(1.0, game.player_hp_max * owner.GIANT_TEMP_HP_RATIO), 0.0, 1.0)
-		game.draw_rect(Rect2(center + Vector2(-30, -78), Vector2(60, 4)), Color(0.03, 0.05, 0.04, 0.78 * alpha), true)
-		game.draw_rect(Rect2(center + Vector2(-29, -77), Vector2(58 * guard_ratio, 2)), Color(WEIGHT.r, WEIGHT.g, WEIGHT.b, 0.9 * alpha), true)
+		var guard_y := _bar_y(game, owner, 1)
+		game.draw_rect(Rect2(center + Vector2(-30, guard_y), Vector2(60, 4)), Color(0.03, 0.05, 0.04, 0.78 * alpha), true)
+		game.draw_rect(Rect2(center + Vector2(-29, guard_y + 1), Vector2(58 * guard_ratio, 2)), Color(WEIGHT.r, WEIGHT.g, WEIGHT.b, 0.9 * alpha), true)
+	if owner.giant_armor > 0.0:
+		var armor_ratio := clampf(owner.giant_armor / maxf(1.0, game.player_hp_max * owner.GIANT_ARMOR_RATIO), 0.0, 1.0)
+		var armor_y := _bar_y(game, owner, 2)
+		game.draw_rect(Rect2(center + Vector2(-36, armor_y), Vector2(72, 5)), Color(0.05, 0.04, 0.02, 0.9 * alpha), true)
+		game.draw_rect(Rect2(center + Vector2(-35, armor_y + 1), Vector2(70 * armor_ratio, 3)), Color(1.0, 0.67, 0.2, 0.96 * alpha), true)
+
+
+static func _draw_flask(game: Node2D, center: Vector2, progress: float, alpha: float) -> void:
+	var p := clampf(progress, 0.0, 1.0)
+	var hand := center + Vector2(18.0, lerpf(-18.0, -48.0, sin(p * PI)))
+	_shape(game, 1, hand, Vector2(8.0, 12.0), p * 0.7, Color(INK, alpha * 0.92))
+	_shape(game, 1, hand + Vector2(0, 2), Vector2(5.0, 8.0), p * 0.7, Color(0.34, 1.0, 0.48, alpha * 0.95))
+	for index in range(4):
+		var spark := center + Vector2.from_angle(index * TAU / 4.0 + p * 1.8) * (22.0 + p * 22.0)
+		game.draw_circle(spark, 2.0 + p * 2.0, Color(0.42, 1.0, 0.54, alpha * (1.0 - p)))
+
+
+static func _draw_leap(game: Node2D, origin: Vector2, target: Vector2, progress: float, alpha: float) -> void:
+	var p := clampf(progress, 0.0, 1.0)
+	var ground := origin.lerp(target, smoothstep(0.0, 1.0, p))
+	var height := sin(p * PI) * 142.0
+	var shadow_ratio := 1.0 - height / 180.0
+	game.draw_set_transform(ground + Vector2(0, 40), 0.0, Vector2(1.0 + (1.0 - shadow_ratio) * 0.7, 0.28))
+	game.draw_circle(Vector2.ZERO, 36.0, Color(0.0, 0.0, 0.0, alpha * (0.18 + shadow_ratio * 0.22)))
+	game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	for index in range(4):
+		var trail_y := height * float(index + 1) / 5.0
+		_shape(game, 3, ground - Vector2(0, trail_y), Vector2(18.0 + index * 5.0, 3.0), -PI * 0.5, Color(IMPACT, alpha * (0.32 - index * 0.05)))
+	if p > 0.78:
+		var landing := clampf((p - 0.78) / 0.22, 0.0, 1.0)
+		_fractures(game, target + Vector2(0, 38), 40.0 + landing * 110.0, landing * alpha)
+		_dust_wave(game, target + Vector2(0, 38), 30.0 + landing * 90.0, landing, landing * alpha)
 
 
 static func _draw_impact_armor(game: Node2D, center: Vector2, owner: RefCounted, alpha: float) -> void:
@@ -247,8 +304,9 @@ static func _draw_impact_armor(game: Node2D, center: Vector2, owner: RefCounted,
 		_shape(game, 1, plate_center, Vector2(8.0, 4.5), angle, Color(INK, 0.72 * alpha))
 		_shape(game, 1, plate_center - radial * 1.5, Vector2(6.8, 2.8), angle, Color(IMPACT, (0.42 + armor_ratio * 0.42) * alpha))
 	var bar_width := 42.0
-	game.draw_rect(Rect2(center + Vector2(-bar_width * 0.5, -66), Vector2(bar_width, 3)), Color(0.03, 0.03, 0.03, 0.64 * alpha), true)
-	game.draw_rect(Rect2(center + Vector2(-bar_width * 0.5 + 1, -65), Vector2((bar_width - 2.0) * armor_ratio, 1)), Color(IMPACT.r, IMPACT.g, IMPACT.b, 0.86 * alpha), true)
+	var impact_y := _bar_y(game, owner, 0)
+	game.draw_rect(Rect2(center + Vector2(-bar_width * 0.5, impact_y), Vector2(bar_width, 3)), Color(0.03, 0.03, 0.03, 0.64 * alpha), true)
+	game.draw_rect(Rect2(center + Vector2(-bar_width * 0.5 + 1, impact_y + 1), Vector2((bar_width - 2.0) * armor_ratio, 1)), Color(IMPACT.r, IMPACT.g, IMPACT.b, 0.86 * alpha), true)
 
 
 static func _draw_guard(game: Node2D, center: Vector2, direction: Vector2, progress: float, alpha: float) -> void:
@@ -317,3 +375,65 @@ static func _draw_stack_ticks(game: Node2D, center: Vector2, stacks: int, trigge
 
 
 const LASTRO_TICKS := 5
+
+
+
+static func _decal_tex(game: Node2D, name: String) -> Texture2D:
+	if game.textures.has(name):
+		return game.textures[name] as Texture2D
+	var path := "res://assets/sprites/player/player_2_suit/" + name + ".png"
+	var tex: Texture2D = load(path) as Texture2D if ResourceLoader.exists(path) else null
+	game.textures[name] = tex
+	return tex
+
+
+## Decalques de peso: rachadura no chao, poeira, onda de choque, estrela de impacto e sulco da investida.
+static func _draw_decals(game: Node2D, camera: Vector2, decals: Array) -> void:
+	for decal_value in decals:
+		var decal: Dictionary = decal_value
+		var life := clampf(float(decal.get("life", 0.0)) / maxf(0.01, float(decal.get("max", 1.0))), 0.0, 1.0)
+		var u := 1.0 - life
+		var pos: Vector2 = Vector2(decal.get("pos", Vector2.ZERO)) - camera
+		var radius: float = float(decal.get("radius", 60.0))
+		var kind := String(decal.get("kind", "dust"))
+		match kind:
+			"crack":
+				var crack_tex := _decal_tex(game, "henry_colossus_crack_decal")
+				var fade := smoothstep(0.0, 0.3, life)
+				if crack_tex != null:
+					game.draw_texture_rect(crack_tex, Rect2(pos - Vector2(radius, radius * 0.62), Vector2(radius * 2.0, radius * 1.24)), false, Color(1.0, 1.0, 1.0, fade))
+				else:
+					_fractures(game, pos, radius * minf(1.0, u * 6.0 + 0.4), fade)
+			"dust":
+				var dust_tex := _decal_tex(game, "henry_colossus_dust_burst")
+				if dust_tex != null:
+					var r := radius * (0.5 + 0.7 * u)
+					game.draw_texture_rect(dust_tex, Rect2(pos - Vector2(r, r * 0.62), Vector2(r * 2.0, r * 1.24)), false, Color(1.0, 1.0, 1.0, life))
+				else:
+					_dust_wave(game, pos, radius, u, life)
+			"shock":
+				var r2 := radius * (0.3 + 0.9 * (1.0 - pow(1.0 - u, 2.0)))
+				var points := PackedVector2Array()
+				for index in range(33):
+					points.append(pos + Vector2.from_angle(float(index) * TAU / 32.0) * r2 * Vector2(1.0, 0.62))
+				game.draw_polyline(points, Color(CHALK.r, CHALK.g, CHALK.b, 0.85 * life), 3.0 + 5.0 * life, true)
+				game.draw_polyline(points, Color(INK.r, INK.g, INK.b, 0.4 * life), 1.5, true)
+			"star":
+				var star_tex := _decal_tex(game, "henry_colossus_impact_star")
+				var s := radius * (0.8 + 0.6 * u)
+				if star_tex != null:
+					game.draw_texture_rect(star_tex, Rect2(pos - Vector2(s, s), Vector2(s, s) * 2.0), false, Color(1.0, 1.0, 1.0, life))
+				else:
+					var spikes := PackedVector2Array()
+					for index in range(16):
+						var a := float(index) * TAU / 16.0 + float(decal.get("seed", 0)) * 0.1
+						spikes.append(pos + Vector2.from_angle(a) * s * (1.0 if index % 2 == 0 else 0.45))
+					game.draw_colored_polygon(spikes, Color(CHALK.r, CHALK.g, CHALK.b, 0.9 * life))
+					game.draw_polyline(spikes + PackedVector2Array([spikes[0]]), Color(INK.r, INK.g, INK.b, 0.8 * life), 2.0, true)
+			"furrow":
+				var dir: Vector2 = Vector2(decal.get("dir", Vector2.RIGHT)).normalized()
+				var side := dir.orthogonal()
+				var fade2 := smoothstep(0.0, 0.4, life)
+				game.draw_line(pos - dir * radius * 0.5 + side * 14.0, pos + dir * radius * 0.5 + side * 14.0, Color(DUST.r, DUST.g, DUST.b, 0.6 * fade2), 5.0, true)
+				game.draw_line(pos - dir * radius * 0.5 - side * 14.0, pos + dir * radius * 0.5 - side * 14.0, Color(DUST.r, DUST.g, DUST.b, 0.6 * fade2), 5.0, true)
+				game.draw_circle(pos + side * 22.0 * sin(u * 6.0), 6.0 * life, Color(IMPACT.r, IMPACT.g, IMPACT.b, 0.5 * life))

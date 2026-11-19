@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from umbra_rl_curriculum import generalization_report, load_curriculum, rollout_requests
+from umbra_rl_curriculum import discounted_returns, generalization_report, load_curriculum, rollout_requests
 
 try:
     import torch
@@ -36,11 +36,11 @@ except ImportError:
 
 
 PROTOCOL = "ruptura_umbra_rl"
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
 MODEL_FORMAT = "ruptura_umbra_multihead_policy"
 MODEL_FORMAT_VERSION = 1
-MODEL_VERSION = "umbra_2_0_multihead_gru"
-ACTION_SCHEMA_VERSION = 2
+MODEL_VERSION = "umbra_3_0_research_gru"
+ACTION_SCHEMA_VERSION = 3
 TENSOR_ORDER = [
     "encoder.weight", "encoder.bias", "gru.z_input", "gru.z_hidden", "gru.z_bias",
     "gru.r_input", "gru.r_hidden", "gru.r_bias", "gru.n_input", "gru.n_hidden",
@@ -131,8 +131,8 @@ def export_game_model(model: RecurrentActorCritic, contract: dict[str, Any], out
         "heads.value.weight": tensor_record(model.value_head.weight), "heads.value.bias": tensor_record(model.value_head.bias),
     }
     payload = {
-        "format": MODEL_FORMAT, "format_version": MODEL_FORMAT_VERSION, "model_version": MODEL_VERSION,
-        "observation_schema_version": contract["observation_schema_version"], "action_schema_version": ACTION_SCHEMA_VERSION,
+        "format": MODEL_FORMAT, "format_version": MODEL_FORMAT_VERSION, "model_version": contract["model_version"],
+        "observation_schema_version": contract["observation_schema_version"], "action_schema_version": contract["action_schema_version"],
         "precision": "fp32", "feature_schema": contract["feature_schema"], "action_schema": contract["action_schema"],
         "target_schema": contract["target_schema"], "spatial_schema": contract["spatial_schema"],
         "architecture": {"input_size": model.input_size, "encoder_size": model.encoder_size, "hidden_size": model.hidden_size, "action_head_size": model.action_size, "target_head_size": model.target_size},
@@ -147,7 +147,10 @@ def run_rollout(godot: str, root: Path, request: dict[str, Any], ordinal: int) -
         temp_dir = Path(temp)
         request_path, response_path = temp_dir / "request.json", temp_dir / "response.json"
         request_path.write_text(json.dumps(request), encoding="utf-8")
-        completed = call_godot(godot, root, "res://tools/umbra_rl_rollout.gd", ["--request", str(request_path), "--response", str(response_path)])
+        env = dict(os.environ, XDG_DATA_HOME=str(temp_dir / "data"), XDG_CONFIG_HOME=str(temp_dir / "config"))
+        (temp_dir / "data").mkdir()
+        (temp_dir / "config").mkdir()
+        completed = subprocess.run([godot, "--headless", "--path", str(root), "--script", "res://tools/umbra_rl_rollout.gd", "--", "--request", str(request_path), "--response", str(response_path)], env=env, capture_output=True, text=True, timeout=180)
         if completed.returncode != 0 or not response_path.exists():
             raise RuntimeError("Godot rollout failed: " + completed.stderr[-1000:])
         result = json.loads(response_path.read_text(encoding="utf-8"))
@@ -188,9 +191,9 @@ def episode_terms(model: RecurrentActorCritic, rollout: dict[str, Any]) -> tuple
         output, hidden = model.step(observation, hidden)
         action_dist = masked_distribution(output["action"], item["action_mask"])
         action = torch.tensor([item["action"]["action_index"]])
-        # The environment currently validates target/space fields but the live
-        # UMBRA executor has not bound them to abilities. Optimizing them now
-        # would train a placebo head, so PPO learns only causal action choices.
+        # The environment binds explicit spatial commands, but this optimizer
+        # samples/trains only action + value. Spatial control stays player-target
+        # unless a separate experiment explicitly opts into the untrained head.
         log_probs.append(action_dist.log_prob(action))
         entropies.append(action_dist.entropy())
         values.append(output["value"])
@@ -202,7 +205,18 @@ def ppo_update(model: RecurrentActorCritic, optimizer: torch.optim.Optimizer, ro
     with torch.no_grad():
         old_terms = [episode_terms(model, rollout) for rollout in rollouts]
         old_log_probs = [torch.cat(terms[0]).detach() for terms in old_terms]
-        returns = [torch.stack(terms[3]).flip(0).cumsum(0).flip(0).detach() for terms in old_terms]
+        returns = []
+        for rollout in rollouts:
+            transitions = rollout["transitions"]
+            last = transitions[-1]
+            bootstrap = 0.0
+            if last.get("truncated") and not last.get("terminated"):
+                hidden = model.initial_state()
+                for item in transitions:
+                    _, hidden = model.step(torch.tensor(item["observation"], dtype=torch.float32).unsqueeze(0), hidden)
+                next_output, _ = model.step(torch.tensor(last["next_observation"], dtype=torch.float32).unsqueeze(0), hidden)
+                bootstrap = float(next_output["value"].item())
+            returns.append(torch.tensor(discounted_returns([row["reward"] for row in transitions], bootstrap), dtype=torch.float32))
     last = {"loss": 0.0, "reward": 0.0}
     for _ in range(epochs):
         optimizer.zero_grad()
@@ -254,7 +268,7 @@ def main() -> int:
     parser.add_argument("--max-steps", type=int, default=48)
     parser.add_argument("--step-seconds", type=float, default=0.16)
     parser.add_argument("--workers", type=int, default=1)
-    parser.add_argument("--curriculum", default=str(Path(__file__).resolve().parent / "config" / "umbra_rl_curriculum_v1.json"))
+    parser.add_argument("--curriculum", default=str(Path(__file__).resolve().parent / "config" / "umbra_rl_curriculum_v2.json"))
     parser.add_argument("--evaluation-episodes", type=int, default=4)
     parser.add_argument("--selfplay-episodes", type=int, default=8)
     parser.add_argument("--no-selfplay-reference", action="store_true")

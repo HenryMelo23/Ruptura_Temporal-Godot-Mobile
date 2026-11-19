@@ -14,7 +14,7 @@ func _run() -> void:
 	assert(game._is_allowed_discord_webhook("https://discord.com/api/webhooks/1/token"))
 	assert(not game._is_allowed_discord_webhook("https://example.com/hook"))
 	game.gameplay_cheat_text = "QA231021"
-	assert(game._try_unlock_retornante_cheat())
+	assert(game._try_apply_gameplay_cheat())
 	assert(game.qa_data_unlocked)
 	game.run_report_webhook_url = ""
 	game.webhook_edit.text = "https://discord.com/api/webhooks/123456789/test_token"
@@ -45,6 +45,9 @@ func _run() -> void:
 	game.enemies_killed = 7
 	game.run_points_earned = 900
 	game.run_points_spent = 500
+	game.run_death_source = game.ENEMY_STALKER
+	game.run_death_cause = "Espreitador"
+	game.run_death_phase = 2
 	var payload: Dictionary = game._build_run_report_payload("Derrota")
 	assert(payload["player"] == "GeoQA")
 	assert(String(payload["profile_id"]) != "")
@@ -52,6 +55,9 @@ func _run() -> void:
 	assert(payload.has("enemy_scaling"))
 	assert(payload.has("network"))
 	assert(payload.has("settings"))
+	assert(String(payload["death_cause"]) == "Espreitador")
+	assert(String(payload["death_source"]) == game.ENEMY_STALKER)
+	assert(int(payload["death_phase"]) == 2)
 	assert(int(payload["leaderboard_score"]) > 0)
 	assert(int(payload["kills"]) == 7)
 	assert(String(payload["enemy_damage_breakdown"]).contains("Espreitador: 150"))
@@ -59,5 +65,20 @@ func _run() -> void:
 	assert(String(payload["cards"]).contains("Petro x2"))
 	assert(Array(payload["cards_detail"]).size() >= 2)
 	assert(int(payload["cards_total"]) == 3)
+	# A origem só vira causa definitiva quando a morte se confirma; a primeira
+	# queda é consumida por um revive e não pode contaminar o relatório.
+	game.run_death_source = ""
+	game.run_death_cause = ""
+	game.run_death_phase = 0
+	game.run_last_damage_source = game.ENEMY_STALKER
+	game.trembo_charges = 1
+	game.player_hp = 0
+	game._handle_player_down()
+	assert(game.run_death_cause == "")
+	game.player_hp = 0
+	game._handle_player_down()
+	assert(String(game.run_death_source) == game.ENEMY_STALKER)
+	assert(String(game.run_death_cause) == "Espreitador")
+	assert(int(game.run_death_phase) == 2)
 	print("RUN_REPORT_NICKNAME_SMOKE_OK nick=true report=true discord_guard=true qa_gate=true")
 	quit()

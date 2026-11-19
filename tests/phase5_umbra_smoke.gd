@@ -20,7 +20,8 @@ func _run() -> void:
 	assert(game.textures.get("boss5_damage", []).size() >= 5)
 	assert(game.boss_name == "UMBRA")
 	assert(game._enemy_limit() == maxi(1, int(floor(previous_cap * 0.70))))
-	assert(game.enemies.size() == 2)
+	# Mente da Umbra: sem inimigos comuns, a fase vai direto para a UMBRA (RTUmbraIntro).
+	assert(game.enemies.is_empty())
 
 	game.boss_active = true
 	game.boss_dead = false

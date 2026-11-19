@@ -38,7 +38,8 @@ func _run() -> void:
 	game.current_phase = 1
 	game._reset_boss_party_scaling_context(1)
 	var solo_hp: float = game._boss_hp_for_phase(1)
-	_check(_approx(solo_hp, game.BOSS_BASE_HP), "solo boss hp baseline changed")
+	var phase1_durability: float = game._boss_phase_durability_multiplier(1)
+	_check(_approx(solo_hp, game.BOSS_BASE_HP * phase1_durability), "solo boss durability baseline mismatch")
 	_check(_approx(game._multiplayer_boss_damage_scale(), 1.0), "solo pressure baseline changed")
 	var solo_report: Dictionary = game._boss_party_scaling_report()
 	_check(int(solo_report.get("party_size", 0)) == 1, "solo telemetry party size mismatch")
@@ -50,7 +51,7 @@ func _run() -> void:
 	game.current_phase = 1
 	game._reset_boss_party_scaling_context(1)
 	var two_player_hp: float = game._boss_hp_for_phase(1)
-	_check(_approx(two_player_hp, game.BOSS_BASE_HP * 2.0), "2p boss hp coeff mismatch")
+	_check(_approx(two_player_hp, game.BOSS_BASE_HP * phase1_durability * 2.0), "2p boss hp coeff mismatch")
 	_check(int(game._boss_party_scaling_report().get("party_size", 0)) == 2, "2p party size was not snapshotted")
 	_check(_approx(game._multiplayer_boss_damage_scale(), 0.92), "2p pressure coeff mismatch")
 	_check(_approx(game._boss_party_tempo_multiplier(), 1.12), "2p tempo coeff mismatch")
@@ -74,7 +75,7 @@ func _run() -> void:
 	game.current_phase = 2
 	game._reset_boss_party_scaling_context(2)
 	var phase2_hp: float = game._boss_hp_for_phase(2)
-	_check(_approx(phase2_hp, 8910.0 * 3.0), "new boss/fase did not recalculate 3p hp coeff")
+	_check(_approx(phase2_hp, 8910.0 * game._boss_phase_durability_multiplier(2) * 3.0), "new boss/fase did not recalculate durability and 3p hp coeff")
 	_check(_approx(game._multiplayer_boss_damage_scale(), 0.88), "new boss/fase did not recalculate 3p pressure coeff")
 	_check(_approx(game._boss_party_tempo_multiplier(), 1.22), "new boss/fase did not recalculate 3p tempo coeff")
 	_check(game._boss_party_hazard_bonus(2) == 2, "new boss/fase did not recalculate 3p hazard bonus")
@@ -91,7 +92,7 @@ func _run() -> void:
 	_check(int(report_scaling.get("party_size", 0)) == 3, "run telemetry missing boss party size")
 	_check(_approx(float(report_scaling.get("tempo_coeff", 0.0)), 1.22), "run telemetry missing tempo coeff")
 
-	print("BOSS_PARTY_SCALING_SMOKE_OK solo=1.0 two_hp=2.0 two_pressure=0.92 two_tempo=1.12 three_hp=3.0 three_pressure=0.88 three_tempo=1.22")
+	print("BOSS_PARTY_SCALING_SMOKE_OK durability=%.2f solo=1.0 two_hp=2.0 two_pressure=0.92 two_tempo=1.12 three_hp=3.0 three_pressure=0.88 three_tempo=1.22" % phase1_durability)
 	game._cleanup_runtime_resources()
 	root.remove_child(game)
 	game.queue_free()

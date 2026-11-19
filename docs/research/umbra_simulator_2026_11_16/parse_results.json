@@ -1,0 +1,9 @@
+{
+  "scripts/systems/umbra_observation_schema.gd": true,
+  "scripts/systems/umbra_multihead_policy.gd": true,
+  "tools/umbra_rl_runtime.gd": true,
+  "tools/apolo_observation.gd": true,
+  "tools/umbra_rl_rollout.gd": true,
+  "tools/umbra_rl_contract.gd": true,
+  "tests/umbra_training_environment_smoke.gd": true
+}

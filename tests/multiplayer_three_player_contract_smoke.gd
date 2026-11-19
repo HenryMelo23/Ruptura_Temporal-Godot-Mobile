@@ -50,8 +50,16 @@ func _run() -> void:
 	_check(game._combat_targets().size() == 3, "combat target registry did not expose all three players")
 	_check(is_equal_approx(game._multiplayer_enemy_hp_scale(), game.MULTIPLAYER_ENEMY_HP_SCALE_3P), "three-player enemy hp scale is not active")
 	_check(is_equal_approx(game._multiplayer_boss_damage_scale(), game.MULTIPLAYER_BOSS_DAMAGE_SCALE_3P), "three-player boss damage scale is not active")
-	_check(is_equal_approx(game._boss_hp_for_phase(1), game.BOSS_BASE_HP * game.MULTIPLAYER_BOSS_HP_SCALE_3P), "three-player boss hp scale is not active")
-	_check(game._enemy_limit() == game.ENEMY_MAX_BASE + game.MULTIPLAYER_ENEMY_LIMIT_BONUS_3P, "three-player enemy limit bonus is not active")
+	_check(is_equal_approx(game._boss_hp_for_phase(1), game.BOSS_BASE_HP * game._boss_phase_durability_multiplier(1) * game.MULTIPLAYER_BOSS_HP_SCALE_3P), "three-player boss durability/party hp scale is not active")
+	# The native phase cap and long-run pressure are intentionally dynamic. Prove
+	# the multiplayer contribution as a delta instead of assuming phase 1's old
+	# fixed base cap.
+	game.is_multiplayer = false
+	var solo_desired_enemy_limit: int = game.enemy_manager.get_desired_enemy_limit(true)
+	game.is_multiplayer = true
+	var desired_enemy_limit: int = game.enemy_manager.get_desired_enemy_limit(true)
+	_check(desired_enemy_limit - solo_desired_enemy_limit == game.MULTIPLAYER_ENEMY_LIMIT_BONUS_3P, "three-player desired enemy limit bonus is not active")
+	_check(game._enemy_limit() <= desired_enemy_limit, "device-safe enemy cap exceeded the multiplayer desired limit")
 	game.online_room_owner = true
 	game.is_host = true
 	game.run_leader_peer_id = 0
@@ -86,22 +94,8 @@ func _run() -> void:
 		rotated_arauto_targets[int(game._arauto_target_entry(true).get("peer_id", 0))] = true
 	_check(rotated_arauto_targets.size() == 3, "Arauto did not rotate between three living players")
 
-	var eclipsada_index := -1
-	for index in range(game.MANIFESTATIONS.size()):
-		if String(game.MANIFESTATIONS[index].get("key", "")) == "eclipsada":
-			eclipsada_index = index
-			break
-	_check(eclipsada_index >= 0, "Eclipsada is not registered")
-	game.selected_manifestation = eclipsada_index
-	game.manifestation_key = "eclipsada"
-	game.eclipsada_stealth_timer = 5.0
-	var stealth_enemy := {"uid": 701, "pos": game.player_pos, "target_peer_id": local_peer}
-	var stealth_target: Vector2 = game._get_enemy_target_pos(stealth_enemy)
-	_check(int(stealth_enemy.get("target_peer_id", 0)) != local_peer, "enemy retained stealthed local player as target")
-	_check(stealth_target != game.player_pos, "enemy kept following Eclipsada during invisibility")
 	game.net_players_by_peer[42]["stealthed"] = true
 	_check(game._targetable_remote_peer_ids() == [43], "remote stealth fallback restored an invisible peer")
-	game.eclipsada_stealth_timer = 0.0
 	game.net_players_by_peer[42]["stealthed"] = false
 
 	game.arauto_card_drops.clear()
@@ -116,7 +110,10 @@ func _run() -> void:
 	for fragment_value in game.arauto_evolution_fragments:
 		var fragment: Dictionary = fragment_value
 		fragment_owners[int(fragment.get("owner_peer", -1))] = true
-	_check(fragment_owners.size() == 3, "Arauto evolution fragment was not created for every player")
+	if game.MANIFEST_EVOLUTIONS_ENABLED:
+		_check(fragment_owners.size() == 3, "Arauto evolution fragment was not created for every player")
+	else:
+		_check(fragment_owners.is_empty(), "disabled manifestation evolutions still created multiplayer fragments")
 
 	game.mp_manifest_state_by_peer = {
 		42: {"stage": game.MANIFEST_STAGE_AURA, "manifestation": 1, "aura": 2, "ready": true},

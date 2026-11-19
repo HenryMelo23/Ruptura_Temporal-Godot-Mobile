@@ -60,7 +60,7 @@ func _initialize() -> void:
 		var key := "%s|%s" % [manifestation, stage]
 		counts[key] = int(counts.get(key, 0)) + 1
 	if entries.size() != Catalog.TOTAL_EVOLUTIONS:
-		push_error("MANIFEST_EVOLUTION_CATALOG_FAIL expected 180 definitions")
+		push_error("MANIFEST_EVOLUTION_CATALOG_FAIL unexpected definition count")
 		quit(1)
 		return
 	for manifestation in Catalog.MANIFEST_THEMES.keys():

@@ -59,17 +59,11 @@ func _prepare(key: String, entry: Dictionary = {}) -> Array:
 	# placebo merely because no input was accepted.
 	game.player_start_down_fall_timer = 0.0
 	game.player_start_down_landing_timer = 0.0
-	if key == "eclipsada":
-		# Keep this public attack probe on the Sol branch: it is the branch that
-		# emits projectiles. Lua is still exercised by the E-route coverage pass.
-		game.eclipsada_form = game.ECLIPSADA_FORM_SOL
-		game.eclipsada_next_attack_time = 0.0
 	game.last_attack_time = -1000.0
 	game.last_skill_time = -1000.0
 	game.last_secondary_time = -1000.0
 	game.effects.clear()
 	game.bullets.clear()
-	game.return_bullets.clear()
 	game.enemies.clear()
 	game.shockwaves.clear()
 	game.slashes.clear()
@@ -91,9 +85,7 @@ func _prepare(key: String, entry: Dictionary = {}) -> Array:
 func _advance_combat(delta: float = 0.03, frames: int = 16) -> void:
 	for _frame in range(frames):
 		game._update_bullets(delta)
-		game._update_return_bullets(delta)
 		game._update_manifest_evolution_effects(delta)
-		game._update_acorrentada_state(delta)
 
 
 func _public_attack(key: String, resolve: bool = true) -> void:
@@ -104,22 +96,13 @@ func _public_attack(key: String, resolve: bool = true) -> void:
 	if key == "lacerante":
 		game._update_lacerante_prepare(1.0)
 	if resolve:
-		# Acorrentada resolves its real windup/out/hold/return state machine.
-		# Giving it the full motion duration here avoids mistaking an incomplete
-		# animation for an evolution that failed to receive a hit event.
-		_advance_combat(0.03, 60 if key == "acorrentada" else 16)
+		_advance_combat(0.03, 16)
 
 
 func _public_skill(key: String) -> void:
 	game.effects = game.effects.filter(func(effect): return not bool(Dictionary(effect).get("skill_lock", false)))
 	game.time_alive += 10.0
 	game.last_skill_time = -1000.0
-	if key == "necronada":
-		game.necronada_vestiges = [{
-			"id": 901, "enemy_type": game.ENEMY_COMMON,
-			"pos": game.player_pos + Vector2(24.0, 0.0),
-			"profile": game._necronada_profile(game.ENEMY_COMMON), "depth": 1
-		}]
 	game._use_skill(game.player_pos + Vector2(112.0, 0.0))
 	_advance_combat(0.05, 8)
 
@@ -128,18 +111,12 @@ func _public_teleport(key: String) -> void:
 	game.effects = game.effects.filter(func(effect): return not bool(Dictionary(effect).get("skill_lock", false)))
 	game.time_alive += 10.0
 	game._execute_teleport(game.player_pos + Vector2(124.0, 0.0))
-	if key == "cartografica":
-		# Cartografica's first public TP places the pin; the second is the actual
-		# displacement and therefore the only valid evolution trigger.
-		game.time_alive += 10.0
-		game._execute_teleport(game.player_pos + Vector2(124.0, 0.0))
 	_advance_combat(0.05, 8)
 
 
 func _projectile_snapshot() -> Dictionary:
 	var all: Array = []
 	all.append_array(game.bullets)
-	all.append_array(game.return_bullets)
 	var flags := {"pierce": false, "homing": false, "prism": false, "count": all.size()}
 	for value in all:
 		var bullet: Dictionary = Dictionary(value)
@@ -238,6 +215,37 @@ func _choose_prism_pair(entry: Dictionary) -> void:
 		game._choose_manifest_evolution(0)
 	game.manifest_evolution_options = [entry]
 	game._choose_manifest_evolution(0)
+
+
+func _exercise_lacerante(entry: Dictionary) -> bool:
+	var profile: Dictionary = Dictionary(entry.get("profile", {}))
+	if not bool(profile.get("non_projectile", false)):
+		return _exercise_generic("lacerante", entry)
+	var targets := _prepare("lacerante", entry)
+	var evolution_id := String(entry.get("id", ""))
+	var repeats := 1
+	if evolution_id == "lacerante_ev1_hemorragia_crescente":
+		repeats = 4
+	elif evolution_id == "lacerante_ev2_cicatriz_persistente":
+		repeats = 3
+	elif evolution_id == "lacerante_ev2_execucao_cadeia":
+		Dictionary(targets[0])["hp"] = 60.0
+		Dictionary(targets[0])["max_hp"] = 1000.0
+	for _hit in range(repeats):
+		_public_attack("lacerante", true)
+	if evolution_id == "lacerante_ev2_cicatriz_persistente":
+		_advance_combat(0.55, 2)
+	var state := Dictionary(game.manifest_evolution_state.get("lacerante", {}))
+	var metrics := Dictionary(state.get("metrics", {}))
+	last_evidence = {
+		"effect": String(profile.get("effect", "")),
+		"metric": int(metrics.get(evolution_id, 0)),
+		"projectiles": game.bullets.size(),
+		"first_hp": float(Dictionary(targets[0]).get("hp", 0.0)),
+		"second_hp": float(Dictionary(targets[1]).get("hp", 0.0)),
+		"wounds": Array(state.get("wounds", [])).size()
+	}
+	return int(metrics.get(evolution_id, 0)) > 0 and game.bullets.is_empty()
 
 
 func _prism_state() -> Dictionary:
@@ -364,6 +372,10 @@ func _exercise_secondary_actions() -> void:
 
 
 func _run() -> void:
+	if not game.MANIFEST_EVOLUTIONS_ENABLED:
+		print("MANIFEST_EVOLUTION_PUBLIC_CONTRACT_OK disabled=true definitions=%d roster=%d" % [Catalog.TOTAL_EVOLUTIONS, game.MANIFESTATIONS.size()])
+		quit(0)
+		return
 	game._start_game()
 	var entries: Array = Catalog.all_entries()
 	_inventory_and_design_review(entries)
@@ -375,7 +387,7 @@ func _run() -> void:
 	for value in entries:
 		var entry: Dictionary = Dictionary(value)
 		var key := String(entry.get("manifestation", ""))
-		var behavior_ok := _exercise_prismatica(entry) if key == "prismatica" else _exercise_generic(key, entry)
+		var behavior_ok := _exercise_prismatica(entry) if key == "prismatica" else (_exercise_lacerante(entry) if key == "lacerante" else _exercise_generic(key, entry))
 		checked_by_manifestation[key] = int(checked_by_manifestation.get(key, 0)) + 1
 		if not behavior_ok:
 			_record_failure(entry, "public %s route produced no measurable gameplay delta over baseline" % String(Dictionary(entry.get("profile", {})).get("hook", "unknown")))
@@ -386,7 +398,7 @@ func _run() -> void:
 		if count != 12:
 			_fail("coverage incomplete for %s: %d/12" % [key, count])
 	if blocked.is_empty() and behavioral_failures.is_empty():
-		print("MANIFEST_EVOLUTION_PUBLIC_CONTRACT_OK definitions=180 source=public_attack_q_e_tp design_review_groups=%d" % design_review_groups.size())
+		print("MANIFEST_EVOLUTION_PUBLIC_CONTRACT_OK definitions=60 source=public_attack_q_e_tp design_review_groups=%d" % design_review_groups.size())
 	else:
 		print("MANIFEST_EVOLUTION_PUBLIC_CONTRACT_REPROVED placebo=%d blocked=%d design_review_groups=%d" % [behavioral_failures.size(), blocked.size(), design_review_groups.size()])
 		for item in blocked:

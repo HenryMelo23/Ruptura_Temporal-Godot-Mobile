@@ -40,7 +40,7 @@ func _run() -> void:
 	_check(game.unlock_notifications.size() == 1, "card notification was not queued")
 	game.unlock_notifications.clear()
 
-	game._queue_unlock_manifestation_by_key("necronada", "Reviver 30/30 aliados")
+	game._queue_unlock_manifestation_by_key("lacerante", "Eliminar 30/30 inimigos")
 	game._queue_unlock_spectrum_by_key("voraz", "Coletar fome 12/12")
 	_check(game.unlock_notifications.size() == 2, "manifestation and spectrum notifications were not queued")
 	_check(String(game.unlock_notifications[0].get("title", "")) == "MANIFESTACAO DESBLOQUEADA", "manifestation title mismatch")

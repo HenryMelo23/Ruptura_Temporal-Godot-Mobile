@@ -57,7 +57,7 @@ func _run() -> void:
 
 	var multiplayer_players := solo_players.duplicate(true)
 	multiplayer_players.append({"valid": true, "alive": true, "pos": Vector2(1150, 600), "velocity": Vector2(-120, 20), "hp": 30.0, "hp_max": 120.0, "cards": 13.0, "damage": 650.0, "manifestation": "prismatica", "stunned": true, "silenced": false, "action_recent": 0.5})
-	multiplayer_players.append({"valid": true, "alive": false, "pos": Vector2(900, 120), "velocity": Vector2.ZERO, "hp": 0.0, "hp_max": 100.0, "cards": 4.0, "damage": 150.0, "manifestation": "necronada", "stunned": false, "silenced": true, "action_recent": 0.0})
+	multiplayer_players.append({"valid": true, "alive": false, "pos": Vector2(900, 120), "velocity": Vector2.ZERO, "hp": 0.0, "hp_max": 100.0, "cards": 4.0, "damage": 150.0, "manifestation": "gravitante", "stunned": false, "silenced": true, "action_recent": 0.0})
 	var multiplayer := Schema.build_from_snapshot(_snapshot(multiplayer_players))
 	_assert_normalized(multiplayer, "multiplayer")
 	_check(Array(multiplayer.get("valid_player_mask", [])) == [1.0, 1.0, 0.0], "downed multiplayer slot was targetable")

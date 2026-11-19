@@ -54,12 +54,12 @@ func _run() -> void:
 		enemy["max_hp"] = 5000.0
 		enemy["stun"] = 999.0
 
-	_prepare_tp_effects(["eletrica", "necronada", "lacerante", "ancorada", "parasitica"])
+	_prepare_tp_effects(["eletrica", "lacerante", "parasitica"])
 	await _capture("teleport_vfx_pack_a_1280x720.png")
-	_prepare_tp_effects(["gravitante", "prismatica", "cartografica", "contratual", "mnesica"])
+	_prepare_tp_effects(["gravitante", "prismatica"])
 	await _capture("teleport_vfx_pack_b_1280x720.png")
 
-	print("SETTINGS_TELEPORT_VFX_VISUAL_OK settings=true teleports=10 captures=3")
+	print("SETTINGS_TELEPORT_VFX_VISUAL_OK settings=true teleports=5 captures=3")
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()
@@ -73,7 +73,6 @@ func _prepare_tp_effects(keys: Array) -> void:
 	game.tp_effects.clear()
 	game.slashes.clear()
 	game.prisms.clear()
-	game.carto_tp_window = 0.0
 	game.tp_cooldown_pending = false
 	game.tp_cooldown_release_time = -1.0
 	game.tp_cooldown_override = -1.0
@@ -86,10 +85,7 @@ func _prepare_tp_effects(keys: Array) -> void:
 		game.manifestation_key = key
 		if key == "lacerante":
 			game.slashes.append({"a": origin, "b": destination, "life": 3.0, "max": 3.0, "color": Color(1.0, 0.1, 0.18), "width": 42.0, "kind": "lacerante_tp"})
-		if key == "cartografica":
-			game._start_cartografica_teleport_pin(origin, destination)
-		else:
-			game._start_manifestation_teleport_effect(origin, destination)
+		game._start_manifestation_teleport_effect(origin, destination)
 	for effect in game.tp_effects:
 		effect["life"] = float(effect.get("max", effect.get("life", 0.5))) * 0.52
 

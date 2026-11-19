@@ -1,5 +1,8 @@
 extends SceneTree
 
+## QA visual rapido da Parasitica nova: Simbiose ativa, hospedeiros com larvas
+## (um Maduro) e Verme-Rei atacando.
+
 var game: Node
 
 
@@ -11,47 +14,41 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	game.forced_initial_phase = 1
 	game._start_game()
+	if game._tutorial_active():
+		game._finish_tutorial(false)
+	game.set_process(false)
+	game.mode = "game"
 	game.boss_ready = true
 	game.manifestation_key = "parasitica"
 	game.selected_manifestation = 4
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
 	game.player_pos = Vector2(700, 500)
 	game.enemies.clear()
+	var seeds := [5, 3, 2]
+	var i := 0
 	for pos in [Vector2(430, 330), Vector2(840, 310), Vector2(1050, 520)]:
 		game._spawn_enemy(game.ENEMY_COMMON, pos)
 		var enemy = game.enemies[game.enemies.size() - 1]
 		enemy["hp"] = 900.0
 		enemy["max_hp"] = 900.0
-		enemy["seeds"] = 4
-		enemy["parasite_mark_time"] = 6.0
-	game._spawn_secondary_parasitica()
-	var secondary = game.manifestation_secondaries[0]
-	secondary["targets"][0]["arrived"] = true
-	secondary["targets"][0]["feed_left"] = 7.2
-	secondary["targets"][0]["age"] = 2.2
-	secondary["targets"][1]["age"] = 0.82
-	secondary["targets"][2]["age"] = 1.34
-	game.effects.clear()
-
-	game._spawn_enemy(game.ENEMY_COMMON, Vector2(610, 250))
-	var marked = game.enemies[game.enemies.size() - 1]
-	marked["hp"] = 900.0
-	marked["max_hp"] = 900.0
-	marked["seeds"] = 5
-	marked["parasite_mark_time"] = 5.4
-	game.parasite_spit_zones.append({
-		"state": "active",
-		"origin": game.player_pos,
-		"target": Vector2(760, 560),
-		"age": 0.0,
-		"travel": game.PARASITE_SPIT_TRAVEL,
-		"life": 4.0,
-		"max": game.PARASITE_SPIT_DURATION,
-		"tick": 0.3,
-		"phase": 1.7,
-		"infected": {}
-	})
-
+		enemy["speed"] = 0.0
+		enemy["seeds"] = seeds[i]
+		enemy["parasite_mark_time"] = game.PARASITE_MARK_DURATION
+		i += 1
+	var ctl: RTParasiticaController = game._parasitica()
+	game.last_skill_time = -999.0
+	game._use_skill()
+	ctl.hunger = 8
+	game.enemies[1]["seeds"] = 4
+	game.last_secondary_time = -999.0
+	game._use_secondary_skill()
+	assert(ctl.sym_active and ctl.king_active())
+	for f in range(20):
+		game.time_alive += 1.0 / 30.0
+		ctl.update(1.0 / 30.0)
 	game.queue_redraw()
 	await process_frame
 	await process_frame

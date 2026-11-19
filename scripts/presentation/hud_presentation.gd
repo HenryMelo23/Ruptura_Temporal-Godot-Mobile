@@ -24,81 +24,54 @@ static func _draw_tutorial_control_highlight(game: Node2D, t: float) -> void:
 	game.draw_rect(rect.grow(4.0), Color(1.0, 0.18, 0.72, 0.64), false, 2.0)
 
 
-static func _draw_resonant_meter(game: Node2D, viewport: Vector2) -> void :
-	var rect = Rect2(viewport.x * 0.5 - 96.0, viewport.y - 52.0, 192.0, 18.0)
-	game.draw_rect(rect.grow(4.0), Color(0.0, 0.0, 0.0, 0.46), true)
-	game.draw_rect(rect.grow(4.0), Color(1.0, 0.72, 0.2, 0.36), false, 1.4)
-	var is_perfect: bool = game._resonant_is_perfect()
-	var pulse: float = (0.5 + sin(Time.get_ticks_msec() * 0.018) * 0.5) if is_perfect else 0.0
-	var perfect_zone_w: float = max(9.0, rect.size.x * (game.RESONANT_PERFECT_WINDOW / (game.RESONANT_BEAT_INTERVAL * 4.0)) * 2.0)
-	for i in range(5):
-		var x: float = rect.position.x + rect.size.x * (float(i) / 4.0)
-		var zone = Rect2(x - perfect_zone_w * 0.5, rect.position.y - 3.0, perfect_zone_w, rect.size.y + 6.0)
-		game.draw_rect(zone, Color(1.0, 0.66, 0.12, 0.16 + pulse * 0.18), true)
-		game.draw_line(Vector2(x, rect.position.y - 6.0), Vector2(x, rect.end.y + 6.0), Color(1.0, 0.86, 0.38, 0.72), 1.6)
-	var progress: float = fposmod(game.time_alive, game.RESONANT_BEAT_INTERVAL * 4.0) / (game.RESONANT_BEAT_INTERVAL * 4.0)
-	var p = Vector2(rect.position.x + rect.size.x * progress, rect.get_center().y)
-	var perfect_alpha: float = 1.0 if is_perfect else 0.42
-	if is_perfect:
-		game.draw_rect(rect.grow(8.0 + pulse * 5.0), Color(1.0, 0.7, 0.14, 0.16 + pulse * 0.12), false, 2.0)
-	game.draw_circle(p, 8.0 + pulse * 4.0, Color(1.0, 0.82, 0.22, perfect_alpha))
-	var prompt = "ATIRE AGORA" if is_perfect else "ESPERE A BATIDA"
-	var prompt_color = Color(1.0, 0.92, 0.36, 1.0) if is_perfect else Color(0.84, 0.9, 1.0, 0.72)
-	game._draw_centered(prompt, rect.get_center() + Vector2(0, -22), 13 if is_perfect else 11, prompt_color)
-	game._draw_centered("COMBO %d  x%.2f" % [game.resonant_perfect_streak, game._resonant_combo_multiplier()], rect.get_center() + Vector2(0, 22), 10, Color(1.0, 0.9, 0.62, 0.86))
-
-
 static func update_button_layout(game: Node2D, viewport: Vector2) -> void:
+	var henry_colossus: bool = game.active_character_key == game.CHARACTER_HENRY and game.mutation_key == "colosso"
 	if game._uses_desktop_ui() and game.mode != "edit_layout":
 		var desktop_rects: Dictionary = RTHudLayout.desktop_button_rects(
 			viewport,
-			game.manifestation_key == "lacerante" or game.manifestation_key == "eclipsada" or game.manifestation_key == "necronada",
-			game.manifestation_key == "bombastica",
-			not game._is_drop_game_mode() and (not game.shop_auto_enabled or game.qa_data_unlocked or game._sanitize_forced_initial_phase(game.forced_initial_phase) > 0),
+			game.manifestation_key == "lacerante" or henry_colossus,
+			false,
 			game._sanitize_desktop_hud_scale(game.desktop_hud_scale)
 		)
 		for key in ["attack", "skill", "secondary", "dash", "pause", "boss"]:
 			game.buttons[key] = desktop_rects[key]
-		for optional_key in ["lacerante_empower", "bombastica_detonator", "shop_manual"]:
+		for optional_key in ["lacerante_empower"]:
 			if desktop_rects.has(optional_key):
 				game.buttons[optional_key] = desktop_rects[optional_key]
 			else:
 				game.buttons.erase(optional_key)
+		game.buttons.erase("shop_manual")
 		return
 	var touch_rects: Dictionary = RTHudLayout.touch_button_rects(
 		game._attack_center(viewport), game._attack_scale(), game._skill_pos(viewport), game._skill_scale(),
 		game._secondary_center(viewport), game._secondary_scale(), game._dash_center(viewport), game._dash_scale(),
 		game._lacerante_empower_center(viewport), game._lacerante_empower_scale(),
-		game.manifestation_key == "lacerante" or game.manifestation_key == "eclipsada" or game.manifestation_key == "necronada" or game.mode == "edit_layout",
-		game.manifestation_key == "bombastica" and game.mode != "edit_layout", game._pause_pos(viewport), game._boss_call_pos(viewport), game._manual_shop_pos(viewport),
-		not game._is_drop_game_mode() and not (game.shop_auto_enabled and not game.qa_data_unlocked and game._sanitize_forced_initial_phase(game.forced_initial_phase) == 0 and game.mode != "edit_layout")
+		game.manifestation_key == "lacerante" or henry_colossus or game.mode == "edit_layout",
+		game._pause_pos(viewport), game._boss_call_pos(viewport), game._manual_shop_pos(viewport),
+		false
 	)
 	var custom_combat_layout: bool = game.hud_attack_pos != Vector2.ZERO or game.hud_secondary_pos != Vector2.ZERO or game.hud_dash_pos != Vector2.ZERO or game.hud_skill_pos != Vector2(-1, -1) or game.hud_lacerante_empower_pos != Vector2(-1, -1)
 	if game.mode != "edit_layout" and not custom_combat_layout and _touch_hub_has_overlap(touch_rects, viewport):
-		var organized: Dictionary = RTHudLayout.organized_touch_button_rects(viewport, game._attack_scale(), game._skill_scale(), game._secondary_scale(), game._dash_scale(), game._lacerante_empower_scale(), game.manifestation_key == "lacerante" or game.manifestation_key == "eclipsada" or game.manifestation_key == "necronada" or game.manifestation_key == "bombastica")
+		var organized: Dictionary = RTHudLayout.organized_touch_button_rects(viewport, game._attack_scale(), game._skill_scale(), game._secondary_scale(), game._dash_scale(), game._lacerante_empower_scale(), game.manifestation_key == "lacerante" or henry_colossus)
 		for key in ["attack", "skill", "secondary", "dash"]:
 			if organized.has(key):
 				touch_rects[key] = organized[key]
 		if organized.has("extra"):
-			if game.manifestation_key == "bombastica":
-				touch_rects["bombastica_detonator"] = organized["extra"]
-			else:
-				touch_rects["lacerante_empower"] = organized["extra"]
+			touch_rects["lacerante_empower"] = organized["extra"]
 	for key in ["attack", "skill", "secondary", "dash", "pause", "boss"]:
 		game.buttons[key] = touch_rects[key]
-	for optional_key in ["lacerante_empower", "bombastica_detonator", "shop_manual"]:
+	for optional_key in ["lacerante_empower"]:
 		if touch_rects.has(optional_key):
 			game.buttons[optional_key] = touch_rects[optional_key]
 		else:
 			game.buttons.erase(optional_key)
+	game.buttons.erase("shop_manual")
 
 
 static func _touch_hub_has_overlap(rects: Dictionary, viewport: Vector2) -> bool:
 	var keys: Array[String] = ["attack", "skill", "secondary", "dash"]
 	if rects.has("lacerante_empower"):
 		keys.append("lacerante_empower")
-	if rects.has("bombastica_detonator"):
-		keys.append("bombastica_detonator")
 	for i in range(keys.size()):
 		var base_rect: Rect2 = rects[keys[i]]
 		if base_rect.position.x < 0.0 or base_rect.position.y < 0.0 or base_rect.end.x > viewport.x or base_rect.end.y > viewport.y:
@@ -132,11 +105,27 @@ static func _draw_hud_bar(game: Node2D, pos: Vector2, width: float, height: floa
 	game.draw_line(pos + Vector2(0, height + 3), pos + Vector2(width * ratio, height + 3), Color(color.r, color.g, color.b, 0.5), 2)
 
 
-static func _draw_contractual_status_line(game: Node2D, pos: Vector2, label: String, color: Color) -> void:
-	var rect := Rect2(pos, Vector2(252.0, 24.0))
-	game.draw_rect(rect, Color(0.02, 0.03, 0.04, 0.72), true)
-	game.draw_rect(rect, color, false, 1)
-	game.draw_string(game.font, pos + Vector2(10.0, 17.0), label, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 20.0, game._readable_text_size(11), color)
+static func _draw_player_run_level(game: Node2D, panel: Rect2, scale_value: float = 1.0) -> void:
+	var level: int = clampi(int(game.player_run_level), 1, 10)
+	var xp: int = maxi(0, int(game.player_run_xp))
+	var needed: int = game._player_run_level_controller().xp_to_next()
+	var ratio: float = 1.0 if needed <= 0 else clampf(float(xp) / float(needed), 0.0, 1.0)
+	var bar := Rect2(panel.position + Vector2(12.0 * scale_value, panel.size.y + 22.0 * scale_value), Vector2(panel.size.x - 24.0 * scale_value, 6.0 * scale_value))
+	game.draw_rect(bar, Color(0.015, 0.035, 0.055, 0.86), true)
+	game.draw_rect(Rect2(bar.position, Vector2(bar.size.x * ratio, bar.size.y)), Color(0.16, 0.82, 1.0, 0.92), true)
+	game.draw_rect(bar, Color(0.34, 0.92, 1.0, 0.7), false, 1.0)
+	var label := "NV %d  MAX" % level if level >= 10 else "NV %d  %d/%d" % [level, xp, needed]
+	game.draw_string_outline(game.font, bar.position + Vector2(0.0, -5.0 * scale_value), label, HORIZONTAL_ALIGNMENT_LEFT, bar.size.x, int(11.0 * scale_value), 3, Color(0.01, 0.02, 0.03, 0.95))
+	game.draw_string(game.font, bar.position + Vector2(0.0, -5.0 * scale_value), label, HORIZONTAL_ALIGNMENT_LEFT, bar.size.x, int(11.0 * scale_value), Color(0.66, 0.95, 1.0, 0.92))
+
+
+## Relogio + ameaca no topo central. No retrato desce para baixo dos paineis laterais.
+static func _clock_rect(game: Node2D, viewport: Vector2, compact: bool, below: float = 0.0) -> Rect2:
+	var size := Vector2(160.0, 66.0) if compact else Vector2(204.0, 80.0)
+	var y: float = 12.0
+	if game._is_portrait(viewport):
+		y = below + 8.0
+	return Rect2(Vector2(viewport.x * 0.5 - size.x * 0.5, y), size)
 
 
 static func _draw_desktop_fps_hud(game: Node2D, viewport: Vector2) -> void:
@@ -150,6 +139,10 @@ static func _draw_desktop_fps_hud(game: Node2D, viewport: Vector2) -> void:
 static func _draw_hud(game: Node2D, viewport: Vector2) -> void :
 	if game._spectator_controls_locked():
 		game._draw_spectator_hud(viewport)
+		_draw_point_boost_hud(game, viewport)
+		return
+	if game._runtime_visual_budget_active():
+		_draw_performance_status_hud(game, viewport)
 		return
 	if game._uses_desktop_ui():
 		game._draw_desktop_hud(viewport)
@@ -161,6 +154,8 @@ static func _draw_hud(game: Node2D, viewport: Vector2) -> void :
 	var left_rect = Rect2(game._left_panel_pos(viewport), Vector2(left_w, left_h))
 	var left_alpha: float = _hud_rect_player_alpha(game, left_rect, viewport, 84.0)
 	game.hud_feedback.health_panel(game, left_rect, left_alpha)
+	var clock_rect: Rect2 = _clock_rect(game, viewport, true, left_rect.end.y)
+	game.hud_feedback.clock_panel(game, clock_rect, _hud_rect_player_alpha(game, clock_rect, viewport, 84.0), true)
 
 	var right_w = (220.0 * sm) if not portrait else min(220.0, viewport.x * 0.44)
 	var right_rect = Rect2(game._right_panel_pos(viewport), Vector2(right_w, left_h))
@@ -192,17 +187,106 @@ static func _draw_hud(game: Node2D, viewport: Vector2) -> void :
 			ping_text += "  PAR %dms" % game.net_remote_ping_ms
 		if game._is_world_replica():
 			ping_text += "  JIT %.0fms" % game.net_world_jitter_ms
-		game.draw_string(game.font, Vector2(viewport.x * 0.5 - 118.0 * sm, 28.0 * sm), ping_text, HORIZONTAL_ALIGNMENT_CENTER, 236.0 * sm, int(12 * sm), Color(0.72, 0.96, 1.0, 0.86))
-	game._draw_card_mechanic_huds(viewport, left_rect)
-	game._draw_ancorada_hud(viewport, left_rect)
-	game._draw_acorrentada_hud(viewport, left_rect)
-	game._draw_bombastica_hud(viewport, left_rect)
-	game._draw_necronada_hud(viewport, left_rect)
-	game._draw_aura_hud(viewport, left_rect)
-	game._draw_revive_heal_penalty_hud(viewport, left_rect)
+		game.draw_string(game.font, Vector2(viewport.x * 0.5 - 118.0 * sm, clock_rect.end.y + 14.0 * sm), ping_text, HORIZONTAL_ALIGNMENT_CENTER, 236.0 * sm, int(12 * sm), Color(0.72, 0.96, 1.0, 0.86))
+	_draw_point_boost_hud(game, viewport)
+	game._tutorial_guide().draw_mission(game, viewport)
 	game._draw_lacerante_coagulum_hud(viewport)
-	game._draw_contractual_order_hud(viewport)
 	game._draw_unlock_notifications(viewport)
+
+
+static func _draw_performance_status_hud(game: Node2D, viewport: Vector2) -> void:
+	var accent: Color = game._manifestation_color()
+	var hp_ratio: float = clampf(float(game.player_hp) / maxf(1.0, float(game.player_hp_max)), 0.0, 1.0)
+	var hp_color := Color(0.3, 1.0, 0.48) if hp_ratio >= 0.55 else (Color(1.0, 0.68, 0.18) if hp_ratio >= 0.25 else Color(1.0, 0.2, 0.28))
+	var left_rect := Rect2(18.0, 16.0, minf(258.0, viewport.x * 0.42), 56.0)
+	var right_rect := Rect2(viewport.x - minf(230.0, viewport.x * 0.38) - 18.0, 16.0, minf(230.0, viewport.x * 0.38), 56.0)
+	game.draw_rect(left_rect, Color(0.015, 0.025, 0.035, 0.9), true)
+	game.draw_rect(left_rect, hp_color, false, 1.0)
+	game.draw_string(game.font, left_rect.position + Vector2(10.0, 18.0), "VIDA %d / %d" % [game.player_hp, game.player_hp_max], HORIZONTAL_ALIGNMENT_LEFT, left_rect.size.x - 20.0, 13, Color.WHITE)
+	var hp_bar := Rect2(left_rect.position + Vector2(10.0, 27.0), Vector2(left_rect.size.x - 20.0, 9.0))
+	game.draw_rect(hp_bar, Color(0.08, 0.11, 0.13, 0.96), true)
+	game.draw_rect(Rect2(hp_bar.position, Vector2(hp_bar.size.x * hp_ratio, hp_bar.size.y)), hp_color, true)
+	game.hud_feedback.heal_reduction_wire(game, hp_bar, 1.0)
+	game.draw_string(game.font, left_rect.position + Vector2(10.0, 50.0), "NV %d  %s" % [int(game.player_run_level), game._phase_region_name(game.current_phase)], HORIZONTAL_ALIGNMENT_LEFT, left_rect.size.x - 20.0, 11, Color(accent.r, accent.g, accent.b, 0.9))
+	var perf_clock := Rect2(viewport.x * 0.5 - 60.0, 16.0, 120.0, 36.0)
+	game.draw_rect(perf_clock, Color(0.015, 0.025, 0.035, 0.9), true)
+	game.draw_rect(perf_clock, game.hud_feedback.THREAT_COLORS[game.hud_feedback.threat_tier(game)], false, 1.0)
+	game.draw_string(game.font, perf_clock.position + Vector2(0.0, 27.0), game.hud_feedback.clock_text(game), HORIZONTAL_ALIGNMENT_CENTER, perf_clock.size.x, 22, Color.WHITE)
+
+	game.draw_rect(right_rect, Color(0.015, 0.025, 0.035, 0.9), true)
+	game.draw_rect(right_rect, Color(0.12, 0.9, 1.0), false, 1.0)
+	game.draw_string(game.font, right_rect.position + Vector2(10.0, 22.0), "PONTOS  %s" % game.hud_feedback.display_points(game, game.score), HORIZONTAL_ALIGNMENT_LEFT, right_rect.size.x - 20.0, 16, Color.WHITE)
+	game.draw_string(game.font, right_rect.position + Vector2(10.0, 45.0), "CARTAS COMPRAVEIS: %d" % game._affordable_card_count(), HORIZONTAL_ALIGNMENT_LEFT, right_rect.size.x - 20.0, 11, Color(0.72, 0.96, 1.0))
+
+	if game.boss_active and game.boss_hp > 0.0 and not game._boss3_miasma_hides_boss_bar() and not game._umbra_miasma_hides_boss_bar():
+		var boss_rect := Rect2(viewport.x * 0.5 - 180.0, 18.0, 360.0, 24.0)
+		game.draw_rect(boss_rect, Color(0.04, 0.015, 0.025, 0.92), true)
+		game.draw_rect(Rect2(boss_rect.position, Vector2(boss_rect.size.x * clampf(game.boss_hp / maxf(1.0, game.boss_hp_max), 0.0, 1.0), boss_rect.size.y)), Color(0.92, 0.1, 0.22, 0.86), true)
+		game.draw_rect(boss_rect, Color(1.0, 0.28, 0.38), false, 1.0)
+		game._draw_centered(String(game.boss_name), boss_rect.get_center() + Vector2(0.0, 5.0), 11, Color.WHITE)
+
+	if game.is_multiplayer and game.online_connected:
+		game.draw_string(game.font, Vector2(viewport.x * 0.5 - 92.0, 58.0), "PING %sms" % (str(game.net_ping_ms) if game.net_ping_ms >= 0 else "--"), HORIZONTAL_ALIGNMENT_CENTER, 184.0, 10, Color(0.72, 0.96, 1.0, 0.86))
+	_draw_point_boost_hud(game, viewport)
+	game._tutorial_guide().draw_mission(game, viewport)
+	game._draw_lacerante_coagulum_hud(viewport)
+	game._draw_unlock_notifications(viewport)
+
+
+static func _draw_point_boost_hud(game: Node2D, viewport: Vector2) -> void:
+	_draw_fury_hud(game, viewport)
+	RTParasiticaPresentation.draw_hud(game, viewport)
+	if not game.point_boost_pickup_controller.is_active():
+		return
+	var remaining: float = game.point_boost_pickup_controller.remaining()
+	var duration: float = maxf(0.01, game.point_boost_pickup_controller.duration())
+	var ratio: float = clampf(remaining / duration, 0.0, 1.0)
+	var warning: bool = game.point_boost_pickup_controller.final_warning_active()
+	var pulse: float = 0.5 + 0.5 * sin(game.time_alive * (12.0 if warning else 4.0))
+	var width: float = minf(214.0, viewport.x * 0.42)
+	var height := 44.0
+	var y: float = 52.0 if not game.boss_active else 104.0
+	if viewport.y < 520.0:
+		y = 40.0 if not game.boss_active else 82.0
+	var rect := Rect2(Vector2(viewport.x * 0.5 - width * 0.5, y), Vector2(width, height))
+	var accent := Color(1.0, 0.46 + pulse * 0.2, 0.1, 0.96) if warning else Color(0.2, 1.0, 0.8, 0.94)
+	game.draw_rect(rect, Color(0.025, 0.045, 0.045, 0.9), true)
+	game.draw_rect(rect, accent, false, 2.0 + pulse * 0.8)
+	var coin_center := rect.position + Vector2(23.0, 20.0)
+	game.draw_circle(coin_center, 12.0 + pulse * 1.2, Color(0.08, 0.32, 0.28, 1.0))
+	game.draw_circle(coin_center, 8.5, Color(1.0, 0.76, 0.12, 1.0))
+	game.draw_arc(coin_center, 12.5, 0.0, TAU, 20, Color(0.26, 1.0, 0.82, 0.96), 1.8, true)
+	game._draw_centered("x2", coin_center + Vector2(0.0, 4.0), 10, Color(0.2, 0.12, 0.01, 0.96))
+	game.draw_string(game.font, rect.position + Vector2(43.0, 20.0), "x2 PONTOS", HORIZONTAL_ALIGNMENT_LEFT, width - 91.0, 16, Color(1.0, 0.91, 0.42))
+	game.draw_string(game.font, rect.position + Vector2(width - 52.0, 20.0), "%02ds" % int(ceil(remaining)), HORIZONTAL_ALIGNMENT_RIGHT, 42.0, 15, Color.WHITE)
+	var bar_rect := Rect2(rect.position + Vector2(43.0, 29.0), Vector2(width - 55.0, 6.0))
+	game.draw_rect(bar_rect, Color(0.04, 0.09, 0.08, 0.94), true)
+	game.draw_rect(Rect2(bar_rect.position, Vector2(bar_rect.size.x * ratio, bar_rect.size.y)), accent, true)
+
+
+## Barra da Furia (artefato de dano). Fica logo abaixo da barra do x2.
+static func _draw_fury_hud(game: Node2D, viewport: Vector2) -> void:
+	var artifacts: RTFieldArtifactController = game._field_artifacts()
+	if artifacts.fury_remaining <= 0.0:
+		return
+	var ratio: float = clampf(artifacts.fury_remaining / RTFieldArtifactController.FURY_DURATION, 0.0, 1.0)
+	var pulse: float = 0.5 + 0.5 * sin(game.time_alive * (12.0 if artifacts.fury_remaining <= 3.0 else 5.0))
+	var width: float = minf(214.0, viewport.x * 0.42)
+	var y: float = (52.0 if not game.boss_active else 104.0) + (50.0 if game.point_boost_pickup_controller.is_active() else 0.0)
+	if viewport.y < 520.0:
+		y = (40.0 if not game.boss_active else 82.0) + (48.0 if game.point_boost_pickup_controller.is_active() else 0.0)
+	var rect := Rect2(Vector2(viewport.x * 0.5 - width * 0.5, y), Vector2(width, 44.0))
+	var accent := Color(1.0, 0.36 + pulse * 0.2, 0.14, 0.96)
+	game.draw_rect(rect, Color(0.06, 0.02, 0.02, 0.9), true)
+	game.draw_rect(rect, accent, false, 2.0 + pulse * 0.8)
+	var icon := rect.position + Vector2(23.0, 20.0)
+	game.draw_circle(icon, 12.0 + pulse * 1.2, Color(0.32, 0.06, 0.03, 1.0))
+	game.draw_colored_polygon(PackedVector2Array([icon + Vector2(0, -9), icon + Vector2(6, 3), icon + Vector2(0, 8), icon + Vector2(-6, 3)]), Color(1.0, 0.74, 0.22))
+	game.draw_string(game.font, rect.position + Vector2(43.0, 20.0), "FURIA +50%", HORIZONTAL_ALIGNMENT_LEFT, width - 91.0, 16, Color(1.0, 0.7, 0.42))
+	game.draw_string(game.font, rect.position + Vector2(width - 52.0, 20.0), "%02ds" % int(ceil(artifacts.fury_remaining)), HORIZONTAL_ALIGNMENT_RIGHT, 42.0, 15, Color.WHITE)
+	var bar_rect := Rect2(rect.position + Vector2(43.0, 29.0), Vector2(width - 55.0, 6.0))
+	game.draw_rect(bar_rect, Color(0.1, 0.04, 0.03, 0.94), true)
+	game.draw_rect(Rect2(bar_rect.position, Vector2(bar_rect.size.x * ratio, bar_rect.size.y)), accent, true)
 
 
 static func _draw_revive_heal_penalty_hud(game: Node2D, viewport: Vector2, anchor: Rect2) -> void :
@@ -214,38 +298,6 @@ static func _draw_revive_heal_penalty_hud(game: Node2D, viewport: Vector2, ancho
 	game.draw_rect(rect, Color(0.04, 0.02, 0.025, 0.72), true)
 	game.draw_rect(rect, accent, false, 1.5)
 	game.draw_string(game.font, rect.position + Vector2(10.0, 20.0), "SACRIFICIO: CURAS -50%%  %.0fs" % ceil(game.revive_heal_penalty_timer), HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 20.0, game._readable_text_size(11), accent)
-
-
-static func _draw_contractual_order_hud(game: Node2D, viewport: Vector2) -> void :
-	if not game.contractual_order.is_empty():
-		var age = float(game.contractual_order.get("real_age", game.contractual_order.get("age", 0.0)))
-		var goal: int = max(1, int(game.contractual_order.get("goal", 1)))
-		var progress: int = clampi(int(game.contractual_order.get("progress", 0)), 0, goal)
-		var time_left = float(game.contractual_order.get("time_left", 0.0))
-		if age < game.CONTRACT_ORDER_EXECUTION_START_TIME:
-			var panel_size = Vector2(min(560.0, viewport.x * 0.74), 246.0)
-			var center = viewport * 0.5
-			var shrink = 1.0
-			if age < game.CONTRACT_ORDER_SLOW_IN_TIME:
-				shrink = lerpf(0.78, 1.0, clampf(age / game.CONTRACT_ORDER_SLOW_IN_TIME, 0.0, 1.0))
-			elif age >= game.CONTRACT_ORDER_READ_END_TIME:
-				shrink = lerpf(1.0, 0.58, clampf((age - game.CONTRACT_ORDER_READ_END_TIME) / game.CONTRACT_ORDER_SLOW_OUT_TIME, 0.0, 1.0))
-			var reveal_rect = Rect2(center - panel_size * shrink * 0.5, panel_size * shrink)
-			var read_left = maxf(0.0, game.CONTRACT_ORDER_READ_END_TIME - maxf(age, game.CONTRACT_ORDER_SLOW_IN_TIME))
-			var phase_label = "DESACELERANDO O MUNDO" if age < game.CONTRACT_ORDER_SLOW_IN_TIME else ("LEITURA %.0fs" % ceil(read_left) if age < game.CONTRACT_ORDER_READ_END_TIME else "PROTOCOLANDO ORDEM")
-			game._draw_judicial_order_paper(reveal_rect, String(game.contractual_order.get("label", "")), String(game.contractual_order.get("desc", "")), "%d/%d" % [progress, goal], phase_label, false)
-		else:
-			var compact_rect = Rect2(18.0, 238.0, min(330.0, viewport.x * 0.36), 104.0)
-			game._draw_judicial_order_paper(compact_rect, String(game.contractual_order.get("label", "")), "", "%d/%d" % [progress, goal], "%.0fs" % ceil(time_left), true)
-			var ratio = float(progress) / float(goal)
-			_draw_hud_bar(game, compact_rect.position + Vector2(18, 76), compact_rect.size.x - 36.0, 8.0, ratio, Color(0.54, 0.12, 0.04))
-	var y = 334.0
-	for key in game.contractual_order_rewards.keys():
-		_draw_contractual_status_line(game, Vector2(18.0, y), "BENCAO %s %.0fs" % [String(key).to_upper(), ceil(float(game.contractual_order_rewards[key]))], Color(0.38, 1.0, 0.58))
-		y += 28.0
-	for key in game.contractual_order_penalties.keys():
-		_draw_contractual_status_line(game, Vector2(18.0, y), "CONFISCO %s %.0fs" % [String(key).to_upper(), ceil(float(game.contractual_order_penalties[key]))], Color(1.0, 0.3, 0.18))
-		y += 28.0
 
 
 static func _draw_spectator_hud(game: Node2D, viewport: Vector2) -> void :
@@ -265,148 +317,64 @@ static func _draw_spectator_hud(game: Node2D, viewport: Vector2) -> void :
 static func _draw_lacerante_coagulum_hud(game: Node2D, viewport: Vector2) -> void :
 	if game.manifestation_key != "lacerante":
 		return
-	var hud_scale = game.hud_coagulum_scale
-	var center_y = viewport.y - (42.0 if not game._is_portrait(viewport) else 58.0)
-	var pulse = clamp(game.lacerante_coagulum_pulse, 0.0, 1.0)
-	var orb_radius = 13.0 + pulse * 4.0 + sin(game.time_alive * 4.0) * 1.2
-	var count_text = "(+%d)" % game.lacerante_coagula
-	var count_width = game.font.get_string_size(count_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
-	var group_width = orb_radius * 2.0 + 10.0 + count_width
-	var center = game._coagulum_hud_center(viewport, group_width, orb_radius, center_y)
+	var hud_scale: float = game.hud_coagulum_scale
+	var size: Vector2 = RTHudLayout.COAGULUM_PANEL_SIZE
+	var center: Vector2 = game._coagulum_hud_center(viewport, size.x, 0.0, 0.0)
+	var pulse: float = clampf(game.lacerante_coagulum_pulse, 0.0, 1.0)
+	var count: int = int(game.lacerante_coagula)
+	var crimson := Color(0.94, 0.06, 0.16)
 	game.draw_set_transform(center * (1.0 - hud_scale), 0.0, Vector2.ONE * hud_scale)
-	game.draw_circle(center, orb_radius + 7.0, Color(0.2, 0.0, 0.03, 0.64))
-	game.draw_circle(center, orb_radius + 2.0, Color(0.72, 0.01, 0.1, 0.34 + pulse * 0.24))
-	game.draw_circle(center, orb_radius, Color(0.94, 0.04, 0.15, 0.92))
-	game.draw_circle(center - Vector2(4.0, 4.0), orb_radius * 0.34, Color(1.0, 0.7, 0.72, 0.82))
-	game.draw_arc(center, orb_radius + 3.0, - game.time_alive * 1.8, TAU - game.time_alive * 1.8, 32, Color(1.0, 0.28, 0.36, 0.78), 1.8)
-	game.draw_string(game.font, center + Vector2(orb_radius + 10.0, 6.0), count_text, HORIZONTAL_ALIGNMENT_LEFT, count_width, 16, Color(1.0, 0.88, 0.88))
-	var label = "COAGULO TEMPORAL"
-	var label_width = game.font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
-	game.draw_string(game.font, Vector2(viewport.x * 0.5 - label_width * 0.5, center.y + 27.0), label, HORIZONTAL_ALIGNMENT_LEFT, label_width, 9, Color(1.0, 0.46, 0.52, 0.78))
+	var rect := Rect2(center - size * 0.5, size)
+	game._draw_combat_panel(rect, crimson.lerp(Color(1.0, 0.7, 0.72), pulse * 0.5), 0.62 + pulse * 0.2)
+	if pulse > 0.0:
+		game.draw_rect(rect.grow(2.0 + pulse * 3.0), Color(1.0, 0.3, 0.36, pulse * 0.6), false, 2.0)
+	# Gota de Coagulo (pulsa ao ganhar).
+	var drop_c: Vector2 = rect.position + Vector2(24.0, 26.0)
+	var drop_r: float = 10.0 * (1.0 + pulse * 0.35) + sin(game.time_alive * 3.4) * 0.6
+	game.draw_circle(drop_c + Vector2(0, 2), drop_r + 6.0, Color(0.4, 0.0, 0.05, 0.45))
+	_draw_blood_drop(game, drop_c, drop_r, Color(0.86, 0.03, 0.13), Color(1.0, 0.74, 0.76, 0.9))
+	# Contagem e bonus atuais.
+	game.draw_string(game.font, rect.position + Vector2(44.0, 16.0), "COÁGULOS", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.62, 0.66, 0.92))
+	var count_size: int = 20 + int(pulse * 6.0)
+	game.draw_string(game.font, rect.position + Vector2(44.0, 38.0), str(count), HORIZONTAL_ALIGNMENT_LEFT, -1, count_size, Color(1.0, 0.94, 0.94))
+	var bonus := "+%s%% DANO  +%s%% VEL." % [("%.1f" % (float(count) * game.LACERANTE_COAGULUM_DAMAGE_RATE * 100.0)).replace(".", ","), ("%.1f" % (float(count) * game.LACERANTE_COAGULUM_ATTACK_SPEED_RATE * 100.0)).replace(".", ",")]
+	game.draw_string(game.font, rect.position + Vector2(92.0, 22.0), bonus, HORIZONTAL_ALIGNMENT_LEFT, size.x - 98.0, 9, Color(0.98, 0.84, 0.84, 0.9))
+	# Proximo marco: a cada 10 (+1 volta do Q) e a cada 20 (+5 px e +2 cortes).
+	var next_mark: int = (count / 10 + 1) * 10
+	var progress: float = float(count % 10) / 10.0
+	var reward := "+5 PX · +2 CORTES" if next_mark % 20 == 0 else "Q +1 VOLTA"
+	var bar := Rect2(rect.position + Vector2(92.0, 31.0), Vector2(size.x - 102.0, 5.0))
+	game.draw_rect(bar, Color(0.12, 0.0, 0.02, 0.85), true)
+	game.draw_rect(Rect2(bar.position, Vector2(bar.size.x * progress, bar.size.y)), crimson, true)
+	game.draw_string(game.font, rect.position + Vector2(92.0, 46.0), "%d: %s" % [next_mark, reward], HORIZONTAL_ALIGNMENT_LEFT, size.x - 98.0, 8, Color(1.0, 0.6, 0.64, 0.82))
 	game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	# Gotas voando do alvo executado ate o painel.
+	var fly: Array = game.lacerante_execution.coagulum_fly
+	if not fly.is_empty():
+		var camera: Vector2 = game._camera(viewport)
+		var to: Vector2 = center + (drop_c - center) * hud_scale
+		for f in fly:
+			if float(f["t"]) < 0.0:
+				continue
+			var p: float = clampf(float(f["t"]) / RTLaceranteExecutionController.COAGULUM_FLY_TIME, 0.0, 1.0)
+			var from: Vector2 = Vector2(f["from"]) - camera + Vector2(0, -30)
+			var ctrl: Vector2 = from.lerp(to, 0.5) + Vector2(0, -120)
+			var e: float = p * p
+			var pos: Vector2 = from.lerp(ctrl, e).lerp(ctrl.lerp(to, e), e)
+			for k in range(3):
+				var tp: float = maxf(0.0, e - float(k + 1) * 0.06)
+				var tail: Vector2 = from.lerp(ctrl, tp).lerp(ctrl.lerp(to, tp), tp)
+				game.draw_circle(tail, 5.0 - float(k), Color(0.9, 0.04, 0.14, 0.5 - float(k) * 0.14))
+			_draw_blood_drop(game, pos, 8.0, Color(0.94, 0.05, 0.15), Color(1.0, 0.8, 0.82, 0.9))
 
 
-static func _draw_ancorada_hud(game: Node2D, viewport: Vector2, anchor: Rect2) -> void :
-	if game.manifestation_key != "ancorada":
-		return
-	var width: float = minf(224.0, viewport.x * 0.46)
-	var origin: Vector2 = game._cards_panel_pos(viewport, anchor) + Vector2(0.0, 54.0)
-	var rect: Rect2 = Rect2(origin, Vector2(width, 52.0))
-	var hud_color: Color = Color(0.28, 1.0, 0.36)
-	if game.lastro_stacks == 5:
-		hud_color = Color(0.85, 1.0, 0.88)
-	game._draw_combat_panel(rect, hud_color, 0.58)
-
-	var title_text: String = "LASTRO MOVEL"
-	if game.lastro_stacks == 5:
-		title_text = "MARCHA TOTAL"
-	game.draw_string(game.font, rect.position + Vector2(10, 17), title_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, hud_color)
-	game.draw_string(game.font, rect.position + Vector2(width - 64, 17), "%d/5" % game.lastro_stacks, HORIZONTAL_ALIGNMENT_RIGHT, 56, 12, Color.WHITE)
-
-	var module_width: float = (width - 24.0 - 16.0) / 5.0
-	var start_x: float = rect.position.x + 12.0
-	var y_pos: float = rect.position.y + 26.0
-
-	for m in range(5):
-		var m_x: float = start_x + float(m) * (module_width + 4.0)
-		var m_rect: Rect2 = Rect2(m_x, y_pos, module_width, 18.0)
-		var is_stack_active: bool = m < game.lastro_stacks
-		var is_current_stack: bool = m == game.lastro_stacks
-
-		game.draw_rect(m_rect, Color(0.04, 0.08, 0.05, 0.85), true)
-		game.draw_rect(m_rect, Color(0.12, 0.32, 0.16, 0.7), false, 1.0)
-
-		var sub_w: float = (module_width - 5.0) / 4.0
-		for sub in range(4):
-			var sub_x: float = m_x + 1.0 + float(sub) * (sub_w + 1.0)
-			var sub_rect: Rect2 = Rect2(sub_x, y_pos + 2.0, sub_w, 14.0)
-			var point_filled: bool = false
-			if is_stack_active:
-				point_filled = true
-			elif is_current_stack and sub < game.lastro_points:
-				point_filled = true
-
-			if point_filled:
-				var col: Color
-				match m:
-					0: col = Color(0.2, 0.65, 0.3, 0.9)
-					1: col = Color(0.25, 0.85, 0.35, 0.92)
-					2: col = Color(0.3, 0.95, 0.4, 0.95)
-					3: col = Color(0.35, 1.0, 0.5, 0.98)
-					4: col = Color(0.85, 1.0, 0.88, 1.0)
-					_: col = Color(0.3, 0.95, 0.4, 0.95)
-				game.draw_rect(sub_rect, col, true)
-
-
-static func _draw_acorrentada_hud(game: Node2D, viewport: Vector2, anchor: Rect2) -> void :
-	if game.manifestation_key != "acorrentada":
-		return
-	var width = min(224.0, viewport.x * 0.46)
-	var origin = game._cards_panel_pos(viewport, anchor) + Vector2(0.0, 54.0)
-	var rect = Rect2(origin, Vector2(width, 48.0))
-	game._draw_combat_panel(rect, game._acorrentada_color_hot(), 0.6)
-	var ratio = clampf(game.acorrentada_tension / 100.0, 0.0, 1.0)
-	game.draw_string(game.font, rect.position + Vector2(10, 17), "TENSAO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, game._acorrentada_color_hot())
-	game.draw_string(game.font, rect.position + Vector2(width - 64, 17), "%d%%" % int(round(game.acorrentada_tension)), HORIZONTAL_ALIGNMENT_RIGHT, 56, 12, Color.WHITE)
-	game.draw_rect(Rect2(rect.position + Vector2(12, 29), Vector2(width - 24, 7)), Color(0.05, 0.05, 0.06, 0.84), true)
-	game.draw_rect(Rect2(rect.position + Vector2(12, 29), Vector2((width - 24) * ratio, 7)), game._acorrentada_color_hot(), true)
-	for i in range(3):
-		var p = rect.position + Vector2(18 + i * 22, 42)
-		var filled: bool = i < game.acorrentada_combo_step
-		game.draw_arc(p, 6.0, 0.0, TAU, 16, Color(0.18, 0.86, 1.0, 0.86 if filled else 0.24), 2.0)
-	if game.acorrentada_tension >= 100.0:
-		game._draw_centered("SOBRETENSAO", rect.get_center() + Vector2(0, -1), 11, Color(1.0, 0.96, 0.88))
-
-
-static func _draw_bombastica_hud(game: Node2D, viewport: Vector2, anchor: Rect2) -> void :
-	if game.manifestation_key != "bombastica":
-		return
-	var width = min(224.0, viewport.x * 0.46)
-	var origin = game._cards_panel_pos(viewport, anchor) + Vector2(0.0, 54.0)
-	var rect = Rect2(origin, Vector2(width, 58.0))
-	game._draw_combat_panel(rect, Color(1.0, 0.48, 0.12), 0.58)
-	var ready_charges = game._bombastica_ready_charges()
-	game.draw_string(game.font, rect.position + Vector2(10, 17), "ESTOPIM", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.7, 0.28))
-	game.draw_string(game.font, rect.position + Vector2(width - 94, 17), "%d/%d Q" % [ready_charges, game.BOMBASTICA_Q_CHARGES], HORIZONTAL_ALIGNMENT_RIGHT, 86, 12, Color.WHITE)
-	for i in range(game.BOMBASTICA_Q_CHARGES):
-		var p = rect.position + Vector2(17 + i * 24, 34)
-		var timer = float(game.bombastica_q_recharges[i])
-		var charge_ready = timer <= 0.0
-		game.draw_circle(p, 7.0, Color(1.0, 0.54, 0.1, 0.94) if charge_ready else Color(0.12, 0.08, 0.04, 0.84))
-		game.draw_arc(p, 9.5, 0, TAU, 18, Color(1.0, 0.86, 0.32, 0.76), 1.4)
-		if not charge_ready:
-			var ratio = 1.0 - clampf(timer / game.BOMBASTICA_Q_RECHARGE, 0.0, 1.0)
-			game.draw_arc(p, 11.5, - PI * 0.5, - PI * 0.5 + TAU * ratio, 18, Color(0.18, 0.88, 1.0, 0.86), 2.0)
-	var powder_targets = game.bombastica_powder_marks.size()
-	game.draw_string(game.font, rect.position + Vector2(92, 36), "BOMBAS %d" % game.bombastica_bombs.size(), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.88, 0.54))
-	game.draw_string(game.font, rect.position + Vector2(92, 51), "POLVORA %d" % powder_targets, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.78, 1.0, 1.0))
-
-
-static func _draw_necronada_hud(game: Node2D, viewport: Vector2, anchor: Rect2) -> void :
-	if game.manifestation_key != "necronada":
-		return
-	var width = minf(262.0, viewport.x * 0.48)
-	var origin = game._cards_panel_pos(viewport, anchor) + Vector2(0.0, 54.0)
-	var rect = Rect2(origin, Vector2(width, 64.0))
-	game._draw_combat_panel(rect, game._necronada_color(), 0.58)
-	game.draw_string(game.font, rect.position + Vector2(10, 18), "JARDIM OSSUARIO", HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 20.0, game._readable_text_size(11), game._necronada_accent())
-	var start = rect.position + Vector2(18.0, 42.0)
-	for i in range(game.NECRONADA_ROSE_MAX):
-		var rose_pos = start + Vector2(i * 22.0, 0.0)
-		var filled = i < game.necronada_vestiges.size()
-		game.draw_circle(rose_pos + Vector2(0, 6), 7.0, Color(0.03, 0.04, 0.08, 0.78))
-		if filled:
-			game.draw_line(rose_pos + Vector2(0, 6), rose_pos + Vector2(0, -7), Color(0.22, 0.62, 0.32, 0.95), 1.7)
-			for p_i in range(5):
-				game.draw_circle(rose_pos + Vector2.from_angle(float(p_i) * TAU / 5.0) * 3.4 + Vector2(0, -9), 2.9, Color(0.34, 0.82, 1.0, 0.94))
-		else:
-			game.draw_arc(rose_pos, 7.0, 0.0, TAU, 18, Color(0.25, 0.32, 0.42, 0.58), 1.0)
-	var progress = clampf(float(game.necronada_horde_progress) / float(game.NECRONADA_ULTIMATE_REQUIRED_REVIVES), 0.0, 1.0)
-	var bar = Rect2(rect.position + Vector2(136.0, 34.0), Vector2(maxf(52.0, rect.size.x - 150.0), 8.0))
-	game.draw_rect(bar, Color(0.04, 0.05, 0.09, 0.82), true)
-	game.draw_rect(Rect2(bar.position, Vector2(bar.size.x * progress, bar.size.y)), Color(0.66, 0.34, 1.0, 0.92), true)
-	game.draw_rect(bar, game._necronada_accent(), false, 1.0)
-	game.draw_string(game.font, rect.position + Vector2(132.0, 58.0), "ONDA %d/%d" % [game.necronada_horde_progress, game.NECRONADA_ULTIMATE_REQUIRED_REVIVES], HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 142.0, game._readable_text_size(10), Color(0.92, 0.96, 1.0))
+static func _draw_blood_drop(game: Node2D, c: Vector2, r: float, fill: Color, shine: Color) -> void:
+	var pts := PackedVector2Array([c + Vector2(0, -r * 1.75)])
+	for i in range(9):
+		var a: float = -0.25 * PI + float(i) / 8.0 * 1.5 * PI
+		pts.append(c + Vector2(cos(a), sin(a)) * r)
+	game.draw_colored_polygon(pts, fill)
+	game.draw_circle(c + Vector2(-r * 0.32, -r * 0.1), r * 0.26, shine)
 
 
 static func _draw_card_mechanic_huds(game: Node2D, viewport: Vector2, anchor: Rect2) -> void :
@@ -659,6 +627,8 @@ static func _draw_desktop_hud(game: Node2D, viewport: Vector2) -> void:
 	var life_rect = Rect2(18.0, 16.0, 276.0, 76.0)
 	var life_alpha: float = _hud_rect_player_alpha(game, life_rect, viewport, 84.0)
 	game.hud_feedback.health_panel(game, life_rect, life_alpha)
+	var clock_rect: Rect2 = _clock_rect(game, viewport, false)
+	game.hud_feedback.clock_panel(game, clock_rect, _hud_rect_player_alpha(game, clock_rect, viewport, 84.0), false)
 	var right_rect = Rect2(viewport.x - 300.0, 16.0, 220.0, 76.0)
 	var right_alpha: float = _hud_rect_player_alpha(game, right_rect, viewport, 84.0)
 	game.hud_feedback.stats_panel(game, right_rect, right_alpha)
@@ -680,31 +650,24 @@ static func _draw_desktop_hud(game: Node2D, viewport: Vector2) -> void:
 			ping_text += "  PAR %dms" % game.net_remote_ping_ms
 		if game._is_world_replica():
 			ping_text += "  JIT %.0fms" % game.net_world_jitter_ms
-		game.draw_string(game.font, Vector2(viewport.x * 0.5 - 118.0, 28.0), ping_text, HORIZONTAL_ALIGNMENT_CENTER, 236.0, 12, Color(0.72, 0.96, 1.0, 0.86))
+		game.draw_string(game.font, Vector2(viewport.x * 0.5 - 118.0, clock_rect.end.y + 14.0), ping_text, HORIZONTAL_ALIGNMENT_CENTER, 236.0, 12, Color(0.72, 0.96, 1.0, 0.86))
 
-	game._draw_card_mechanic_huds(viewport, life_rect)
-	game._draw_ancorada_hud(viewport, life_rect)
-	game._draw_acorrentada_hud(viewport, life_rect)
-	game._draw_bombastica_hud(viewport, life_rect)
-	game._draw_necronada_hud(viewport, life_rect)
-	game._draw_aura_hud(viewport, life_rect)
-	game._draw_revive_heal_penalty_hud(viewport, life_rect)
+	_draw_point_boost_hud(game, viewport)
+	game._tutorial_guide().draw_mission(game, viewport)
 	game._draw_lacerante_coagulum_hud(viewport)
-	game._draw_contractual_order_hud(viewport)
 	game._draw_unlock_notifications(viewport)
 
 
 static func _draw_desktop_combat_hud(game: Node2D, viewport: Vector2) -> void :
 	var icons = []
+	var henry_colossus: bool = game.active_character_key == game.CHARACTER_HENRY and game.mutation_key == "colosso"
 
 	var active_eletrica_secondary = game._active_eletrica_secondary()
 	var toggle_ultimate_active = (game.manifestation_key == "prismatica" and game.time_alive - game.last_secondary_time < game.SECONDARY_PRISMATICA_DURATION) or (game.manifestation_key == "eletrica" and active_eletrica_secondary)
 	var tp_visual_active = game.tp_cooldown_pending and not game.tp_effects.is_empty()
-	var dash_label = "VOLTAR" if game.manifestation_key == "retornante" and game.retornante_tp_window > 0.0 else ("ATIVO" if tp_visual_active else "TP")
+	var dash_label = "SALTO" if henry_colossus and game.henry_colossus_ability_controller.giant_active else ("ATIVO" if tp_visual_active else "TP")
 
 	var q_charges = 0
-	if game.manifestation_key == "bombastica":
-		q_charges = game.bombastica_bombs.size()
 
 	var tp_charges = 0
 	if game.manifestation_key == "lacerante":
@@ -713,6 +676,11 @@ static func _draw_desktop_combat_hud(game: Node2D, viewport: Vector2) -> void :
 	var ult_color = Color(1.0, 0.78, 0.2, 0.95)
 	var ult_label = "ULT"
 	var ult_sub = "ULTIMATE"
+	if henry_colossus:
+		var fury_percent := int(round(game.henry_colossus_ability_controller.fury_ratio() * 100.0))
+		ult_label = "%d%%" % fury_percent
+		ult_sub = "FURIA"
+		ult_color = Color(1.0, 0.34, 0.08, 0.98)
 
 	if not active_eletrica_secondary.is_empty():
 		var tesla_t = float(active_eletrica_secondary.get("active_time", 0.0))
@@ -736,21 +704,14 @@ static func _draw_desktop_combat_hud(game: Node2D, viewport: Vector2) -> void :
 
 	icons.append({"id": "attack", "label": "ATK", "sub": "Ataque", "charges": 0, "bind": game._compact_key_binding_name("attack") if game._uses_desktop_ui() else "", "color": Color(1.0, 0.24, 0.28), "cd_elapsed": 100.0, "cd_max": 1.0, "icon_type": "sword"})
 	icons.append({"id": "skill", "label": "HAB 1", "sub": "Hab 1", "charges": q_charges, "bind": game._compact_key_binding_name("skill") if game._uses_desktop_ui() else game._compact_binding_name("skill"), "color": Color(0.2, 0.75, 1.0), "cd_elapsed": game.time_alive - game.last_skill_time, "cd_max": game._skill_cooldown(), "icon_type": "star"})
-	icons.append({"id": "secondary", "label": ult_label, "sub": ult_sub, "active": toggle_ultimate_active, "charges": 0, "bind": game._compact_key_binding_name("secondary") if game._uses_desktop_ui() else "", "color": ult_color, "cd_elapsed": game.time_alive - game.last_secondary_time, "cd_max": game._secondary_skill_cooldown(), "icon_type": "trident"})
-	icons.append({"id": "dash", "label": dash_label, "active": dash_label != "TP", "sub": "Teleporte" if dash_label == "TP" else "", "charges": tp_charges, "bind": game._compact_key_binding_name("dash") if game._uses_desktop_ui() else "", "color": Color(0.2, 0.9, 1.0), "cd_elapsed": game.time_alive - game.last_dash_time, "cd_max": game._current_dash_cooldown(), "icon_type": "portal"})
+	icons.append({"id": "secondary", "label": ult_label, "sub": ult_sub, "active": toggle_ultimate_active, "charges": 0, "bind": game._compact_key_binding_name("secondary") if game._uses_desktop_ui() else "", "color": ult_color, "cd_elapsed": game.henry_colossus_ability_controller.fury if henry_colossus else game.time_alive - game.last_secondary_time, "cd_max": game.henry_colossus_ability_controller.FURY_MAX if henry_colossus else game._secondary_skill_cooldown(), "icon_type": "trident"})
+	icons.append({"id": "dash", "label": "SALTO" if henry_colossus and game.henry_colossus_ability_controller.giant_active else dash_label, "active": dash_label != "TP", "sub": "Impacto" if henry_colossus and game.henry_colossus_ability_controller.giant_active else ("Teleporte" if dash_label == "TP" else ""), "charges": tp_charges, "bind": game._compact_key_binding_name("dash") if game._uses_desktop_ui() else "", "color": Color(1.0, 0.58, 0.18) if henry_colossus and game.henry_colossus_ability_controller.giant_active else Color(0.2, 0.9, 1.0), "cd_elapsed": game.time_alive - game.last_dash_time, "cd_max": game._current_dash_cooldown(), "icon_type": "portal"})
 
 	if game.manifestation_key == "lacerante":
-		icons.append({"id": "lacerante_empower", "label": "REFORÇO" if game.lacerante_empowered_ready else "+", "sub": "Reforço", "charges": 0, "bind": game._compact_key_binding_name("lacerante_empower") if game._uses_desktop_ui() else "", "color": Color(0.92, 0.03, 0.12, 0.92 if game.lacerante_empowered_ready else 0.68), "cd_elapsed": game.time_alive - game.last_lacerante_empower_time, "cd_max": game.LACERANTE_EMPOWER_COOLDOWN, "icon_type": "star"})
-	if game.manifestation_key == "eclipsada":
-		var form_color = game._eclipsada_color()
-		icons.append({"id": "lacerante_empower", "label": game._eclipsada_form_label(), "sub": "Forma", "charges": 0, "bind": game._compact_key_binding_name("lacerante_empower") if game._uses_desktop_ui() else "", "color": Color(form_color.r, form_color.g, form_color.b, 0.86), "cd_elapsed": 1.0, "cd_max": 1.0, "icon_type": "star"})
-	if game.manifestation_key == "necronada":
-		var necr_cd_elapsed = game.NECRONADA_EMPOWER_COOLDOWN if game.necronada_empowered_ready else game.NECRONADA_EMPOWER_COOLDOWN - maxf(0.0, game.necronada_empower_cooldown_until - game.time_alive)
-		icons.append({"id": "lacerante_empower", "label": "PO" if game.necronada_empowered_ready else "+", "sub": "Poeira", "charges": 0, "bind": game._compact_key_binding_name("lacerante_empower") if game._uses_desktop_ui() else "", "color": Color(0.52, 0.34, 0.92, 0.94 if game.necronada_empowered_ready else 0.7), "cd_elapsed": necr_cd_elapsed, "cd_max": game.NECRONADA_EMPOWER_COOLDOWN, "icon_type": "star"})
-	if game.manifestation_key == "bombastica":
-		var det_ready = 1.0 if game.bombastica_bombs.size() > 0 else 0.0
-		icons.append({"id": "bombastica_detonator", "label": "DET", "sub": "Detonar", "charges": game.bombastica_bombs.size(), "bind": game._compact_key_binding_name("lacerante_empower") if game._uses_desktop_ui() else "", "color": Color(1.0, 0.48, 0.12, 0.88 if det_ready > 0.0 else 0.44), "cd_elapsed": det_ready, "cd_max": 1.0, "icon_type": "star"})
-
+		icons.append({"id": "lacerante_empower", "label": "REFORÇO" if game.lacerante_empowered_ready else "+", "sub": "Reforço", "charges": 0, "bind": game._compact_key_binding_name("lacerante_empower") if game._uses_desktop_ui() else "", "color": Color(0.92, 0.03, 0.12, 0.92 if game.lacerante_empowered_ready else 0.68), "cd_elapsed": game._lacerante_exec().reforco_elapsed(), "cd_max": game._lacerante_exec().reforco_total, "icon_type": "star"})
+	if henry_colossus:
+		var colossus_controller = game.henry_colossus_ability_controller
+		icons.append({"id": "lacerante_empower", "label": colossus_controller.reinforcement_label(), "sub": "Retaliacao" if colossus_controller.giant_active else "Reforco", "charges": 0, "bind": game._compact_key_binding_name("lacerante_empower") if game._uses_desktop_ui() else "", "color": Color(1.0, 0.54, 0.16, 0.96), "cd_elapsed": colossus_controller.REINFORCEMENT_COOLDOWN - colossus_controller.reinforcement_cooldown, "cd_max": colossus_controller.REINFORCEMENT_COOLDOWN, "icon_type": "star"})
 	var desktop_scale: float = game._sanitize_desktop_hud_scale(game.desktop_hud_scale)
 	var card_w = 92.0
 	var card_h = 96.0
@@ -772,9 +733,14 @@ static func _draw_desktop_combat_hud(game: Node2D, viewport: Vector2) -> void :
 
 
 static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
+	var henry_colossus: bool = game.active_character_key == game.CHARACTER_HENRY and game.mutation_key == "colosso"
 	if game._uses_desktop_ui():
-		game._draw_desktop_combat_hud(viewport)
-		game._draw_desktop_session_buttons(viewport)
+		if game._runtime_visual_budget_active():
+			_draw_performance_desktop_combat_hud(game, viewport)
+			_draw_performance_desktop_session_buttons(game)
+		else:
+			game._draw_desktop_combat_hud(viewport)
+			game._draw_desktop_session_buttons(viewport)
 		if game._ability_cancel_active():
 			game._draw_ability_cancel_button(viewport)
 		game._draw_player_dance_emote(game._camera(viewport))
@@ -815,11 +781,6 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 	var skill_alpha: float = _hud_rect_player_alpha(game, Rect2(skill_c - Vector2(skill_r, skill_r), Vector2(skill_r * 2.0, skill_r * 2.0)), viewport)
 	if not game.is_gamepad_active:
 		game._draw_button(skill_c, skill_r, "HAB1", Color(game._manifestation_color().r, game._manifestation_color().g, game._manifestation_color().b, 0.7 * skill_alpha))
-	if game.manifestation_key == "bombastica" and game.bombastica_bombs.size() > 0:
-		var q_badge_center: Vector2 = skill_c + Vector2(skill_r * 0.66, - skill_r * 0.68)
-		game.draw_circle(q_badge_center, 14.0, Color(0.16, 0.0, 0.025, 0.96))
-		game.draw_arc(q_badge_center, 14.0, 0.0, TAU, 24, Color(1.0, 0.78, 0.18, 0.98), 2.0)
-		game._draw_centered("x%d" % game.bombastica_bombs.size(), q_badge_center + Vector2(0, 1), 12, Color.WHITE)
 	var secondary_c = game.buttons["secondary"].position + game.buttons["secondary"].size * 0.5
 	var secondary_r: float = minf(43.0 * game._secondary_scale(), float(game.buttons["secondary"].size.x) * 0.5)
 	var secondary_alpha: float = _hud_rect_player_alpha(game, Rect2(secondary_c - Vector2(secondary_r, secondary_r), Vector2(secondary_r * 2.0, secondary_r * 2.0)), viewport)
@@ -832,7 +793,12 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 		game.draw_circle(secondary_c, secondary_r + 9.0 + cancel_pulse * 5.0, Color(1.0, 0.0, 0.05, outer_alpha * secondary_alpha))
 		game.draw_circle(secondary_c, secondary_r * 0.96, Color(0.4, 0.0, 0.02, 0.92 * secondary_alpha))
 	if not game.is_gamepad_active:
-		game._draw_button(secondary_c, secondary_r, "CANCELAR" if toggle_ultimate_active else "ULT", _with_alpha(Color(1.0, 0.02, 0.06, 0.98) if toggle_ultimate_active else Color(1.0, 0.72, 0.22, 0.72), secondary_alpha))
+		var secondary_label := "%d%%" % int(round(game.henry_colossus_ability_controller.fury_ratio() * 100.0)) if henry_colossus else ("CANCELAR" if toggle_ultimate_active else "ULT")
+		game._draw_button(secondary_c, secondary_r, secondary_label, _with_alpha(Color(1.0, 0.34, 0.08, 0.9) if henry_colossus else (Color(1.0, 0.02, 0.06, 0.98) if toggle_ultimate_active else Color(1.0, 0.72, 0.22, 0.72)), secondary_alpha))
+	if henry_colossus:
+		var fury_ratio: float = game.henry_colossus_ability_controller.fury_ratio()
+		game.draw_arc(secondary_c, secondary_r + 9.0, -PI * 0.5, -PI * 0.5 + TAU * fury_ratio, 64, Color(1.0, 0.22, 0.04, 0.98), 5.0, true)
+		game._draw_centered("FURIA", secondary_c + Vector2(0, secondary_r + 15.0), 9, Color(1.0, 0.78, 0.42, 0.96))
 	if game.manifestation_key == "eletrica" and not toggle_ultimate_active:
 		var cd_total: float = game._secondary_skill_cooldown()
 		var cd_elapsed: float = clampf(game.time_alive - game.last_secondary_time, 0.0, cd_total)
@@ -873,7 +839,7 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 	var dash_r: float = minf(46.0 * game._dash_scale(), float(game.buttons["dash"].size.x) * 0.5)
 	var dash_alpha: float = _hud_rect_player_alpha(game, Rect2(dash_c - Vector2(dash_r, dash_r), Vector2(dash_r * 2.0, dash_r * 2.0)), viewport)
 	var tp_visual_active = game.tp_cooldown_pending and not game.tp_effects.is_empty()
-	var dash_label = "VOLTAR" if game.manifestation_key == "retornante" and game.retornante_tp_window > 0.0 else ("ATIVO" if tp_visual_active else "TP")
+	var dash_label = "SALTO" if henry_colossus and game.henry_colossus_ability_controller.giant_active else ("ATIVO" if tp_visual_active else "TP")
 	if not game.is_gamepad_active:
 		game._draw_button(dash_c, dash_r, dash_label, _with_alpha(Color(0.42, 0.28, 1.0, 0.88) if dash_label == "VOLTAR" else Color(0.2, 0.85, 1.0, 0.72), dash_alpha))
 	if game.manifestation_key == "lacerante":
@@ -889,20 +855,15 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 		var empower_c = empower_rect.get_center()
 		var empower_r = empower_rect.size.x * 0.5
 		var armed_pulse = 0.5 + sin(game.time_alive * 10.0) * 0.5
-		if game.manifestation_key == "eclipsada":
-			var form_color = game._eclipsada_color()
-			game.draw_circle(empower_c, empower_r + 7.0 + armed_pulse * 4.0, Color(form_color.r, form_color.g, form_color.b, 0.14 + armed_pulse * 0.12))
+		if henry_colossus:
+			var colossus_controller = game.henry_colossus_ability_controller
+			if colossus_controller.reinforced_hit_ready or colossus_controller.retaliation_timer > 0.0:
+				game.draw_circle(empower_c, empower_r + 7.0 + armed_pulse * 4.0, Color(1.0, 0.42, 0.08, 0.18 + armed_pulse * 0.18))
 			if not game.is_gamepad_active:
-				game._draw_button(empower_c, empower_r, game._eclipsada_form_label(), Color(form_color.r, form_color.g, form_color.b, 0.78))
-				game._draw_centered("FORMA", empower_c + Vector2(0, empower_r + 13.0), 9, Color(1.0, 0.9, 0.72, 0.92))
-		elif game.manifestation_key == "necronada":
-			if game.necronada_empowered_ready:
-				game.draw_circle(empower_c, empower_r + 7.0 + armed_pulse * 4.0, Color(0.52, 0.34, 0.92, 0.18 + armed_pulse * 0.16))
-			if not game.is_gamepad_active:
-				game._draw_button(empower_c, empower_r, "PO" if game.necronada_empowered_ready else "+", Color(0.52, 0.34, 0.92, 0.92 if game.necronada_empowered_ready else 0.68))
-				game._draw_centered("POEIRA", empower_c + Vector2(0, empower_r + 13.0), 9, game._necronada_accent())
-			if not game.necronada_empowered_ready:
-				game._draw_cooldown_overlay(empower_c, empower_r, game.NECRONADA_EMPOWER_COOLDOWN - maxf(0.0, game.necronada_empower_cooldown_until - game.time_alive), game.NECRONADA_EMPOWER_COOLDOWN)
+				game._draw_button(empower_c, empower_r, colossus_controller.reinforcement_label(), Color(1.0, 0.48, 0.12, 0.92 if colossus_controller.reinforcement_ready() else 0.58))
+				game._draw_centered("RETALIAR" if colossus_controller.giant_active else "REFORCO", empower_c + Vector2(0, empower_r + 13.0), 9, Color(1.0, 0.78, 0.48, 0.92))
+			if not colossus_controller.reinforcement_ready():
+				game._draw_cooldown_overlay(empower_c, empower_r, colossus_controller.REINFORCEMENT_COOLDOWN - colossus_controller.reinforcement_cooldown, colossus_controller.REINFORCEMENT_COOLDOWN)
 		else:
 			if game.lacerante_empowered_ready:
 				game.draw_circle(empower_c, empower_r + 7.0 + armed_pulse * 4.0, Color(1.0, 0.02, 0.1, 0.18 + armed_pulse * 0.18))
@@ -910,26 +871,10 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 				game._draw_button(empower_c, empower_r, "R" if game.lacerante_empowered_ready else "+", Color(0.92, 0.03, 0.12, 0.92 if game.lacerante_empowered_ready else 0.68))
 				game._draw_centered("REFORCO", empower_c + Vector2(0, empower_r + 13.0), 9, Color(1.0, 0.72, 0.74, 0.92))
 			if not game.lacerante_empowered_ready:
-				game._draw_cooldown_overlay(empower_c, empower_r, game.time_alive - game.last_lacerante_empower_time, game.LACERANTE_EMPOWER_COOLDOWN)
-	if game.buttons.has("bombastica_detonator"):
-		var det_rect: Rect2 = game.buttons["bombastica_detonator"]
-		var det_c = det_rect.get_center()
-		var det_r = det_rect.size.x * 0.5
-		var detonator_ready = game.bombastica_bombs.size() > 0
-		var hold_ratio = clampf(game.bombastica_detonator_hold / 0.62, 0.0, 1.0) if game.bombastica_detonator_touch_index != -1 else 0.0
-		var pulse = 0.5 + sin(game.time_alive * 11.0) * 0.5
-		if detonator_ready:
-			game.draw_circle(det_c, det_r + 7.0 + pulse * 4.0, Color(1.0, 0.48, 0.08, 0.16 + pulse * 0.12))
-		if not game.is_gamepad_active:
-			game._draw_button(det_c, det_r, "DET", Color(1.0, 0.48, 0.12, 0.88 if detonator_ready else 0.42))
-			game._draw_centered("DETONAR", det_c + Vector2(0, det_r + 13.0), 9, Color(1.0, 0.78, 0.46, 0.92))
-		if hold_ratio > 0.0:
-			game.draw_arc(det_c, det_r + 8.0, - PI * 0.5, - PI * 0.5 + TAU * hold_ratio, 42, Color(0.18, 0.88, 1.0, 0.96), 4.0)
-			game._draw_centered("TODAS", det_c + Vector2(0, - det_r - 14.0), 9, Color(0.7, 1.0, 1.0))
-
+				game._draw_cooldown_overlay(empower_c, empower_r, game._lacerante_exec().reforco_elapsed(), game._lacerante_exec().reforco_total)
 	game._draw_cooldown_overlay(atk_c, atk_r, game.time_alive - game.last_attack_time, game._current_attack_interval())
 	game._draw_cooldown_overlay(skill_c, skill_r, game.time_alive - game.last_skill_time, game._skill_cooldown())
-	if not toggle_ultimate_active:
+	if not toggle_ultimate_active and not henry_colossus:
 		game._draw_cooldown_overlay(secondary_c, secondary_r, game.time_alive - game.last_secondary_time, game._secondary_skill_cooldown())
 	if game.tp_cooldown_pending and game.tp_cooldown_release_time <= 0.0 and not game.tp_effects.is_empty():
 		var active_tp: Dictionary = game.tp_effects[0]
@@ -937,31 +882,6 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 	else:
 		game._draw_cooldown_overlay(dash_c, dash_r, game.time_alive - game.last_dash_time, game._current_dash_cooldown())
 	game._draw_hud_rect_button(game.buttons["pause"], "II", _with_alpha(Color(0.0, 1.0, 0.82), _hud_rect_player_alpha(game, game.buttons["pause"], viewport, 72.0)))
-	if game.buttons.has("shop_manual"):
-		var shop_rect: Rect2 = game.buttons["shop_manual"]
-		var shop_ready: bool = game._affordable_card_count() > 0 and game.mode == "game" and game._manual_shop_available()
-		var shop_grace: bool = game._manual_shop_grace_active()
-		var bargain_pending: bool = game.has_method("_bargain_pending_discount_remaining") and game._bargain_pending_discount_remaining() > 0.0
-		var shop_cooldown: float = game._manual_shop_cooldown_remaining()
-		var shop_accent = Color(1.0, 0.78, 0.22) if bargain_pending else Color(0.3, 1.0, 0.62) if shop_grace else Color(0.0, 1.0, 0.82) if shop_ready else Color(0.38, 0.42, 0.46)
-		var shop_alpha: float = _hud_rect_player_alpha(game, shop_rect, viewport, 82.0)
-		var shop_label: String = "REABRIR" if shop_grace else "LOJA"
-		var shop_top: String = game._manual_shop_status_text()
-		if shop_top == "":
-			shop_top = "LOJA %d" % game.card_cost
-		game._draw_hud_rect_button(shop_rect, shop_label, _with_alpha(shop_accent, shop_alpha))
-		game._draw_centered(shop_top, shop_rect.get_center() + Vector2(0, -29), 11 if shop_top.length() > 14 else 12, Color(shop_accent.r, shop_accent.g, shop_accent.b, 0.96 * shop_alpha))
-		if shop_cooldown > 0.0:
-			var cooldown_total: float = maxf(0.01, game.SHOP_MANUAL_REOPEN_COOLDOWN)
-			var progress: float = clampf(1.0 - shop_cooldown / cooldown_total, 0.0, 1.0)
-			var ring_rect: Rect2 = shop_rect.grow(4.0)
-			game.draw_arc(ring_rect.get_center(), maxf(ring_rect.size.x, ring_rect.size.y) * 0.5, -PI * 0.5, -PI * 0.5 + TAU * progress, 48, Color(0.72, 0.9, 1.0, 0.78 * shop_alpha), 3.0, true)
-		elif shop_grace:
-			var grace_progress: float = clampf(game._manual_shop_grace_remaining() / maxf(0.01, game.SHOP_MANUAL_ACCIDENTAL_CLOSE_GRACE), 0.0, 1.0)
-			game.draw_arc(shop_rect.get_center(), maxf(shop_rect.size.x, shop_rect.size.y) * 0.56, -PI * 0.5, -PI * 0.5 + TAU * grace_progress, 48, Color(0.46, 1.0, 0.62, 0.86 * shop_alpha), 3.0, true)
-		elif game.shop_manual_cooldown_pulse > 0.0:
-			var pulse_alpha: float = clampf(game.shop_manual_cooldown_pulse, 0.0, 1.0) * shop_alpha
-			game.draw_rect(shop_rect.grow(5.0), Color(0.0, 1.0, 0.82, 0.22 * pulse_alpha), false, 2.0)
 	if game.boss_ready and not game.boss_active and not game.boss_dead and game.experimental_phase_controller.should_show_boss_button():
 		var boss_rect: Rect2 = game.buttons["boss"]
 		var boss_alpha: float = _hud_rect_player_alpha(game, boss_rect, viewport, 82.0)
@@ -971,6 +891,53 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 		game._draw_ability_cancel_button(viewport)
 	game._draw_dance_wheel(viewport)
 	game._draw_player_dance_emote(game._camera(viewport))
+
+
+static func _draw_performance_desktop_combat_hud(game: Node2D, viewport: Vector2) -> void:
+	var henry_colossus: bool = game.active_character_key == game.CHARACTER_HENRY and game.mutation_key == "colosso"
+	var active_eletrica: Dictionary = game._active_eletrica_secondary()
+	var secondary_active: bool = not active_eletrica.is_empty() or not game._active_prismatica_secondary().is_empty()
+	var dash_label := "SALTO" if henry_colossus and game.henry_colossus_ability_controller.giant_active else "TP"
+	var entries: Array[Dictionary] = [
+		{"label": "ATK", "bind": game._compact_key_binding_name("attack"), "elapsed": game.time_alive - game.last_attack_time, "cooldown": game._current_attack_interval(), "color": Color(1.0, 0.24, 0.28)},
+		{"label": "HAB 1", "bind": game._compact_key_binding_name("skill"), "elapsed": game.time_alive - game.last_skill_time, "cooldown": game._skill_cooldown(), "color": Color(0.2, 0.75, 1.0)},
+		{"label": "%d%%" % int(round(game.henry_colossus_ability_controller.fury_ratio() * 100.0)) if henry_colossus else ("CANCELAR" if secondary_active else "ULT"), "bind": game._compact_key_binding_name("secondary"), "elapsed": game.henry_colossus_ability_controller.fury if henry_colossus else (game._secondary_skill_cooldown() if secondary_active else game.time_alive - game.last_secondary_time), "cooldown": game.henry_colossus_ability_controller.FURY_MAX if henry_colossus else game._secondary_skill_cooldown(), "color": Color(1.0, 0.34, 0.08) if henry_colossus else (Color(1.0, 0.18, 0.24) if secondary_active else Color(1.0, 0.78, 0.2))},
+		{"label": dash_label, "bind": game._compact_key_binding_name("dash"), "elapsed": game.time_alive - game.last_dash_time, "cooldown": game._current_dash_cooldown(), "color": Color(0.2, 0.9, 1.0)}
+	]
+	if game.manifestation_key == "lacerante":
+		entries.append({"label": "REFORCO" if game.lacerante_empowered_ready else "+", "bind": game._compact_key_binding_name("lacerante_empower"), "elapsed": game._lacerante_exec().reforco_elapsed(), "cooldown": game._lacerante_exec().reforco_total, "color": Color(0.92, 0.03, 0.12)})
+	elif henry_colossus:
+		var colossus_controller = game.henry_colossus_ability_controller
+		entries.append({"label": colossus_controller.reinforcement_label(), "bind": game._compact_key_binding_name("lacerante_empower"), "elapsed": colossus_controller.REINFORCEMENT_COOLDOWN - colossus_controller.reinforcement_cooldown, "cooldown": colossus_controller.REINFORCEMENT_COOLDOWN, "color": Color(1.0, 0.5, 0.14)})
+	var width := 84.0
+	var height := 48.0
+	var gap := 8.0
+	var total_width := width * entries.size() + gap * maxi(0, entries.size() - 1)
+	var start := Vector2(viewport.x * 0.5 - total_width * 0.5, viewport.y - height - 20.0)
+	for index in range(entries.size()):
+		var entry: Dictionary = entries[index]
+		var rect := Rect2(start + Vector2(float(index) * (width + gap), 0.0), Vector2(width, height))
+		var color: Color = entry["color"]
+		var cooldown: float = maxf(0.01, float(entry["cooldown"]))
+		var ratio: float = clampf(float(entry["elapsed"]) / cooldown, 0.0, 1.0)
+		game.draw_rect(rect, Color(0.015, 0.025, 0.035, 0.9), true)
+		game.draw_string(game.font, rect.position + Vector2(7.0, 28.0), "%s  %s" % [String(entry["bind"]), String(entry["label"])], HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 14.0, 10, Color.WHITE)
+		game.draw_rect(Rect2(rect.position + Vector2(6.0, rect.size.y - 6.0), Vector2((rect.size.x - 12.0) * ratio, 2.0)), color, true)
+	if game._should_draw_desktop_fps_counter():
+		game.draw_string(game.font, Vector2(viewport.x - 94.0, viewport.y - 22.0), "%d FPS" % Engine.get_frames_per_second(), HORIZONTAL_ALIGNMENT_RIGHT, 76.0, 11, Color(0.2, 0.92, 1.0))
+
+
+static func _draw_performance_desktop_session_buttons(game: Node2D) -> void:
+	var entries: Array[Dictionary] = []
+	if game.buttons.has("pause"):
+		entries.append({"rect": game.buttons["pause"], "label": "II", "color": Color(0.0, 1.0, 0.82)})
+	if game.boss_ready and not game.boss_active and not game.boss_dead and game.buttons.has("boss") and game.experimental_phase_controller.should_show_boss_button():
+		entries.append({"rect": game.buttons["boss"], "label": "BOSS", "color": Color(1.0, 0.52, 0.16)})
+	for entry in entries:
+		var rect: Rect2 = entry["rect"]
+		var color: Color = entry["color"]
+		game.draw_rect(rect, Color(0.015, 0.025, 0.035, 0.9), true)
+		game.draw_string(game.font, rect.position + Vector2(5.0, rect.size.y * 0.5 + 5.0), String(entry["label"]), HORIZONTAL_ALIGNMENT_CENTER, rect.size.x - 10.0, 10, color)
 
 
 static func _draw_edit_layout_safe_guides(game: Node2D, viewport: Vector2) -> void:
@@ -1075,11 +1042,7 @@ static func _draw_edit_layout(game: Node2D, viewport: Vector2) -> void :
 	game.draw_rect(boss_rect, c_boss, false, 2)
 	game._draw_centered("BOSS HP", boss_rect.get_center(), 14, Color.WHITE)
 
-	var shop_rect = Rect2(game._manual_shop_pos(viewport), Vector2(104, 42))
-	game.buttons["shop_manual"] = shop_rect
-	var c_shop = Color(1, 1, 0, 0.6) if game.edit_layout_selected == "shop_manual" else Color(0.0, 1.0, 0.82, 0.3)
-	game.draw_rect(shop_rect, c_shop, false, 2)
-	game._draw_centered("LOJA", shop_rect.get_center(), 14, Color.WHITE)
+	game.buttons.erase("shop_manual")
 
 	var aura_rect = Rect2(game._aura_panel_pos(viewport, left_rect), Vector2(min(224.0, viewport.x * 0.46), 48.0) * game.hud_aura_panel_scale)
 	var c_aura = Color(1, 1, 0, 0.6) if game.edit_layout_selected == "aura_panel" else Color(0.54, 0.82, 1.0, 0.3)
@@ -1096,7 +1059,7 @@ static func _draw_edit_layout(game: Node2D, viewport: Vector2) -> void :
 		game._draw_layout_scale_controls(cards_rect)
 
 	var coag_center = game._coagulum_hud_center(viewport, 120.0, 13.0, viewport.y - (42.0 if not portrait else 58.0))
-	var coag_size = Vector2(160, 48) * game.hud_coagulum_scale
+	var coag_size = RTHudLayout.coagulum_panel_size(game.hud_coagulum_scale)
 	var coag_rect = Rect2(coag_center - coag_size * 0.5, coag_size)
 	var c_coag = Color(1, 1, 0, 0.6) if game.edit_layout_selected == "coagulum" else Color(1.0, 0.12, 0.22, 0.3)
 	game.draw_rect(coag_rect, c_coag, false, 2)

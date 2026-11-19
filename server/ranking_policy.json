@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 2,
+  "name": "Mérito de expedição",
+  "withdrawnRunIds": ["d21f9000b1e8370f59"],
+  "withdrawalReason": "Registro de balanceamento legado retirado da competição; histórico preservado.",
+  "phasePoints": 1000,
+  "bossPoints": 2000,
+  "resilienceMax": 500,
+  "damageReferencePerPhase": 500,
+  "victoryPoints": 3000
+}

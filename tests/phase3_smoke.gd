@@ -75,8 +75,9 @@ func _run() -> void:
 	game.boss_dead = false
 	game.boss_active = true
 	game.boss_hp = 1.0
+	var expected_phase_after_two: int = game._next_phase_after_boss(2)
 	game._damage_boss(999999.0, "eletrica")
-	assert(int(game.phase_fragment.get("next_phase", 0)) == 3)
+	assert(int(game.phase_fragment.get("next_phase", 0)) == expected_phase_after_two)
 	game.current_phase = 3
 	game.boss_dead = false
 	game.boss_active = true

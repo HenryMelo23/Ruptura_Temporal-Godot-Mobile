@@ -1,5 +1,8 @@
 extends SceneTree
 
+## Parasitica (kit 2026-11): marca de 8s, larvas ate 5, E sem hospedeiro nao gasta
+## recarga, Verme-Rei com alvo comum + chefe + Arauto suportando larvas.
+
 var game: Node
 
 
@@ -11,6 +14,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	game._start_game()
+	game.set_process(false)
 	game.manifestation_key = "parasitica"
 	game.player_start_down_fall_timer = 0.0
 	game.player_start_down_landing_timer = 0.0
@@ -21,76 +25,43 @@ func _run() -> void:
 	enemy["hp"] = 1000.0
 	enemy["max_hp"] = 1000.0
 
+	# ATK implanta larva e renova a marca de 8s; maximo 5.
 	game._apply_bullet_effect({"kind": "parasitica", "damage": 20.0, "pos": enemy["pos"]}, enemy)
 	assert(int(enemy["seeds"]) == 1)
-	assert(is_equal_approx(float(enemy["parasite_mark_time"]), 6.0))
-	game._update_enemy_dots(enemy, 5.9)
-	assert(int(enemy["seeds"]) == 1)
+	assert(is_equal_approx(float(enemy["parasite_mark_time"]), 8.0))
+	for i in range(8):
+		game._apply_bullet_effect({"kind": "parasitica", "damage": 1.0, "pos": enemy["pos"]}, enemy)
+	assert(int(enemy["seeds"]) == 5)
+	game._update_enemy_dots(enemy, 7.9)
+	assert(int(enemy["seeds"]) == 5)
 	game._update_enemy_dots(enemy, 0.2)
 	assert(int(enemy["seeds"]) == 0)
 	assert(float(enemy["parasite_mark_time"]) == 0.0)
 
+	# E sem larvas: nao cria rei e nao consome recarga.
 	var cooldown_before = game.last_secondary_time
 	game._use_secondary_skill()
 	assert(game.last_secondary_time == cooldown_before)
-	assert(game.manifestation_secondaries.is_empty())
+	assert(not game._parasitica().king_active())
 
-	enemy["hp"] = 1000.0
-	enemy["seeds"] = 2
-	enemy["parasite_mark_time"] = 6.0
+	# Chefe e Arauto suportam larvas e viram hospedeiros.
 	game.boss_active = true
 	game.boss_dead = false
 	game.boss_hp = 1000.0
 	game.boss_hp_max = 1000.0
 	game.boss_pos = Vector2(930, 410)
-	game.boss_parasite_seeds = 2
-	game.boss_parasite_mark_time = 6.0
-	game.arauto = {
-		"active": true,
-		"hp": 1000.0,
-		"max_hp": 1000.0,
-		"pos": Vector2(1020, 460),
-		"seeds": 2,
-		"parasite_mark_time": 6.0,
-		"aura_null": 0.0,
-		"aura_wound": 0.0
-	}
-	game._spawn_secondary_parasitica()
-	assert(game.manifestation_secondaries.size() == 1)
-	var secondary = game.manifestation_secondaries[0]
-	assert(secondary["targets"].size() == 3)
-	assert(float(enemy["parasite_mark_time"]) == 0.0)
-	assert(game.boss_parasite_mark_time == 0.0)
-	assert(float(game.arauto["parasite_mark_time"]) == 0.0)
+	game.boss_parasite_seeds = 3
+	game.boss_parasite_mark_time = 8.0
+	game.arauto = {"active": true, "hp": 1000.0, "max_hp": 1000.0, "pos": Vector2(1020, 460), "seeds": 2, "parasite_mark_time": 8.0, "aura_null": 0.0, "aura_wound": 0.0}
+	var host: Dictionary = game._parasitica().best_host()
+	assert(String(host["ref"]["kind"]) == "boss")
+	game.last_secondary_time = -999.0
+	game._use_secondary_skill()
+	assert(game._parasitica().king_active())
+	assert(game.boss_parasite_seeds == 0)
+	assert(int(game._parasitica().king["consumed"]) == 3)
 
-	game._update_secondary_parasitica(secondary, 2.0)
-	game._update_secondary_parasitica(secondary, 0.01)
-	assert(is_equal_approx(float(enemy["parasite_slow_time"]), 0.20))
-	for tick in range(8):
-		game._update_secondary_parasitica(secondary, 1.0)
-	var expected = 1000.0 * pow(0.94, 8)
-	assert(abs(float(enemy["hp"]) - expected) < 0.05)
-	assert(abs(game.boss_hp - expected) < 0.05)
-	assert(abs(float(game.arauto["hp"]) - expected) < 0.05)
-	assert(secondary["targets"].all(func(target): return bool(target["done"])))
-
-	enemy["hp"] = 1000.0
-	enemy["seeds"] = 0
-	enemy["parasite_mark_time"] = 0.0
-	game.boss_active = false
-	game.arauto.clear()
-	game.last_facing = Vector2.RIGHT
-	enemy["pos"] = game.player_pos + Vector2.RIGHT * 285.0
-	game.last_skill_time = -999.0
-	game._use_skill()
-	assert(game.parasite_spit_zones.size() == 1)
-	game._update_parasite_spit_zones(0.5)
-	game._update_parasite_spit_zones(0.01)
-	assert(abs(float(enemy["hp"]) - 950.0) < 0.05)
-	assert(int(enemy["seeds"]) == 1)
-	assert(is_equal_approx(float(enemy["parasite_mark_time"]), 6.0))
-
-	print("PARASITICA_SMOKE_OK mark=6.0 slow=20%% feast_hp=%.2f q_area_hp=%.2f arauto=true" % [expected, float(enemy["hp"])])
+	print("PARASITICA_SMOKE_OK mark=8.0 max_larvae=5 e_without_host_free=true boss_host=true")
 	root.remove_child(game)
 	game.free()
 	quit(0)

@@ -20,6 +20,43 @@ For refactor sequencing and stop rules, use:
 
 - `.agents/REFRACTOR_CAMPAIGN.md`
 
+## New Phase Standard
+
+For a new phase, enemy roster, or phase gameplay scaffold, read
+`docs/PHASE_CREATION_GUIDE.md` first. New phases use one large shared map,
+one starting common enemy, four special enemy types, one miniboss and one boss.
+Phase 5 / UMBRA is an exception. The guide maps focused integration symbols;
+do not reread an entire existing phase or runtime file to recreate its structure.
+
+## Experimental Map Standard
+
+For `FaseEX`, `FaseEX2`, `FaseEX3`, `FaseEX4`, `FaseEX6`, `FaseEX7`, or a new experimental phase, read
+`docs/PHASE_EX_TERRAIN.md` before implementation. Reuse the shared experimental
+controller and chunk renderer. Preserve each source phase's identity and rules;
+validate with the actual player sprite at desktop and mobile landscape scales.
+
+## Solo-First Multiplayer Freeze
+
+The user froze multiplayer validation on 2026-10-29 to prioritize solo
+production. Until the user explicitly asks to resume multiplayer validation:
+
+- Keep new gameplay compatible with the existing multiplayer architecture when
+  the affected path already has authority, snapshot, RPC, or remote-visual
+  handling.
+- Do not run dedicated-server, host/client, relay, lobby, online, multi-process,
+  or physical multi-device tests. Validate the solo behavior instead.
+- Do not remove, bypass, or knowingly break existing multiplayer contracts just
+  because their validation is deferred.
+- Append every feature with unverified multiplayer impact to
+  `.agents/MULTIPLAYER_DEFERRED_VALIDATION.md`, including the solo evidence and
+  the exact multiplayer scenarios still owed.
+- Do not load or execute the complete deferred backlog during normal solo work.
+  Read it in full only when the user explicitly asks to resume or audit
+  multiplayer.
+
+The reproducible frozen remote baseline and current pending items live in that
+backlog.
+
 ## Context Budget
 
 - Before implementation, keep discovery to at most 5 searches/reads and at most

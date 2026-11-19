@@ -14,6 +14,28 @@ var last_selection_attempt_ms := 0
 var henry_effect_selection_opened := false
 var henry_ready_sent := false
 var start_only := false
+var client_feature_fixture_ready := false
+var client_suturer_stolen_seen := false
+var client_suturer_restored_seen := false
+var client_suturer_snapshot_seen := false
+var client_boss6_snapshot_seen := false
+
+
+func _check_canonical_player_identities(states: Dictionary, expected_count: int, label: String) -> void:
+	_check(states.size() == expected_count, "%s expected %d player identities, got %d" % [label, expected_count, states.size()])
+	var henry_keys: Array[String] = []
+	for mutation in game.HENRY_MUTATIONS:
+		henry_keys.append(String(mutation.get("key", "")))
+	for peer_key in states.keys():
+		var state: Dictionary = Dictionary(states.get(peer_key, {}))
+		var manifestation: int = int(state.get("manifestation", -1))
+		var manifestation_key: String = String(state.get("manifestation_key", ""))
+		if manifestation == game.HENRY_SELECTION_INDEX:
+			_check(manifestation_key in henry_keys, "%s peer %s has an invalid Henry identity %s" % [label, peer_key, manifestation_key])
+		else:
+			_check(manifestation >= 0 and manifestation < game.MANIFESTATIONS.size(), "%s peer %s has an invalid manifestation index" % [label, peer_key])
+			_check(manifestation_key == String(game.MANIFESTATIONS[manifestation].get("key", "")), "%s peer %s mixed manifestation index and sprite key" % [label, peer_key])
+			_check(game._manifest_mp_selection_public(game.MANIFEST_STAGE_MANIFESTATION, manifestation, 0), "%s peer %s exposed a hidden manifestation" % [label, peer_key])
 
 
 func _retry_rejected_selection() -> void:
@@ -170,6 +192,7 @@ func _cleanup_audio_resources() -> void:
 func _run_server_loop() -> void:
 	var total_time = 0.0
 	var game_announced := false
+	var identities_validated := false
 	while true:
 		await process_frame
 		total_time += 0.016
@@ -180,7 +203,18 @@ func _run_server_loop() -> void:
 		# Validar que a partida foi iniciada pelo host
 		if game.mode == "game" and not game_announced:
 			game_announced = true
+			var henry_selection_found := false
+			for selection_value in game.dedicated_manifest_selection_by_peer.values():
+				var selection: Dictionary = Dictionary(selection_value)
+				if int(selection.get("manifestation", -1)) != game.HENRY_SELECTION_INDEX:
+					continue
+				henry_selection_found = true
+				_check(int(selection.get("henry_mutation", -1)) == 2 and int(selection.get("henry_effect", -1)) == 1, "Server did not preserve Henry mutation/effect highlights")
+			_check(henry_selection_found, "Server did not receive Henry's live selection state")
 			print("[SERVER] SUCCESS: Dedicated server successfully transitioned to game state")
+		if game_announced and not identities_validated and game.dedicated_player_state_by_peer.size() == 3:
+			_check_canonical_player_identities(game.dedicated_player_state_by_peer, 3, "server")
+			identities_validated = true
 			var result_file := FileAccess.open(_result_path("server"), FileAccess.WRITE)
 			if result_file:
 				result_file.store_string("OK")
@@ -226,9 +260,11 @@ func _run_host_loop() -> void:
 			manifest_start_requested = game.mp_manifest_start_pending
 
 		if game.mode == "game":
-			await create_timer(7.0).timeout
+			await _host_validate_deferred_features()
+			await create_timer(4.8).timeout
 			print("[HOST] FLOW ping=%dms world_jitter=%.2fms players=%d" % [game.net_ping_ms, game.net_world_jitter_ms, game.net_players_by_peer.size()])
 			_check(game.net_players_by_peer.size() == 2, "Host did not retain both remote player states")
+			_check_canonical_player_identities(game.net_players_by_peer, 2, "host")
 			if start_only:
 				await _finish_ok("Host and clients joined and reached the game state")
 				return
@@ -274,8 +310,13 @@ func _run_client_loop() -> void:
 		if game.active_character_key == game.CHARACTER_HENRY and game.mode == "mutation_select_mp" and not henry_effect_selection_opened:
 			print("[CLIENT] Henry mutation stage reached. Opening effect selection...")
 			henry_effect_selection_opened = true
+			game.selected_mutation = 2
+			game.selected_effect = 1
+			game.manifest_scroll_pos = 2.0
+			game._sync_manifest_mp_selection(true)
 			game.mode = "effect_select_mp"
 			game.manifest_select_stage = game.MANIFEST_STAGE_AURA
+			game.aura_scroll_pos = 1.0
 			game._sync_manifest_mp_selection(true)
 		elif game.active_character_key == game.CHARACTER_HENRY and game.mode == "effect_select_mp" and not henry_ready_sent:
 			print("[CLIENT] Henry effect selected. Marking ready...")
@@ -293,22 +334,105 @@ func _run_client_loop() -> void:
 			game._confirm_manifest_mp_selection()
 
 		if game.mode == "game":
+			if not client_feature_fixture_ready:
+				client_feature_fixture_ready = true
+				game.cards_bought["Disparo crescente"] = 1
 			var network_settle_deadline := Time.get_ticks_msec() + 6000
-			while Time.get_ticks_msec() < network_settle_deadline and (game.net_ping_ms < 0 or game.net_world_jitter_ms > 15.0 or game.net_players_by_peer.size() < 2):
+			while Time.get_ticks_msec() < network_settle_deadline and (game.net_report_ping_count <= 0 or game.net_report_ping_min > 100 or game.net_world_jitter_ms > 15.0 or game.net_players_by_peer.size() < 2):
+				_observe_deferred_feature_sync()
 				await process_frame
-			print("[%s] FLOW ping=%dms world_jitter=%.2fms players=%d first_world=%s" % [role.to_upper(), game.net_ping_ms, game.net_world_jitter_ms, game.net_players_by_peer.size(), str(game.online_first_world_snapshot_received)])
+			_observe_deferred_feature_sync()
+			print("[%s] FLOW ping=%dms ping_min=%dms world_jitter=%.2fms players=%d first_world=%s" % [role.to_upper(), game.net_ping_ms, game.net_report_ping_min, game.net_world_jitter_ms, game.net_players_by_peer.size(), str(game.online_first_world_snapshot_received)])
 			_check(game.online_first_world_snapshot_received, "%s did not receive a world snapshot" % role)
 			_check(game.net_players_by_peer.size() == 2, "%s did not retain both remote player states" % role)
-			_check(game.net_ping_ms >= 0 and game.net_ping_ms <= 100, "%s local smoke ping exceeded 100ms" % role)
+			_check_canonical_player_identities(game.net_players_by_peer, 2, role)
+			_check(game.net_report_ping_count > 0 and game.net_report_ping_min <= 100, "%s local smoke stable ping exceeded 100ms (best=%d last=%d)" % [role, game.net_report_ping_min, game.net_ping_ms])
 			_check(game.net_world_jitter_ms <= 15.0, "%s world snapshot jitter exceeded 15ms" % role)
 			if start_only:
 				await _finish_ok("Client joined and received the authoritative game state")
 				return
-			var victory_deadline := Time.get_ticks_msec() + 6000
-			while game.mode != "specter_upgrade" and Time.get_ticks_msec() < victory_deadline:
+			# Host observes seven seconds of gameplay before triggering victory.
+			# Clients must remain connected through that window and delivery.
+			var victory_deadline := Time.get_ticks_msec() + 15000
+			var expected_victory_mode := "victory" if game.active_character_key == game.CHARACTER_HENRY else "specter_upgrade"
+			while game.mode != expected_victory_mode and Time.get_ticks_msec() < victory_deadline:
+				_observe_deferred_feature_sync()
 				await process_frame
+			_observe_deferred_feature_sync()
+			_check(client_boss6_snapshot_seen, "%s did not receive Boss6 stage/ability state" % role)
+			_check(client_suturer_snapshot_seen, "%s did not receive Suturador presentation state" % role)
+			if role == "client":
+				_check(client_suturer_stolen_seen and client_suturer_restored_seen, "target client did not receive exactly-once Suturador steal/restore")
+			else:
+				_check(not client_suturer_stolen_seen and int(game.cards_bought.get("Disparo crescente", 0)) == 1, "non-target client received Suturador card mutation")
 			_check(game.run_finalized_result == "Vitoria", "%s did not receive authoritative Umbra victory" % role)
-			_check(game.mode == "specter_upgrade" and game.specter_upgrade_previous_mode == "victory", "%s did not open Specter upgrade after Umbra" % role)
+			_check(game.mode == expected_victory_mode, "%s did not open the character-specific victory screen" % role)
+			if expected_victory_mode == "specter_upgrade":
+				_check(game.specter_upgrade_previous_mode == "victory", "%s lost Specter upgrade return mode" % role)
 			_check(game.pending_phase == 0 and game.phase_fragment.is_empty(), "%s retained a stale phase transition after Umbra" % role)
 			await _finish_ok("Client observed the authoritative Umbra victory state")
 			return
+
+
+func _host_validate_deferred_features() -> void:
+	var target_peer_id := 0
+	# Entrar em "game" acontece antes de o primeiro snapshot de todos os
+	# jogadores necessariamente chegar ao host. Espere a identidade canônica
+	# usada pela habilidade, em vez de tornar o teste dependente da máquina.
+	var identity_deadline := Time.get_ticks_msec() + 6000
+	while target_peer_id == 0 and Time.get_ticks_msec() < identity_deadline:
+		for peer_key in game.net_players_by_peer.keys():
+			var state: Dictionary = Dictionary(game.net_players_by_peer.get(peer_key, {}))
+			if String(state.get("name", "")) == "ClientPlayer":
+				target_peer_id = int(peer_key)
+				break
+		if target_peer_id == 0:
+			await process_frame
+	_check(target_peer_id > 0, "Host could not resolve the selected Suturador target")
+	game.current_phase = 6
+	game.boss_active = false
+	game.boss_dead = false
+	game.boss_call_timer = -1.0
+	game.phase_transition_timer = 0.0
+	var suturer_enemy: Dictionary = game.amber_suturer_controller.spawn_now()
+	_check(not suturer_enemy.is_empty(), "Host could not spawn the Suturador fixture")
+	game.amber_suturer_state["encounter_id"] = "integration_suturer_trio"
+	game.amber_suturer_state["state"] = game.amber_suturer_controller.STATE_ACTIVE
+	game.amber_suturer_visual_events = [{"id": "integration_suturer_visual", "kind": "hook_hit", "life": 5.0, "pos": game.player_pos}]
+	game.net_world_sync_last_ms = 0
+	game.net_world_visual_sync_last_ms = 0
+	game._send_peer_suturer_card_change(target_peer_id, "Disparo crescente", false, "integration_suturer_trio")
+	game._send_peer_suturer_card_change(target_peer_id, "Disparo crescente", false, "integration_suturer_trio")
+	await create_timer(0.8).timeout
+	game._send_peer_suturer_card_change(target_peer_id, "Disparo crescente", true, "integration_suturer_trio")
+	game._send_peer_suturer_card_change(target_peer_id, "Disparo crescente", true, "integration_suturer_trio")
+	await create_timer(0.8).timeout
+	game.amber_suturer_controller.cleanup("integration_complete", false)
+	game.boss_active = true
+	game.boss_hp_max = 9000.0
+	game.boss_hp = 2700.0
+	game.boss6_stage = 3
+	# Keep this fixture on the regular ability path. At 30% HP the real boss
+	# otherwise prioritizes its queued one-shot transitions and legitimately
+	# clears the manually assigned current ability before the next snapshot.
+	game.boss6_event_80_triggered = true
+	game.boss6_event_60_triggered = true
+	game.boss6_event_40_triggered = true
+	game.boss6_event_30_triggered = true
+	game.boss6_event_15_triggered = true
+	game._boss6_start_ability(game.BOSS6_ABILITY_SCYTHES)
+	game.net_world_sync_last_ms = 0
+	game.net_world_visual_sync_last_ms = 0
+	await create_timer(1.2).timeout
+
+
+func _observe_deferred_feature_sync() -> void:
+	var card_count := int(game.cards_bought.get("Disparo crescente", 0))
+	if card_count == 0:
+		client_suturer_stolen_seen = true
+	elif client_suturer_stolen_seen and card_count == 1:
+		client_suturer_restored_seen = true
+	if game.current_phase == 6 and String(game.amber_suturer_state.get("encounter_id", "")) == "integration_suturer_trio" and not game.amber_suturer_visual_events.is_empty():
+		client_suturer_snapshot_seen = true
+	if game.current_phase == 6 and game.boss6_stage == 3 and game.boss6_current_ability == "boss6_vertebral_scythes":
+		client_boss6_snapshot_seen = true

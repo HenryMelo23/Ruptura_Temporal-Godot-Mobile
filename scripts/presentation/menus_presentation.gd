@@ -1,6 +1,7 @@
 extends RefCounted
 const CombatTextPresentation = preload("res://scripts/presentation/combat_text_presentation.gd")
 const Lightning = preload("res://scripts/presentation/lightning_presentation.gd")
+const UmbraKnowledgePresentation = preload("res://scripts/presentation/umbra_knowledge_presentation.gd")
 
 # Draws through the main CanvasItem; state stays on the host during migration.
 
@@ -77,7 +78,7 @@ static func _draw_tutorial_offer(game: Node2D, viewport: Vector2, t: float) -> v
 	game._draw_menu_grid(viewport, Color(0.0, 1.0, 0.82, 0.09), 42.0)
 	game._draw_holo_panel(panel, Color(0.0, 1.0, 0.82), true, 0.84)
 	game._draw_glitch_title("TREINAMENTO DE RUPTURA", panel.position + Vector2(panel.size.x * 0.5, 48.0), 28, Color(0.0, 1.0, 0.82))
-	game._draw_wrapped("Antes da partida comecar, Geovana pode sincronizar um treinamento curto. Ele ensina disparo, habilidade, segunda habilidade e dash sem liberar a invasao completa.", body_rect, 18, Color(0.88, 0.96, 1.0, 0.96))
+	game._draw_wrapped("Antes da partida comecar, Geovana pode sincronizar um treinamento curto. Ele ensina disparo, habilidades e teleporte do jeito que seus controles estao configurados, e so depois libera a invasao.", body_rect, 18, Color(0.88, 0.96, 1.0, 0.96))
 	var pulse: float = 0.5 + sin(t * 5.0) * 0.5
 	game.draw_line(panel.position + Vector2(34.0, panel.size.y - 78.0), panel.position + Vector2(panel.size.x - 34.0, panel.size.y - 78.0), Color(1.0, 0.12, 0.72, 0.2 + pulse * 0.22), 2.0)
 	game._draw_big_button(Rect2(rects["tutorial_yes"]), "JOGAR TUTORIAL", Color(0.0, 0.42, 0.42, 0.75), Color(0.0, 1.0, 0.82), game.tutorial_prompt_selected == 0)
@@ -87,7 +88,7 @@ static func _draw_tutorial_offer(game: Node2D, viewport: Vector2, t: float) -> v
 static func _draw_tutorial_story_step(game: Node2D, viewport: Vector2, t: float) -> void:
 	var panel: Rect2 = game._tutorial_panel_rect(viewport)
 	var rects: Dictionary = game._tutorial_prompt_rects(viewport)
-	var data: Dictionary = Dictionary(game.TUTORIAL_STEP_TEXTS.get(game.tutorial_state, {}))
+	var data: Dictionary = game._tutorial_step_text(game.tutorial_state)
 	var title: String = String(data.get("title", "RUPTURA"))
 	var body: String = String(data.get("body", ""))
 	var hint: String = String(data.get("hint", ""))
@@ -106,7 +107,7 @@ static func _draw_tutorial_story_step(game: Node2D, viewport: Vector2, t: float)
 
 static func _draw_tutorial_practical_step(game: Node2D, viewport: Vector2, camera: Vector2, t: float) -> void:
 	var panel: Rect2 = game._tutorial_compact_panel_rect(viewport)
-	var data: Dictionary = Dictionary(game.TUTORIAL_STEP_TEXTS.get(game.tutorial_state, {}))
+	var data: Dictionary = game._tutorial_step_text(game.tutorial_state)
 	var title: String = String(data.get("title", "TREINO"))
 	var body: String = String(data.get("body", ""))
 	var hint: String = String(data.get("hint", ""))
@@ -120,6 +121,9 @@ static func _draw_tutorial_practical_step(game: Node2D, viewport: Vector2, camer
 
 
 static func _draw_tutorial_target_markers(game: Node2D, camera: Vector2, t: float) -> void:
+	if game.tutorial_state == RTTutorialGuide.STATE_DASH_LINE:
+		game._tutorial_guide().draw_dash_line(game, camera, t)
+		return
 	if game.tutorial_state == game.TUTORIAL_STATE_DASH:
 		var player_screen: Vector2 = game.player_pos - camera
 		var danger_r: float = 84.0 + sin(t * 6.0) * 7.0
@@ -142,9 +146,6 @@ static func _draw_tutorial_context_button_hint(game: Node2D, t: float) -> void:
 	var action_key = ""
 	var label = ""
 	match game.tutorial_state:
-		game.TUTORIAL_STATE_SHOP:
-			action_key = "shop_manual"
-			label = "LOJA"
 		game.TUTORIAL_STATE_BOSS_CALL:
 			action_key = "boss"
 			label = "BOSS"
@@ -439,10 +440,11 @@ static func _draw_app_update_popup(game: Node2D, viewport: Vector2) -> void :
 				for i in range(limit):
 					status_text += "\n- " + String(notes[i])
 		"downloading":
-			var downloaded = game.app_update_download_request.get_downloaded_bytes() if game.app_update_download_request != null else 0
+			var downloaded = game._app_update_downloaded_bytes()
 			var total = int(game.app_update_manifest.get("size", 0))
 			var progress = clampf(float(downloaded) / float(maxi(1, total)), 0.0, 1.0)
-			status_text = "Baixando %s direto do servidor.\nMantenha o jogo aberto ate a verificacao terminar.\n%s de %s" % [game._app_update_file_label(), game._format_download_size(downloaded), game._format_download_size(total)]
+			var transfer_label = "Retomando" if game.app_update_download_resume_offset > 0 else "Baixando"
+			status_text = "%s %s direto do servidor.\nSe a conexao cair, o progresso sera mantido.\n%s de %s" % [transfer_label, game._app_update_file_label(), game._format_download_size(downloaded), game._format_download_size(total)]
 			var bar = Rect2(content_rect.position.x, content_rect.position.y + 96.0, content_rect.size.x, 20.0)
 			game.draw_rect(bar, Color(0.01, 0.04, 0.07, 0.92), true)
 			game.draw_rect(Rect2(bar.position, Vector2(bar.size.x * progress, bar.size.y)), Color(0.0, 0.88, 0.72, 0.92), true)
@@ -581,20 +583,11 @@ static func _draw_gameplay_settings(game: Node2D, viewport: Vector2) -> void :
 	game.settings_buttons = game._gameplay_preferences_rects(viewport)
 	var analog_accent = Color(0.0, 1.0, 0.82) if game.analog_fixed else Color(1.0, 0.74, 0.22)
 	game._draw_gameplay_preference(game.settings_buttons["analog"], "ANALOGICO", "Origem do controle de movimento.", "FIXO" if game.analog_fixed else "DINAMICO", analog_accent, game.settings_selected == game._gameplay_preference_index("analog"))
-	var shop_accent = Color(0.0, 1.0, 0.82) if game.shop_auto_enabled else Color(1.0, 0.68, 0.24)
-	game._draw_gameplay_preference(game.settings_buttons["shop_mode"], "ABERTURA DA LOJA", "Automatica usa contagem; manual usa botao no HUD.", "AUTOMATICA" if game.shop_auto_enabled else "MANUAL", shop_accent, game.settings_selected == game._gameplay_preference_index("shop_mode"))
-	game._draw_toggle_switch(game._shop_mode_toggle_rect(game.settings_buttons["shop_mode"]), game.shop_auto_enabled, shop_accent)
-	var interval_panel: Rect2 = game.settings_buttons["shop_interval"]
-	var interval_value = "%d MIN" % int(game.shop_auto_interval / 60.0) if game.shop_auto_enabled else "DESATIVADO"
-	game._draw_gameplay_preference(interval_panel, "INTERVALO DA LOJA", "Tempo entre aberturas automaticas.", interval_value, Color(0.44, 0.82, 1.0) if game.shop_auto_enabled else Color(0.48, 0.52, 0.58), game.settings_selected == game._gameplay_preference_index("shop_interval"))
-	if game.shop_auto_enabled:
-		game._draw_small_rect_button(game._shop_interval_minus_rect(interval_panel), "-", Color(0.04, 0.1, 0.14), Color(0.44, 0.82, 1.0))
-		game._draw_small_rect_button(game._shop_interval_plus_rect(interval_panel), "+", Color(0.04, 0.1, 0.14), Color(0.44, 0.82, 1.0))
 	game._draw_gameplay_preference(game.settings_buttons["target_priority"], "PRIORIDADE DO DISPARO", "Define o alvo escolhido pela mira automatica.", game._target_priority_label(), Color(1.0, 0.48, 0.74), game.settings_selected == game._gameplay_preference_index("target_priority"))
 	if game._uses_desktop_ui() and game.settings_buttons.has("desktop_aim"):
 		game._draw_gameplay_preference(game.settings_buttons["desktop_aim"], "MIRA DAS HABILIDADES", "Como Q/E usam o cursor no desktop.", game._desktop_aim_mode_label(), Color(0.42, 0.92, 1.0), game.settings_selected == game._gameplay_preference_index("desktop_aim"))
 	if game._uses_desktop_ui() and game.settings_buttons.has("desktop_teleport"):
-		game._draw_gameplay_preference(game.settings_buttons["desktop_teleport"], "TELEPORTE DESKTOP", "Cursor, alvo automatico, ultima direcao ou confirmacao.", game._desktop_teleport_mode_label(), Color(0.56, 0.72, 1.0), game.settings_selected == game._gameplay_preference_index("desktop_teleport"))
+		game._draw_gameplay_preference(game.settings_buttons["desktop_teleport"], "TELEPORTE DESKTOP", ("Ataque automatico: teleporte sem mouse. Mude a MIRA DO ATAQUE para CURSOR para liberar." if game._tutorial_guide().attack_auto() else "Cursor, alvo automatico, ultima direcao ou confirmacao."), game._desktop_teleport_mode_label(), Color(0.56, 0.72, 1.0), game.settings_selected == game._gameplay_preference_index("desktop_teleport"))
 	if game._uses_desktop_ui() and game.settings_buttons.has("desktop_attack_aim"):
 		game._draw_gameplay_preference(game.settings_buttons["desktop_attack_aim"], "MIRA DO ATAQUE BASICO", "Alvo automatico ou direcao do cursor.", game._desktop_attack_aim_mode_label(), Color(0.48, 0.88, 0.64), game.settings_selected == game._gameplay_preference_index("desktop_attack_aim"))
 	if game._uses_desktop_ui() and game.settings_buttons.has("desktop_hud_scale"):
@@ -612,20 +605,20 @@ static func _draw_gameplay_settings(game: Node2D, viewport: Vector2) -> void :
 	game._draw_small_rect_button(game._interface_text_minus_rect(interface_panel), "-", Color(0.04, 0.1, 0.16), Color(0.62, 0.88, 1.0))
 	game._draw_small_rect_button(game._interface_text_plus_rect(interface_panel), "+", Color(0.04, 0.1, 0.16), Color(0.62, 0.88, 1.0))
 	var bark_panel = game.settings_buttons["geovana_bark"]
-	game._draw_gameplay_preference(bark_panel, "FALAS DA GEOVANA", "Tamanho do balão de fala durante a partida.", "%d%%" % int(round(game.geovana_bark_scale * 100.0)), Color(1.0, 0.82, 0.42), game.settings_selected == game._gameplay_preference_index("geovana_bark"))
+	game._draw_gameplay_preference(bark_panel, "BALÕES DE FALA", "Tamanho dos balões de fala durante a partida.", "%d%%" % int(round(game.geovana_bark_scale * 100.0)), Color(1.0, 0.82, 0.42), game.settings_selected == game._gameplay_preference_index("geovana_bark"))
 	game._draw_small_rect_button(game._interface_text_minus_rect(bark_panel), "-", Color(0.16, 0.11, 0.04), Color(1.0, 0.82, 0.42))
 	game._draw_small_rect_button(game._interface_text_plus_rect(bark_panel), "+", Color(0.16, 0.11, 0.04), Color(1.0, 0.82, 0.42))
 	var fps_accent = Color(0.0, 1.0, 0.82) if game.show_fps_counter else Color(0.48, 0.52, 0.58)
 	game._draw_gameplay_preference(game.settings_buttons["fps"], "CONTADOR DE FPS", "Mostra desempenho no canto da tela.", "ON" if game.show_fps_counter else "OFF", fps_accent, game.settings_selected == game._gameplay_preference_index("fps"))
 	game._draw_toggle_switch(game._shop_mode_toggle_rect(game.settings_buttons["fps"]), game.show_fps_counter, fps_accent)
 	var tutorial_accent = Color(0.0, 1.0, 0.82) if game.run_tutorial_enabled else Color(0.48, 0.52, 0.58)
-	game._draw_gameplay_preference(game.settings_buttons["tutorial"], "TUTORIAL INICIAL", "Pergunta ao iniciar a proxima partida.", "ON" if game.run_tutorial_enabled else "OFF", tutorial_accent, game.settings_selected == game._gameplay_preference_index("tutorial"))
+	game._draw_gameplay_preference(game.settings_buttons["tutorial"], "PRIMEIRA PARTIDA", "Devolve tutorial, dicas e a historia do Mercador. Desliga sozinho ao fim da partida.", "ON" if game.run_tutorial_enabled else "OFF", tutorial_accent, game.settings_selected == game._gameplay_preference_index("tutorial"))
 	game._draw_toggle_switch(game._shop_mode_toggle_rect(game.settings_buttons["tutorial"]), game.run_tutorial_enabled, tutorial_accent)
-	var cheat_value = "FASE EX ARMADA" if game.experimental_phase_requested else ("QA ATIVO" if game.qa_data_unlocked else ("ONLINE OK" if game.online_mode_unlocked else ("RETORNANTE OK" if game.retornante_unlocked else (game.gameplay_cheat_text if game.gameplay_cheat_text != "" else "TOQUE E DIGITE"))))
-	var cheat_accent = Color(0.34, 0.94, 1.0) if game.experimental_phase_requested else (Color(0.74, 1.0, 0.36) if game.qa_data_unlocked else (Color(0.0, 1.0, 0.82) if game.online_mode_unlocked else (Color(0.86, 0.48, 1.0) if game.retornante_unlocked else Color(0.64, 0.44, 1.0))))
+	var cheat_value = (game.experimental_phase_controller.phase_label(game.experimental_phase_controller.requested_phase) + " ARMADA") if game.experimental_phase_requested else ("QA ATIVO" if game.qa_data_unlocked else ("ONLINE OK" if game.online_mode_unlocked else (game.gameplay_cheat_text if game.gameplay_cheat_text != "" else "TOQUE E DIGITE")))
+	var cheat_accent = Color(0.34, 0.94, 1.0) if game.experimental_phase_requested else (Color(0.74, 1.0, 0.36) if game.qa_data_unlocked else (Color(0.0, 1.0, 0.82) if game.online_mode_unlocked else Color(0.64, 0.44, 1.0)))
 	if game.gameplay_cheat_focused:
 		cheat_value = "DIGITANDO..."
-	game._draw_gameplay_preference(game.settings_buttons["retornante_cheat"], "CHEAT SECRETO", "Campo reservado para codigos de QA e dev.", cheat_value, cheat_accent, game.settings_selected == game._gameplay_preference_index("retornante_cheat"))
+	game._draw_gameplay_preference(game.settings_buttons["gameplay_cheat"], "CHEAT SECRETO", "Campo reservado para códigos de QA e dev.", cheat_value, cheat_accent, game.settings_selected == game._gameplay_preference_index("gameplay_cheat"))
 	var haptics_accent = Color(0.0, 1.0, 0.82) if game.haptics_enabled else Color(0.48, 0.52, 0.58)
 	game._draw_gameplay_preference(game.settings_buttons["haptics"], "VIBRACAO", "Feedback tatil dos impactos e habilidades.", "ON" if game.haptics_enabled else "OFF", haptics_accent, game.settings_selected == game._gameplay_preference_index("haptics"))
 	game._draw_toggle_switch(game._shop_mode_toggle_rect(game.settings_buttons["haptics"]), game.haptics_enabled, haptics_accent)
@@ -663,7 +656,7 @@ static func _draw_gameplay_preference(game: Node2D, rect: Rect2, title: String, 
 	if game.mode == "settings_graphics":
 		value_rect = Rect2(rect.end.x - 136.0, rect.get_center().y - 18.0, 116.0, 36.0)
 	var text_width: float = maxf(100.0, value_rect.position.x - rect.position.x - 30.0)
-	var stepper: bool = title in ["INTERVALO DA LOJA", "TEXTO DE DANO", "TEXTOS DA INTERFACE", "TAMANHO DO HUD"]
+	var stepper: bool = title in ["INTERVALO DA LOJA", "OPACIDADE DO ALCANCE", "TEXTO DE DANO", "TEXTOS DA INTERFACE", "TAMANHO DO HUD"]
 	if stepper:
 		text_width -= 48.0
 	var title_size: int = 15 if rect.size.y >= 64.0 else 13
@@ -945,13 +938,17 @@ static func _draw_catalog_locked_card_icon(game: Node2D, rect: Rect2, large: = f
 static func _draw_spectrum_reveal_fragments(game: Node2D, center_x: float, center_y: float, card_w: float, card_h: float, spacing: float, progress: float) -> void :
 	var break_t = smoothstep(0.0, 0.56, progress)
 	var rebuild_t = smoothstep(0.34, 1.0, progress)
+	var manifest_slot: int = game._manifest_selection_slot_for_index(game.selected_manifestation, false)
+	var aura_slot: int = game._manifest_selection_slot_for_index(game.selected_aura, true)
 	for diff in [-1, 0, 1]:
 		var abs_diff = abs(float(diff))
 		var scale = 1.15 if diff == 0 else 0.85
 		var pos_x = center_x + float(diff) * spacing
 		var rect = Rect2(pos_x - card_w * scale * 0.5, center_y - card_h * scale * 0.5, card_w * scale, card_h * scale)
-		var manifest_idx = posmod(game.selected_manifestation + diff, game.MANIFESTATIONS.size())
-		var aura_idx = posmod(game.selected_aura + diff, game.AURAS.size())
+		var manifest_idx: int = game._manifest_selection_index_for_slot(manifest_slot + diff, false)
+		var aura_idx: int = game._manifest_selection_index_for_slot(aura_slot + diff, true)
+		if manifest_idx < 0 or aura_idx < 0:
+			continue
 		var manifest_item: Dictionary = game.MANIFESTATIONS[manifest_idx]
 		var aura_item: Dictionary = game.AURAS[aura_idx]
 		var manifest_color = game._manifest_select_item_color(manifest_item, false)
@@ -994,18 +991,21 @@ static func _draw_fragmented_choice_texture(game: Node2D, texture: Texture2D, re
 
 static func _draw_manifest_mp(game: Node2D, viewport: Vector2) -> void :
 	game._draw_holo_background(viewport, null, Color(0.0, 1.0, 0.82))
-	var local_scroll: float = game.aura_scroll_pos if game.manifest_select_stage == game.MANIFEST_STAGE_AURA else game.manifest_scroll_pos
+	var henry_view: bool = game.active_character_key == game.CHARACTER_HENRY and game.mode in ["mutation_select_mp", "effect_select_mp"]
 	var aura_view: bool = game.manifest_select_stage == game.MANIFEST_STAGE_AURA
-	var active_items: Array = game.AURAS if aura_view else game.MANIFESTATIONS
-	var active_selected: int = game.selected_aura if aura_view else game.selected_manifestation
+	var local_scroll: float = (game.aura_scroll_pos if aura_view else game.manifest_scroll_pos)
+	var active_indices: Array = [] if henry_view else game._manifest_selection_visible_indices(aura_view)
+	var active_items: Array = (game.HENRY_EFFECTS if aura_view else game.HENRY_MUTATIONS) if henry_view else game._manifest_selection_visible_items(aura_view)
+	var source_selected: int = (game.selected_effect if aura_view else game.selected_mutation) if henry_view else (game.selected_aura if aura_view else game.selected_manifestation)
+	var active_selected: int = source_selected if henry_view else game._manifest_selection_slot_for_index(source_selected, aura_view)
 	var item: Dictionary = active_items[active_selected]
-	var color: Color = game._manifest_select_item_color(item, aura_view)
+	var color: Color = Color(item.get("accent", item.get("color", Color(1.0, 0.62, 0.16)))) if henry_view else game._manifest_select_item_color(item, aura_view)
 	var margin: float = clampf(viewport.x * 0.03, 18.0, 36.0)
 	var title_size: int = int(clampf(viewport.y * 0.046, 24.0, 34.0))
 	var header_y: float = clampf(viewport.y * 0.085, 44.0, 64.0)
 	game._draw_glitch_title("EQUIPE ONLINE", Vector2(viewport.x * 0.5, header_y), title_size, color)
-	var stage_label: String = "ESPECTRO" if aura_view else "MANIFESTACAO"
-	var status_text: String = "confirme seu estado final" if aura_view else "selecione sua manifestacao"
+	var stage_label: String = ("EFEITO" if aura_view else "MUTACAO") if henry_view else ("ESPECTRO" if aura_view else "MANIFESTACAO")
+	var status_text: String = ("confirme o efeito final" if aura_view else "selecione sua mutacao") if henry_view else ("confirme seu estado final" if aura_view else "selecione sua manifestacao")
 	if game.mp_local_ready:
 		status_text = "sua escolha esta travada"
 	game._draw_centered(stage_label + " // " + status_text.to_upper(), Vector2(viewport.x * 0.5, header_y + 34.0), game._readable_text_size(11), Color(0.78, 0.93, 0.98, 0.9))
@@ -1027,19 +1027,25 @@ static func _draw_manifest_mp(game: Node2D, viewport: Vector2) -> void :
 		team_w = maxf(220.0, panel.size.x - inner_pad * 3.0 - 430.0)
 		choice_rect.size.x = panel.size.x - team_w - inner_pad * 3.0
 		team_rect = Rect2(panel.end.x - team_w - inner_pad, content_top, team_w, content_bottom - content_top)
-	game._draw_manifest_mp_choice_surface(choice_rect, active_items, active_selected, local_scroll, aura_view, color)
+	game._draw_manifest_mp_choice_surface(choice_rect, active_items, active_selected, local_scroll, aura_view, color, henry_view, active_indices)
 	game._draw_manifest_mp_team_panel(team_rect, color)
 	var footer_y: float = panel.end.y - action_h - 10.0
 	game.buttons["mp_manifest_ready"] = Rect2(choice_rect.position.x, footer_y, choice_rect.size.x * (0.58 if aura_view and not game.mp_local_ready else 0.74), 46.0)
-	var btn_label: String = "PRONTO" if aura_view else "REVELAR ESPECTRO"
+	var btn_label: String = "PRONTO" if aura_view else ("ESCOLHER EFEITO" if henry_view else "REVELAR ESPECTRO")
 	if game.mp_local_ready:
 		btn_label = "CANCELAR PRONTO"
 	game._draw_big_button(game.buttons["mp_manifest_ready"], btn_label, Color(0.02, 0.14, 0.11, 0.9) if not game.mp_local_ready else Color(0.18, 0.06, 0.08, 0.78), color if not game.mp_local_ready else Color(1.0, 0.22, 0.3), game.mp_local_ready)
+	if henry_view:
+		game.buttons["henry_continue"] = game.buttons["mp_manifest_ready"]
 	if aura_view and not game.mp_local_ready:
 		game.buttons["mp_manifest_back_manifestation"] = Rect2(game.buttons["mp_manifest_ready"].end.x + 12.0, footer_y, maxf(136.0, choice_rect.size.x - game.buttons["mp_manifest_ready"].size.x - 12.0), 46.0)
-		game._draw_big_button(game.buttons["mp_manifest_back_manifestation"], "TROCAR MANIF.", Color(0.03, 0.08, 0.12, 0.86), Color(0.56, 0.76, 1.0), false)
+		game._draw_big_button(game.buttons["mp_manifest_back_manifestation"], "TROCAR MUTACAO" if henry_view else "TROCAR MANIF.", Color(0.03, 0.08, 0.12, 0.86), Color(0.56, 0.76, 1.0), false)
+		if henry_view:
+			game.buttons["henry_back"] = game.buttons["mp_manifest_back_manifestation"]
 	else:
 		game.buttons.erase("mp_manifest_back_manifestation")
+		if henry_view:
+			game.buttons.erase("henry_back")
 	game.buttons["mp_manifest_start"] = Rect2(team_rect.position.x, footer_y, team_rect.size.x, 46.0)
 	var all_ready: bool = game._manifest_all_players_ready()
 	var can_start: bool = game._manifest_mp_start_available()
@@ -1056,12 +1062,12 @@ static func _draw_manifest_mp(game: Node2D, viewport: Vector2) -> void :
 		game._draw_centered(game.mp_manifest_rejection_message, warning_rect.get_center() + Vector2(0, 5), 14, Color.WHITE)
 
 
-static func _draw_manifest_mp_choice_surface(game: Node2D, rect: Rect2, active_items: Array, active_selected: int, scroll: float, aura_view: bool, accent: Color) -> void :
+static func _draw_manifest_mp_choice_surface(game: Node2D, rect: Rect2, active_items: Array, active_selected: int, scroll: float, aura_view: bool, accent: Color, henry_view: bool = false, source_indices: Array = []) -> void :
 	var item: Dictionary = active_items[active_selected]
 	game.draw_rect(rect, Color(0.02, 0.035, 0.04, 0.82))
 	var header_h: float = 58.0
 	var title: String = String(item.get("name", "???")).to_upper()
-	var caption: String = "ESPECTRO SELECIONADO" if aura_view else "MANIFESTACAO SELECIONADA"
+	var caption: String = ("EFEITO SELECIONADO" if aura_view else "MUTACAO SELECIONADA") if henry_view else ("ESPECTRO SELECIONADO" if aura_view else "MANIFESTACAO SELECIONADA")
 	game.draw_string(game.font, rect.position + Vector2(20.0, 30.0), title, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 40.0, game._fit_text_size(title, rect.size.x - 40.0, 24, 15), accent)
 	game.draw_string(game.font, rect.position + Vector2(20.0, 50.0), caption, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 40.0, game._readable_text_size(9), Color(0.72, 0.9, 0.96, 0.82))
 	game.draw_line(rect.position + Vector2(18.0, header_h), rect.position + Vector2(rect.size.x - 18.0, header_h), Color(accent.r, accent.g, accent.b, 0.34), 1.0)
@@ -1087,13 +1093,16 @@ static func _draw_manifest_mp_choice_surface(game: Node2D, rect: Rect2, active_i
 		var pos_x: float = center_x + diff * spacing
 		var item_rect: Rect2 = Rect2(pos_x - card_w * card_scale * 0.5, center_y - card_h * card_scale * 0.5, card_w * card_scale, card_h * card_scale)
 		var card_item: Dictionary = active_items[i]
-		var item_unlocked: bool = game._manifest_select_item_unlocked(i, aura_view)
-		var item_color: Color = game._manifest_select_item_color(card_item, aura_view) if item_unlocked else Color(0.42, 0.46, 0.68)
-		var taken: bool = game._manifest_choice_taken(i, aura_view)
+		var source_index: int = i if henry_view else int(source_indices[i])
+		var item_unlocked: bool = true if henry_view else game._manifest_select_item_unlocked(source_index, aura_view)
+		var item_color: Color = Color(card_item.get("accent", card_item.get("color", accent))) if henry_view else (game._manifest_select_item_color(card_item, aura_view) if item_unlocked else Color(0.42, 0.46, 0.68))
+		var taken: bool = false if henry_view else game._manifest_choice_taken(source_index, aura_view)
 		if taken:
 			item_color = Color(1.0, 0.18, 0.24)
 		game._draw_holo_panel(item_rect, item_color, abs_diff < 0.5, opacity * 0.72)
-		var icon: Texture2D = game._manifest_select_item_texture(card_item, aura_view)
+		if henry_view:
+			game.buttons["henry_choice_%d" % i] = item_rect.grow(5.0)
+		var icon: Texture2D = game._henry_choice_icon_texture(String(card_item.get("key", ""))) if henry_view else game._manifest_select_item_texture(card_item, aura_view)
 		if not item_unlocked:
 			game._draw_catalog_locked_card_icon(item_rect.grow(-18.0 * card_scale), false)
 		elif icon:
@@ -1109,9 +1118,9 @@ static func _draw_manifest_mp_choice_surface(game: Node2D, rect: Rect2, active_i
 		var x: float = center_x - total_w * 0.5 + i * 14.0
 		game.draw_circle(Vector2(x, dots_y), 5.5 if i == active_selected else 3.0, accent if i == active_selected else Color(0.36, 0.52, 0.62, 0.42))
 
-	var details: Dictionary = game._aura_details(String(item["name"])) if aura_view else game._manifestation_details(item["key"])
+	var details: Dictionary = {} if henry_view else (game._aura_details(String(item["name"])) if aura_view else game._manifestation_details(item["key"]))
 	var info_rect: Rect2 = Rect2(rect.position.x + 20.0, dots_y + 18.0, rect.size.x - 40.0, rect.end.y - dots_y - 32.0)
-	game._draw_manifest_mp_compact_info(info_rect, item, details, aura_view, accent)
+	game._draw_manifest_mp_compact_info(info_rect, item, details, aura_view, accent, _henry_mp_info_rows(item) if henry_view else [])
 
 
 static func _draw_manifest_mp_team_panel(game: Node2D, rect: Rect2, accent: Color) -> void :
@@ -1120,6 +1129,8 @@ static func _draw_manifest_mp_team_panel(game: Node2D, rect: Rect2, accent: Colo
 		"stage": game.manifest_select_stage,
 		"manifestation": game.selected_manifestation,
 		"aura": game.selected_aura,
+		"henry_mutation": game.selected_mutation if game.active_character_key == game.CHARACTER_HENRY else -1,
+		"henry_effect": game.selected_effect if game.active_character_key == game.CHARACTER_HENRY else -1,
 		"ready": game.mp_local_ready,
 		"name": game.player_nickname if game.player_nickname != "" else "Voce"
 	}
@@ -1135,7 +1146,7 @@ static func _draw_manifest_mp_team_panel(game: Node2D, rect: Rect2, accent: Colo
 		if bool(Dictionary(row["state"]).get("ready", false)):
 			ready_count += 1
 	game._draw_online_label("EQUIPE  %d/%d PRONTOS" % [ready_count, rows.size()], Rect2(rect.position + Vector2(16, 8), Vector2(rect.size.x - 32, 26)), 18, Color.WHITE)
-	game._draw_online_label("Manifestacao + espectro", Rect2(rect.position + Vector2(16, 36), Vector2(rect.size.x - 32, 22)), 14, Color(0.64, 0.8, 0.83))
+	game._draw_online_label("Escolhas da equipe em tempo real", Rect2(rect.position + Vector2(16, 36), Vector2(rect.size.x - 32, 22)), 14, Color(0.64, 0.8, 0.83))
 	var gap: float = 10.0
 	var list_top: float = rect.position.y + 66.0
 	var available_h: float = rect.end.y - list_top - 12.0
@@ -1152,18 +1163,20 @@ static func _draw_manifest_peer_summary_row(game: Node2D, rect: Rect2, peer_id: 
 	var aura_view = stage == game.MANIFEST_STAGE_AURA
 	var manifest_idx: int = int(state.get("manifestation", 0))
 	var aura_idx: int = int(state.get("aura", 0))
-	var manifest_item: Dictionary = game._selection_manifest_item(manifest_idx)
-	var aura_item: Dictionary = game._selection_aura_item(aura_idx)
-	var color: Color = game._manifest_select_item_color(aura_item, true) if aura_view else game._manifest_select_item_color(manifest_item, false)
-	var manifest_color: Color = game._manifest_select_item_color(manifest_item, false)
-	var aura_color: Color = game._manifest_select_item_color(aura_item, true)
+	var henry_selection: bool = manifest_idx == game.HENRY_SELECTION_INDEX
+	var henry_mutation: int = clampi(int(state.get("henry_mutation", 0)), 0, game.HENRY_MUTATIONS.size() - 1)
+	var henry_effect: int = clampi(int(state.get("henry_effect", 0)), 0, game.HENRY_EFFECTS.size() - 1)
+	var manifest_item: Dictionary = game.HENRY_MUTATIONS[henry_mutation] if henry_selection else game._selection_manifest_item(manifest_idx)
+	var aura_item: Dictionary = game.HENRY_EFFECTS[henry_effect] if henry_selection else game._selection_aura_item(aura_idx)
+	var manifest_color: Color = Color(manifest_item.get("accent", manifest_item.get("color", Color(1.0, 0.5, 0.12)))) if henry_selection else game._manifest_select_item_color(manifest_item, false)
+	var aura_color: Color = Color(aura_item.get("accent", aura_item.get("color", Color(1.0, 0.76, 0.22)))) if henry_selection else game._manifest_select_item_color(aura_item, true)
+	var color: Color = aura_color if aura_view else manifest_color
 	game.draw_rect(rect, Color(0.035, 0.06, 0.065, 0.96))
 	game.draw_rect(Rect2(rect.position, Vector2(3, rect.size.y)), color)
 	var icon_size: float = minf(rect.size.y - 28.0, 42.0)
 	var icon_rect: Rect2 = Rect2(rect.position + Vector2(12, 10), Vector2(icon_size, icon_size))
-	var henry_selection: bool = manifest_idx == game.HENRY_SELECTION_INDEX
-	var manifest_icon: Texture2D = game._frame_texture("henry_idle", 175, "player_idle") if henry_selection else game._manifest_select_item_texture(manifest_item, false)
-	var aura_icon: Texture2D = null if henry_selection else game._manifest_select_item_texture(aura_item, true)
+	var manifest_icon: Texture2D = game._henry_choice_icon_texture(String(manifest_item.get("key", ""))) if henry_selection else game._manifest_select_item_texture(manifest_item, false)
+	var aura_icon: Texture2D = game._henry_choice_icon_texture(String(aura_item.get("key", ""))) if henry_selection else game._manifest_select_item_texture(aura_item, true)
 	if manifest_icon != null:
 		game._draw_texture_contain(manifest_icon, icon_rect, Color(1.0, 1.0, 1.0, 0.88))
 	if aura_view and aura_icon != null:
@@ -1175,18 +1188,20 @@ static func _draw_manifest_peer_summary_row(game: Node2D, rect: Rect2, peer_id: 
 	var player_label: String = String(state.get("name", "Player %d" % peer_id))
 	if is_local:
 		player_label += " (voce)"
+	var compact_row: bool = rect.size.y < 92.0
 	var line_h: float = (rect.size.y - 14.0) / 4.0
-	game._draw_online_label(player_label, Rect2(text_x, rect.position.y + 5, text_w, line_h), 16, Color.WHITE)
-	game._draw_online_label(String(manifest_item.get("name", "???")), Rect2(text_x, rect.position.y + 5 + line_h, text_w, line_h), 15, manifest_color)
-	var aura_label: String = String(aura_item.get("name", "???")) if aura_view else "Espectro a escolher"
-	game._draw_online_label(aura_label, Rect2(text_x, rect.position.y + 5 + line_h * 2, text_w, line_h), 14, aura_color if aura_view else Color(0.65, 0.76, 0.8))
-	game._draw_online_label("PRONTO" if bool(state.get("ready", false)) else "ESCOLHENDO", Rect2(text_x, rect.position.y + 5 + line_h * 3, text_w, line_h), 12, Color(0.2, 1.0, 0.52) if bool(state.get("ready", false)) else Color(1.0, 0.82, 0.24))
+	game._draw_online_label(player_label, Rect2(text_x, rect.position.y + 5, text_w, line_h), 13 if compact_row else 16, Color.WHITE)
+	game._draw_online_label(String(manifest_item.get("name", "???")), Rect2(text_x, rect.position.y + 5 + line_h, text_w, line_h), 12 if compact_row else 15, manifest_color)
+	var aura_label: String = String(aura_item.get("name", "???")) if aura_view else ("Efeito a escolher" if henry_selection else "Espectro a escolher")
+	game._draw_online_label(aura_label, Rect2(text_x, rect.position.y + 5 + line_h * 2, text_w, line_h), 11 if compact_row else 14, aura_color if aura_view else Color(0.65, 0.76, 0.8))
+	game._draw_online_label("PRONTO" if bool(state.get("ready", false)) else "ESCOLHENDO", Rect2(text_x, rect.position.y + 5 + line_h * 3, text_w, line_h), 10 if compact_row else 12, Color(0.2, 1.0, 0.52) if bool(state.get("ready", false)) else Color(1.0, 0.82, 0.24))
 
 
 static func _draw_manifest_mp_half(game: Node2D, rect: Rect2, stage: String, selected_manif: int, selected_aur: int, scroll: float, is_remote: bool, is_ready: bool) -> void :
 	var aura_view = stage == game.MANIFEST_STAGE_AURA
 	if selected_manif == game.HENRY_SELECTION_INDEX:
-		var henry_item: Dictionary = game._selection_aura_item(selected_aur) if aura_view else game._selection_manifest_item(selected_manif)
+		var decoded: Vector2i = game._decode_henry_mp_selection(scroll)
+		var henry_item: Dictionary = game.HENRY_EFFECTS[decoded.y] if aura_view else game.HENRY_MUTATIONS[decoded.x]
 		var henry_color: Color = Color(henry_item.get("color", Color(1.0, 0.42, 0.08)))
 		game._draw_holo_panel(rect.grow(-10.0), henry_color, is_ready, 0.58)
 		var henry_tex: Texture2D = game._frame_texture("henry_idle", 175, "player_idle")
@@ -1262,8 +1277,22 @@ static func _draw_manifest_mp_half(game: Node2D, rect: Rect2, stage: String, sel
 		game._draw_big_button(btn_ready_rect, btn_label, Color(0.02, 0.14, 0.11, 0.88), color)
 
 
-static func _draw_manifest_mp_compact_info(game: Node2D, rect: Rect2, item: Dictionary, details: Dictionary, aura_view: bool, accent: Color) -> void:
-	var rows: Array = game._manifest_info_rows(item, details, aura_view)
+static func _henry_mp_info_rows(item: Dictionary) -> Array:
+	var rows: Array = [{"label": "RESUMO", "text": String(item.get("desc", ""))}]
+	for raw_line in String(item.get("details", "")).split("\n", false):
+		var line := String(raw_line).strip_edges()
+		if line == "":
+			continue
+		var separator := line.find(":")
+		rows.append({
+			"label": line.substr(0, separator) if separator >= 0 else "EFEITO",
+			"text": line.substr(separator + 1).strip_edges() if separator >= 0 else line
+		})
+	return rows
+
+
+static func _draw_manifest_mp_compact_info(game: Node2D, rect: Rect2, item: Dictionary, details: Dictionary, aura_view: bool, accent: Color, rows_override: Array = []) -> void:
+	var rows: Array = rows_override if not rows_override.is_empty() else game._manifest_info_rows(item, details, aura_view)
 	var count: int = mini(3, rows.size())
 	var row_h: float = rect.size.y / float(maxi(1, count))
 	for i in range(count):
@@ -1288,7 +1317,14 @@ static func _draw_online_label(game: Node2D, text: String, rect: Rect2, size: in
 
 
 static func _draw_manifest_select(game: Node2D, viewport: Vector2) -> void :
-
+	if game.mode == "manifest":
+		RTBuildSelectPresentation.draw(game, viewport, _geovana_build_model(game))
+		RTQuantumChipUI.draw(game, viewport)
+		if game.manifest_preview_open:
+			game._draw_manifest_preview_popup(viewport, game.MANIFESTATIONS[game.selected_manifestation])
+		if game.manifest_details_open:
+			game._draw_manifest_details_popup(viewport, game.MANIFESTATIONS[game.selected_manifestation])
+		return
 	game._draw_holo_background(viewport, null, Color(0.0, 1.0, 0.82))
 	var portrait = game._is_portrait(viewport)
 
@@ -1307,6 +1343,7 @@ static func _draw_manifest_select(game: Node2D, viewport: Vector2) -> void :
 	game._draw_centered(subtitle_text, Vector2(title_x, title_y + 38), game._readable_text_size(12 if not portrait else 14), Color(0.72, 0.94, 1.0, 0.9))
 
 	var active_items: Array = game.AURAS if aura_view else game.MANIFESTATIONS
+	var active_indices: Array = game._manifest_selection_visible_indices(aura_view)
 	var active_scroll = game.aura_scroll_pos if aura_view else game.manifest_scroll_pos
 	var active_selected = game.selected_aura if aura_view else game.selected_manifestation
 	var item: Dictionary = active_items[active_selected]
@@ -1320,13 +1357,14 @@ static func _draw_manifest_select(game: Node2D, viewport: Vector2) -> void :
 	var card_h = 154.0 if portrait else 174.0
 	var spacing = game._manifest_carousel_spacing(viewport)
 
-	var half_size = active_items.size() / 2.0
-	for i in range(active_items.size()):
-		var diff = float(i) - active_scroll
+	var half_size = active_indices.size() / 2.0
+	for slot in range(active_indices.size()):
+		var i: int = int(active_indices[slot])
+		var diff = float(slot) - active_scroll
 		if diff > half_size:
-			diff -= active_items.size()
+			diff -= active_indices.size()
 		elif diff < - half_size:
-			diff += active_items.size()
+			diff += active_indices.size()
 
 		var abs_diff = abs(diff)
 		if abs_diff > 2.2:
@@ -1369,7 +1407,7 @@ static func _draw_manifest_select(game: Node2D, viewport: Vector2) -> void :
 
 		var name_color = Color(1, 1, 1, opacity)
 		var label_y = rect.end.y - (18 * scale)
-		var display_name = String(card_item["name"]).to_upper() if item_unlocked else "???"
+		var display_name = CardCatalogDefinitions.display_name(card_item).to_upper() if item_unlocked else "???"
 		game._draw_centered(display_name, Vector2(rect.get_center().x, label_y), game._readable_text_size(int(16 * scale)), name_color)
 		if item_unlocked:
 			var unread_section := "specter" if aura_view else "manifestation"
@@ -1381,10 +1419,11 @@ static func _draw_manifest_select(game: Node2D, viewport: Vector2) -> void :
 
 
 	var dots_y = center_y + (card_h * 0.65) + 10
-	var total_w = active_items.size() * 18
-	for i in range(active_items.size()):
-		var x = center_x - total_w * 0.5 + i * 18
-		game.draw_circle(Vector2(x, dots_y), 4 if i != active_selected else 7, color if i == active_selected else Color(0.38, 0.52, 0.62, 0.6 * (1.0 if i == active_selected else 0.5)))
+	var total_w = active_indices.size() * 18
+	var active_selected_slot: int = game._manifest_selection_slot_for_index(active_selected, aura_view)
+	for slot in range(active_indices.size()):
+		var x = center_x - total_w * 0.5 + slot * 18
+		game.draw_circle(Vector2(x, dots_y), 4 if slot != active_selected_slot else 7, color if slot == active_selected_slot else Color(0.38, 0.52, 0.62, 0.3))
 
 
 	var details_rect: Rect2
@@ -1509,6 +1548,96 @@ static func _draw_manifest_select(game: Node2D, viewport: Vector2) -> void :
 		game._draw_manifest_preview_popup(viewport, game.MANIFESTATIONS[game.selected_manifestation])
 	if game.manifest_details_open:
 		game._draw_manifest_details_popup(viewport, game.MANIFESTATIONS[game.selected_manifestation])
+
+
+## Monta o model da tela unificada (RTBuildSelectPresentation) para a Geovana.
+static func _geovana_build_model(game: Node2D) -> Dictionary:
+	var transition_t: float = game._manifest_transition_progress()
+	var aura_view: bool = game.manifest_select_stage == game.MANIFEST_STAGE_AURA or (game.manifest_select_stage == game.MANIFEST_STAGE_TRANSITION and transition_t >= 0.52)
+	var source: Array = game.AURAS if aura_view else game.MANIFESTATIONS
+	var indices: Array = game._manifest_selection_visible_indices(aura_view)
+	var selected: int = game.selected_aura if aura_view else game.selected_manifestation
+	var items: Array = []
+	for slot in range(indices.size()):
+		var index: int = int(indices[slot])
+		var entry: Dictionary = source[index]
+		var key: String = String(entry.get("key", ""))
+		items.append({
+			"index": index,
+			"key": key,
+			"name": String(entry.get("name", "")),
+			"color": game._manifest_select_item_color(entry, aura_view),
+			"texture": game._manifest_select_item_texture(entry, aura_view),
+			"unlocked": game._manifest_select_item_unlocked(index, aura_view),
+			"unread": game._content_is_unread("specter" if aura_view else "manifestation", key),
+		})
+	var random_enabled: bool = game._build_random_slot_enabled()
+	var random_view: String = game._build_random_view(aura_view)
+	var random_selected: bool = random_enabled and game._build_random_shown(random_view)
+	if random_enabled:
+		items.append(random_build_item(aura_view))
+	var selected_slot: int = maxi(0, game._manifest_selection_slot_for_index(selected, aura_view))
+	if random_selected:
+		selected_slot = items.size() - 1
+	var selected_entry: Dictionary = source[clampi(selected, 0, source.size() - 1)]
+	var unlocked: bool = true if random_selected else game._manifest_select_item_unlocked(selected, aura_view)
+	var dossier: Dictionary = RTBuildChoiceDossier.spectrum(String(selected_entry.get("name", ""))) if aura_view else RTBuildChoiceDossier.manifestation(String(selected_entry.get("key", "")))
+	if random_selected:
+		dossier = random_build_dossier(aura_view)
+	var manifest_hidden: bool = bool(game.build_random_hidden.get("manifest", false))
+	var manifest_name: String = "???" if manifest_hidden else String(game.MANIFESTATIONS[game.selected_manifestation].get("name", "")).to_upper()
+	var keys: Dictionary = {"primary": "manifest_start", "back": "manifest_back", "preview": "manifest_preview", "pick_prefix": "build_pick_", "prev": "build_prev", "next": "build_next", "chips": "build_chips"}
+	if not random_enabled:
+		keys["random"] = "build_random"
+	var primary_label: String = ("INICIAR" if aura_view else "ESCOLHER ESPECTRO") if unlocked else "BLOQUEADO"
+	if random_selected:
+		primary_label = "SORTEAR E INICIAR" if aura_view else "SORTEAR E SEGUIR"
+	return {
+		"theme": "geovana",
+		"step": 1 if aura_view else 0,
+		"items": items,
+		"selected_slot": selected_slot,
+		"target_scroll": float(game.aura_scroll_pos if aura_view else game.manifest_scroll_pos) if bool(game.manifest_is_dragging) else float(selected_slot),
+		"dossier": dossier,
+		"locked_text": game._manifest_select_unlock_objective_text(selected, aura_view, true),
+		"summary": ("MANIFESTAÇÃO: " + manifest_name) if aura_view else "",
+		"primary_label": primary_label,
+		"primary_enabled": unlocked,
+		"preview_enabled": unlocked and not random_selected and not aura_view and game.manifest_select_stage == game.MANIFEST_STAGE_MANIFESTATION,
+		"hint": "A / D, ARRASTE OU TOQUE NUMA CARTA",
+		"keys": keys,
+		"chips_label": "CHIPS QUANTICOS (%d)" % game._quantum_chips().selected_count(),
+		"random_label": "ESPECTRO ALEATORIO" if aura_view else "MANIFESTACAO ALEATORIA",
+	}
+
+
+## Carta "ALEATORIA" do carrossel: sem arte, um "?" grande desenhado pela tela.
+static func random_build_item(second_step: bool, henry: bool = false) -> Dictionary:
+	var label: String = ("EFEITO ALEATÓRIO" if second_step else "MUTAÇÃO ALEATÓRIA") if henry else ("ESPECTRO ALEATÓRIO" if second_step else "MANIFESTAÇÃO ALEATÓRIA")
+	return {
+		"index": -7,
+		"key": "random",
+		"name": label,
+		"color": Color(1.0, 0.86, 0.32) if henry else Color(0.4, 0.95, 1.0),
+		"texture": null,
+		"unlocked": true,
+		"unread": false,
+		"random": true,
+	}
+
+
+static func random_build_dossier(second_step: bool, henry: bool = false) -> Dictionary:
+	var what: String = ("um efeito" if second_step else "uma mutação") if henry else ("um espectro desbloqueado" if second_step else "uma manifestação desbloqueada")
+	return {
+		"style": "Escolha às cegas",
+		"tagline": "Sorteia %s e segue direto." % what,
+		"rows": [
+			{"label": "SORTEIO", "title": "Sem revelar", "text": "Confirme e o jogo segue sem mostrar o que saiu."},
+			{"label": "PARTIDA", "title": "Descoberta", "text": "Você só descobre a escolha dentro da partida."},
+		],
+		"note": "Boa sorte. A Ruptura escolhe por você.",
+		"difficulty": 0,
+	}
 
 
 static func _draw_manifest_preview_popup(game: Node2D, viewport: Vector2, item: Dictionary) -> void :
@@ -1654,11 +1783,6 @@ static func _draw_manifest_preview_atk(game: Node2D, rect: Rect2, key: String, t
 			game.draw_line(p + Vector2(22, -8), beam_end, Color(accent.r, accent.g, accent.b, 0.38), 8.0)
 			game.draw_line(p + Vector2(22, -8), beam_end, Color(1.0, 1.0, 1.0, 0.8), 2.0)
 			game.draw_circle(beam_end, 12.0 + pulse * 8.0, Color(1.0, 0.42, 0.88, 0.32))
-		"retornante":
-			var mid = p.lerp(e, 0.52) + Vector2(0, -34.0 * sin(t * TAU))
-			game.draw_arc(mid, rect.size.x * 0.21, PI * 0.15, PI * 1.18, 42, Color(accent.r, accent.g, accent.b, 0.6), 3.0)
-			game.draw_circle(p.lerp(e, fposmod(t * 0.6, 1.0)), 8.0, Color(1.0, 0.48, 0.84, 0.9))
-			game.draw_circle(e.lerp(p, fposmod(t * 0.8 + 0.35, 1.0)), 6.0, Color(0.82, 0.7, 1.0, 0.8))
 		"parasitica":
 			var worm = p.lerp(e, fposmod(t * 0.75, 1.0))
 			game._draw_preview_worm_path(p + Vector2(18, 0), e - Vector2(16, 0), t, accent)
@@ -1667,26 +1791,6 @@ static func _draw_manifest_preview_atk(game: Node2D, rect: Rect2, key: String, t
 		"gravitante":
 			var orb = p.lerp(e, fposmod(t * 0.55, 1.0))
 			game.GravitanteVfx.projectile(game, orb, (e - p).normalized(), t)
-		"acorrentada":
-			var step = int(fposmod(floor(t * 3.0), 3.0)) + 1
-			if step == 1:
-				game._draw_acorrentada_chain(p + Vector2(18, -4), e - Vector2(14, 0), Color(0.18, 0.86, 1.0, 0.86), 5.0, 1.0, true)
-			elif step == 2:
-				game.draw_arc(p, rect.size.x * 0.34, -0.65, 0.75, 42, Color(0.92, 0.12, 0.1, 0.68), 6.0)
-				game._draw_acorrentada_chain(p + Vector2(20, 8), e - Vector2(8, 8), Color(0.92, 0.12, 0.1, 0.84), 8.0, 1.0, false)
-			else:
-				game._draw_acorrentada_chain(p + Vector2(16, -22), e + Vector2(-10, 18), Color(0.18, 0.86, 1.0, 0.84), 6.0, 1.0, true)
-				game._draw_acorrentada_chain(p + Vector2(16, 22), e + Vector2(-10, -18), Color(0.92, 0.12, 0.1, 0.84), 8.0, 1.0, false)
-				game.draw_circle(e, 18.0 + pulse * 7.0, Color(1.0, 1.0, 1.0, 0.24))
-		"eclipsada":
-			var step = int(fposmod(floor(t * 4.0), 4.0)) + 1
-			var slash_center: Vector2 = p + Vector2(54.0, -8.0)
-			var slash_angle: float = -0.9 + pulse * 1.8 + float(step) * 0.34
-			game.draw_circle(slash_center, 80.0, Color(0.06, 0.2, 0.48, 0.1))
-			game.draw_arc(slash_center, 80.0, slash_angle, slash_angle + PI * 1.38, 54, Color(accent.r, accent.g, accent.b, 0.88), 7.0 if step == 4 else 5.0)
-			game.draw_arc(slash_center, 72.0, slash_angle + 0.12, slash_angle + PI * 1.22, 48, Color(0.9, 0.98, 1.0, 0.78), 2.0)
-			if step == 4:
-				game.draw_arc(slash_center, 54.0, - slash_angle, TAU - slash_angle, 48, Color(1.0, 0.86, 0.3, 0.68), 3.0)
 		_:
 			game.draw_line(p + Vector2(20, 0), e - Vector2(16, 0), Color(accent.r, accent.g, accent.b, 0.7), 5.0)
 			game.draw_circle(e, 17.0 + pulse * 5.0, Color(1.0, 0.78, 0.26, 0.2))
@@ -1716,11 +1820,6 @@ static func _draw_manifest_preview_skill(game: Node2D, rect: Rect2, key: String,
 			game._draw_preview_diamond(prism, 24.0 + pulse * 3.0, accent)
 			for angle in [-0.7, 0.0, 0.7, 1.35, -1.35]:
 				game.draw_line(prism, prism + Vector2.from_angle(angle) * rect.size.x * 0.28, Color(accent.r, accent.g, accent.b, 0.48), 4.0)
-		"retornante":
-			for i in range(4):
-				var r = 28.0 + i * 13.0 + pulse * 4.0
-				game.draw_arc(c, r, t * TAU + i, t * TAU + i + PI * 1.25, 48, Color(accent.r, accent.g, accent.b, 0.42 - i * 0.06), 2.0)
-			game.draw_circle(c, 10.0 + pulse * 5.0, Color(1.0, 0.38, 0.7, 0.42))
 		"parasitica":
 			game.draw_circle(c + Vector2(8, 10), 58.0 + pulse * 6.0, Color(0.16, 0.75, 0.18, 0.18))
 			for i in range(8):
@@ -1731,18 +1830,6 @@ static func _draw_manifest_preview_skill(game: Node2D, rect: Rect2, key: String,
 			game.GravitanteVfx.event(game, {"kind": "gravity_q", "pos": c,
 				"points": PackedVector2Array([e1, e2]), "max": 0.55,
 				"life": 0.55 * (1.0 - fposmod(t, 1.0))}, Vector2.ZERO)
-		"acorrentada":
-			game._draw_acorrentada_chain(e1, e2, Color(0.18, 0.86, 1.0, 0.82), 6.0, 1.0, true)
-			game._draw_acorrentada_chain(p + Vector2(10, -4), e1, Color(0.92, 0.12, 0.1, 0.7), 7.0, 1.0, false)
-			game.draw_arc(e1.lerp(e2, 0.5), 26.0 + pulse * 9.0, 0.0, TAU, 36, Color(1.0, 0.24, 0.18, 0.42), 2.4)
-		"eclipsada":
-			var dash_end: Vector2 = p + Vector2(52.0, -18.0)
-			game.draw_rect(rect, Color(0.02, 0.16, 0.38, 0.12), true)
-			game.draw_line(p - Vector2(42, 0), dash_end + Vector2(34, 0), Color(0.04, 0.1, 0.28, 0.72), 24.0, true)
-			game.draw_line(p - Vector2(42, 0), dash_end + Vector2(34, 0), Color(accent.r, accent.g, accent.b, 0.82), 5.0, true)
-			for enemy_pos in [e1, e2]:
-				game.draw_arc(enemy_pos + Vector2(8, -8), 18.0 + pulse * 5.0, - t * TAU, TAU - t * TAU, 30, Color(1.0, 0.88, 0.3, 0.88), 2.5)
-				game.draw_line(enemy_pos + Vector2(0, -8), enemy_pos + Vector2(16, -8), Color(0.92, 0.98, 1.0, 0.78), 1.5)
 		_:
 			game.draw_arc(p, 58.0 + pulse * 7.0, 0.0, TAU, 72, Color(accent.r, accent.g, accent.b, 0.54), 3.0)
 			game.draw_line(p, e1, Color(1.0, 0.8, 0.26, 0.46), 3.0)
@@ -1751,7 +1838,10 @@ static func _draw_manifest_preview_skill(game: Node2D, rect: Rect2, key: String,
 static func _draw_effects(game: Node2D, camera: Vector2) -> void :
 	var draw_cap: int = game.MEMORY_EFFECT_DRAW_CAP if game._memory_saver_active() else (game.MOBILE_EFFECT_DRAW_CAP if game._runtime_visual_budget_active() else 999999)
 	var drawn: int = 0
-	for effect in (game.effects + game.net_effects):
+	var local_effect_count: int = game.effects.size()
+	var total_effect_count: int = local_effect_count + game.net_effects.size()
+	for effect_index in range(total_effect_count):
+		var effect: Dictionary = game.effects[effect_index] if effect_index < local_effect_count else game.net_effects[effect_index - local_effect_count]
 		if drawn >= draw_cap:
 			break
 		var effect_world_pos: Vector2 = Vector2(effect.get("pos", Vector2.ZERO))
@@ -1764,6 +1854,26 @@ static func _draw_effects(game: Node2D, camera: Vector2) -> void :
 		var kind = String(effect.get("kind", ""))
 		if kind == CombatTextPresentation.KIND:
 			CombatTextPresentation.draw(game, effect, camera)
+		elif kind == "geovana_level_up":
+			var age_ratio: float = 1.0 - alpha
+			var center: Vector2 = Vector2(effect["pos"]) - camera + Vector2(0.0, -112.0 - 22.0 * age_ratio)
+			var pulse: float = 1.0 + sin(age_ratio * PI) * 0.12
+			var arrow := PackedVector2Array([
+				center + Vector2(0.0, -31.0) * pulse,
+				center + Vector2(-10.0, -16.0) * pulse,
+				center + Vector2(-4.5, -16.0) * pulse,
+				center + Vector2(-4.5, 9.0) * pulse,
+				center + Vector2(4.5, 9.0) * pulse,
+				center + Vector2(4.5, -16.0) * pulse,
+				center + Vector2(10.0, -16.0) * pulse
+			])
+			game.draw_circle(center + Vector2(0.0, -7.0), 27.0 * pulse, Color(0.12, 0.78, 1.0, 0.08 * alpha))
+			game.draw_polygon(arrow, PackedColorArray([Color(0.24, 0.94, 1.0, 0.9 * alpha)]))
+			game.draw_polyline(PackedVector2Array([arrow[0], arrow[1], arrow[2], arrow[3], arrow[4], arrow[5], arrow[6], arrow[0]]), Color(0.88, 1.0, 1.0, 0.94 * alpha), 1.4, true)
+			var label_rect := Rect2(center + Vector2(-38.0, -64.0), Vector2(76.0, 25.0))
+			game.draw_rect(label_rect, Color(0.0, 0.08, 0.14, 0.72 * alpha), true)
+			game.draw_rect(label_rect, Color(0.24, 0.94, 1.0, 0.68 * alpha), false, 1.2)
+			game._draw_centered("Nvl %d" % int(effect.get("level", 1)), label_rect.get_center() + Vector2(0.0, 5.5), game._readable_text_size(17), Color(0.86, 1.0, 1.0, alpha))
 		elif String(effect.get("text", "")) != "":
 			game._draw_centered(effect["text"], effect["pos"] - camera, int(effect["size"]), color)
 		elif kind == "enemy_shard":
@@ -1781,6 +1891,19 @@ static func _draw_effects(game: Node2D, camera: Vector2) -> void :
 			game.draw_polygon(points, PackedColorArray([Color(color.r, color.g, color.b, alpha * 0.92)]))
 			game.draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), Color(1.0, 1.0, 1.0, alpha * 0.75), 1.5, true)
 			game.draw_circle(pos, size * 0.34, Color(1.0, 1.0, 1.0, alpha * 0.85))
+		elif kind == "muzzle":
+			var p = effect["pos"] - camera
+			var flash_dir: Vector2 = Vector2(effect.get("dir", Vector2.RIGHT))
+			var r = float(effect["size"]) * (0.55 + 0.45 * alpha)
+			var flash_side: Vector2 = flash_dir.orthogonal()
+			var petals = PackedVector2Array([p + flash_dir * r * 1.9, p + flash_side * r * 0.42, p - flash_dir * r * 0.5, p - flash_side * r * 0.42])
+			game.draw_polygon(petals, PackedColorArray([Color(color.r, color.g, color.b, alpha * 0.55)]))
+			game.draw_circle(p, r * 0.46, Color(1.0, 1.0, 1.0, alpha * 0.9))
+		elif kind == "ring":
+			var p = effect["pos"] - camera
+			var r = float(effect["size"]) * (0.35 + (1.0 - alpha) * 1.1)
+			game.draw_arc(p, r, 0.0, TAU, 22, Color(color.r, color.g, color.b, alpha * 0.85), maxf(1.5, 3.4 * alpha), true)
+			game.draw_arc(p, r * 0.7, 0.0, TAU, 18, Color(1.0, 1.0, 1.0, alpha * 0.5), 1.4, true)
 		elif kind == "trail":
 			var p = effect["pos"] - camera
 			var radius = float(effect["size"]) * alpha
@@ -1960,6 +2083,7 @@ static func _draw_ground_target_preview(game: Node2D, viewport: Vector2, camera:
 		return
 	var profile = game._ground_target_profile(secondary)
 	var target_world = game._desktop_cursor_ground_target(secondary) if game.desktop_aim_action in ["skill", "secondary"] else game._ground_target_world(touch_pos, viewport, secondary)
+	target_world = RTUltimateAutoAimPresentation.resolve(game, secondary, target_world)
 	var start = game.player_pos - camera
 	var target = target_world - camera
 	var color: Color = profile["color"]
@@ -1973,6 +2097,7 @@ static func _draw_ground_target_preview(game: Node2D, viewport: Vector2, camera:
 	game.draw_arc(target, radius * 0.68, - Time.get_ticks_msec() * 0.002, TAU - Time.get_ticks_msec() * 0.002, 48, Color(1.0, 1.0, 1.0, 0.54), 1.5)
 	game.draw_line(target + Vector2(-14.0, 0.0), target + Vector2(14.0, 0.0), Color.WHITE, 2.0)
 	game.draw_line(target + Vector2(0.0, -14.0), target + Vector2(0.0, 14.0), Color.WHITE, 2.0)
+	RTUltimateAutoAimPresentation.draw_lock(game, secondary, target, pulse)
 
 
 static func _draw_scifi_frame(game: Node2D, rect: Rect2, accent: Color = Color(0.0, 0.85, 1.0), corner_cut: float = 8.0, bg_alpha: float = 0.88) -> void:
@@ -2181,19 +2306,6 @@ static func _draw_desktop_session_buttons(game: Node2D, _viewport: Vector2) -> v
 		game._draw_hud_rect_button(pause_rect, "II", game.CombatHud.CYAN)
 		game._draw_centered(game._compact_key_binding_name("pause"), pause_rect.get_center() + Vector2(0, -24), 10, Color(0.72, 1.0, 0.94, 0.9))
 
-	if game.buttons.has("shop_manual"):
-		var shop_rect: Rect2 = game.buttons["shop_manual"]
-		var bargain_pending: bool = game.has_method("_bargain_pending_discount_remaining") and game._bargain_pending_discount_remaining() > 0.0
-		var shop_accent = Color(1.0, 0.78, 0.22) if bargain_pending else Color(0.0, 0.88, 1.0) if game._affordable_card_count() > 0 and game.mode == "game" else Color(0.38, 0.42, 0.46)
-		game.hud_feedback.surface(game, shop_rect, shop_accent)
-		game._draw_icon_cart(Vector2(shop_rect.position.x + 26.0, shop_rect.position.y + 22.0), 22.0, shop_accent)
-		var shop_status: String = game._manual_shop_status_text()
-		if shop_status == "":
-			game._draw_centered("LOJA", shop_rect.get_center() + Vector2(14.0, 4.0), 16, shop_accent)
-		else:
-			game._draw_centered("LOJA", shop_rect.get_center() + Vector2(14.0, 10.0), 14, shop_accent)
-			game._draw_centered(shop_status, shop_rect.get_center() + Vector2(14.0, -10.0), 10, shop_accent)
-
 	if game.boss_ready and not game.boss_active and not game.boss_dead and game.buttons.has("boss") and game.experimental_phase_controller.should_show_boss_button():
 		var boss_rect: Rect2 = game.buttons["boss"]
 		var boss_accent = Color(1.0, 0.22, 0.28)
@@ -2298,7 +2410,7 @@ static func _draw_revival_altar_talkbox(game: Node2D, camera: Vector2) -> void:
 	var cost_text: String = "%.0f%% DA VIDA" % (game._revival_life_sacrifice_rate() * 100.0)
 	var detail: String = "divide entre %d caido(s)" % game._team_revival_dead_count()
 	if method == game.REVIVE_PAY_POINTS:
-		cost_text = "%d PONTOS" % game._revival_points_cost()
+		cost_text = "%s PONTOS" % game._format_points(game._revival_points_cost())
 		detail = "gasto individual"
 	var rect: Rect2 = Rect2(center.x - 172.0, center.y - 132.0, 344.0, 72.0)
 	game._draw_holo_panel(rect, Color(0.0, 1.0, 0.82), true, 0.78)
@@ -2313,7 +2425,7 @@ static func _draw_revival_interaction_prompt(game: Node2D, viewport: Vector2) ->
 	var key_name: String = "REVIVE" if game._uses_touch_ui() else game._compact_key_binding_name("interact")
 	var cost_text: String = "%.0f%% DA VIDA" % (game._revival_life_sacrifice_rate() * 100.0)
 	if method == game.REVIVE_PAY_POINTS:
-		cost_text = "%d PONTOS" % game._revival_points_cost()
+		cost_text = "%s PONTOS" % game._format_points(game._revival_points_cost())
 	var text: String = "%s INTERAGIR - ALTAR %s (%s)" % [key_name, game._revival_method_label(method), cost_text]
 	var rect: Rect2 = Rect2(viewport.x * 0.5 - 230.0, viewport.y * 0.58, 460.0, 38.0)
 	game._draw_holo_panel(rect, Color(0.0, 1.0, 0.82), true, 0.78)
@@ -2341,7 +2453,7 @@ static func _draw_revive_request(game: Node2D, viewport: Vector2) -> void :
 		var remaining = int(ceil(max(0.0, game.revive_request_timer)))
 		game._draw_centered("ALIADO CAIDO PEDE REVIVE", Vector2(panel.get_center().x, panel.position.y + 34.0), game._readable_text_size(15), accent)
 		game._draw_centered("ESCOLHA COMO REERGUER O ALIADO  |  %ds" % remaining, Vector2(panel.get_center().x, panel.position.y + 66.0), game._readable_text_size(12), Color(0.92, 0.96, 1.0))
-		game._draw_centered("PONTOS: %d  OU  VIDA: -50%% HP" % cost, Vector2(panel.get_center().x, panel.position.y + 96.0), game._readable_text_size(13), Color(1.0, 0.86, 0.26))
+		game._draw_centered("PONTOS: %s  OU  VIDA: -50%% HP" % game._format_points(cost), Vector2(panel.get_center().x, panel.position.y + 96.0), game._readable_text_size(13), Color(1.0, 0.86, 0.26))
 		var sacrifice_rect = Rect2(panel.position.x + 28.0, panel.position.y + 112.0, panel.size.x - 56.0, 28.0)
 		game._draw_wrapped_clamped("SACRIFICIO: SUAS CURAS FICAM 50% MAIS FRACAS POR 1 MINUTO", sacrifice_rect, game._readable_text_size(10), Color(1.0, 0.58, 0.62), 1)
 		var gap = 10.0
@@ -2357,7 +2469,7 @@ static func _draw_revive_request(game: Node2D, viewport: Vector2) -> void :
 		return
 	if game.is_dead:
 		var title = "VOCE FOI ELIMINADO"
-		var detail = "ALIADO PODE PAGAR %d PONTOS OU DOAR VIDA" % cost
+		var detail = "ALIADO PODE PAGAR %s PONTOS OU DOAR VIDA" % game._format_points(cost)
 		var enabled: bool = game.revive_request_cooldown <= 0.0 and not game.revive_request_outgoing
 		if game.revive_request_outgoing:
 			detail = "PEDIDO ENVIADO %.0fs" % ceil(max(0.0, game.revive_request_timer))
@@ -2436,7 +2548,7 @@ static func _draw_card_detail_panel(game: Node2D, card: Dictionary, rect: Rect2,
 	var rarity_color = game._card_rarity_color(card)
 	game.draw_rect(rect, Color(0.02, 0.025, 0.04, 0.92), true)
 	game.draw_rect(rect, Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.78), false, 2)
-	game.draw_string(game.font, rect.position + Vector2(18, 26), String(card["name"]).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 18 if compact else 22, color)
+	game.draw_string(game.font, rect.position + Vector2(18, 26), CardCatalogDefinitions.display_name(card).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 18 if compact else 22, color)
 	var count_text = "x%d NO DECK" % owned_count if owned_count > 0 else "AINDA NAO POSSUI"
 	game.draw_string(game.font, rect.position + Vector2(18, 48), "%s | %s" % [game._card_rarity_label(card), count_text], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, rarity_color)
 	game._draw_card_stat_chips(game._card_stat_chips(String(card["name"])), rect.position + Vector2(rect.size.x * 0.42, 17.0), rect.size.x * 0.54, color, 12)
@@ -2460,7 +2572,7 @@ static func _draw_end_overlay(game: Node2D, viewport: Vector2, title: String, co
 	var panel = Rect2(viewport.x * 0.18 if not portrait else viewport.x * 0.08, viewport.y * 0.22, viewport.x * 0.64 if not portrait else viewport.x * 0.84, viewport.y * 0.56)
 	game._draw_holo_panel(panel, color, true, 0.82)
 	game._draw_glitch_title(title, Vector2(viewport.x * 0.5, panel.position.y + 64.0), 36 if not portrait else 42, color)
-	var summary = Rect2(panel.position.x + 24.0, panel.position.y + 104.0, panel.size.x - 48.0, panel.size.y - 196.0)
+	var summary = Rect2(panel.position.x + 24.0, panel.position.y + 104.0, panel.size.x - 48.0, panel.size.y - 216.0)
 	game._draw_run_summary(summary, color, false)
 	if game.run_report_status != "":
 		game._draw_centered(game.run_report_status.to_upper(), Vector2(viewport.x * 0.5, panel.end.y - 92.0), 12, Color(0.74, 0.92, 1.0, 0.82))
@@ -2683,25 +2795,34 @@ static func _draw_run_summary(game: Node2D, area: Rect2, accent: Color, lost: bo
 		["TEMPO", game._run_time_text()],
 		["INIMIGOS", str(game.enemies_killed)],
 		["DANO INIMIGOS", str(int(round(game.run_damage_to_enemies)))],
-		["PONTOS GANHOS", str(game.run_points_earned)],
-		["PONTOS GASTOS", str(game.run_points_spent)],
+		["PONTOS GANHOS", game._format_points(game.run_points_earned)],
+		["PONTOS GASTOS", game._format_points(game.run_points_spent)],
 		["CARTAS", str(game._deck_total_cards())],
 		["FASE DA QUEDA" if lost else "FASE CONCLUIDA", str(game.current_phase)]
 	]
+	var knowledge: Dictionary = game.umbra_run_knowledge if not game.umbra_run_knowledge.is_empty() else game.umbra_memory_controller.knowledge_report(game)
+	var knowledge_h: float = clampf(area.size.y * 0.34, 42.0, 76.0)
+	var stats_area := Rect2(area.position, Vector2(area.size.x, maxf(24.0, area.size.y - knowledge_h - 7.0)))
 	var columns = 2 if game._is_portrait(game.get_viewport_rect().size) else 3
 	var rows = int(ceil(float(entries.size()) / float(columns)))
 	var gap = 8.0
-	var cell_size = Vector2((area.size.x - gap * float(columns - 1)) / float(columns), (area.size.y - gap * float(rows - 1)) / float(rows))
+	var cell_size = Vector2((stats_area.size.x - gap * float(columns - 1)) / float(columns), (stats_area.size.y - gap * float(rows - 1)) / float(rows))
 	for i in range(entries.size()):
 		var column = i % columns
 		var row = int(i / columns)
-		var rect = Rect2(area.position + Vector2(column * (cell_size.x + gap), row * (cell_size.y + gap)), cell_size)
+		var rect = Rect2(stats_area.position + Vector2(column * (cell_size.x + gap), row * (cell_size.y + gap)), cell_size)
 		game.draw_rect(rect, Color(0.01, 0.015, 0.025, 0.82), true)
 		game.draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.5), false, 1.4)
-		var label_size = game._fit_text_size(String(entries[i][0]), rect.size.x - 14.0, 11, 8)
-		game._draw_centered(String(entries[i][0]), Vector2(rect.get_center().x, rect.position.y + min(18.0, rect.size.y * 0.36)), label_size, Color(accent.r, accent.g, accent.b, 0.86))
-		var value_size = game._fit_text_size(String(entries[i][1]), rect.size.x - 14.0, 22, 14)
-		game._draw_centered(String(entries[i][1]), Vector2(rect.get_center().x, rect.end.y - min(12.0, rect.size.y * 0.24)), value_size, Color.WHITE)
+		if rect.size.y < 27.0:
+			var compact := "%s  %s" % [String(entries[i][0]), String(entries[i][1])]
+			game._draw_centered(compact, rect.get_center() + Vector2(0, 3), game._fit_text_size(compact, rect.size.x - 10.0, 10, 7), Color.WHITE)
+		else:
+			var label_size = game._fit_text_size(String(entries[i][0]), rect.size.x - 14.0, 11, 8)
+			game._draw_centered(String(entries[i][0]), Vector2(rect.get_center().x, rect.position.y + min(17.0, rect.size.y * 0.34)), label_size, Color(accent.r, accent.g, accent.b, 0.86))
+			var value_size = game._fit_text_size(String(entries[i][1]), rect.size.x - 14.0, 20, 12)
+			game._draw_centered(String(entries[i][1]), Vector2(rect.get_center().x, rect.end.y - min(10.0, rect.size.y * 0.22)), value_size, Color.WHITE)
+	var knowledge_rect := Rect2(Vector2(area.position.x, area.end.y - knowledge_h), Vector2(area.size.x, knowledge_h))
+	UmbraKnowledgePresentation.draw_summary(game, knowledge_rect, knowledge)
 
 
 static func _draw_shop_opening_upgrade(game: Node2D, viewport: Vector2) -> void :
@@ -2878,21 +2999,30 @@ static func _draw_centered_outlined(game: Node2D, text: String, pos: Vector2, si
 
 
 static func _draw_wrapped(game: Node2D, text: String, rect: Rect2, size: int, color: Color) -> void :
-	var words = text.split(" ")
-	var line = ""
-	var y = rect.position.y + size
-	for word in words:
-		var test = line + (" " if line != "" else "") + word
-		if game.font.get_string_size(test, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > rect.size.x and line != "":
-			game.draw_string(game.font, Vector2(rect.position.x, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
-			line = word
-			y += size + 4
+	var y: float = rect.position.y + size
+	var paragraphs: PackedStringArray = text.split("\n")
+	for p_index in range(paragraphs.size()):
+		var paragraph: String = paragraphs[p_index]
+		if p_index > 0:
+			y += size + (2 if paragraph != "" else -size * 0.4)
 			if y > rect.end.y:
 				return
-		else:
-			line = test
-	if line != "" and y <= rect.end.y:
-		game.draw_string(game.font, Vector2(rect.position.x, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
+		if paragraph == "":
+			continue
+		var words = paragraph.split(" ")
+		var line = ""
+		for word in words:
+			var test = line + (" " if line != "" else "") + word
+			if game.font.get_string_size(test, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > rect.size.x and line != "":
+				game.draw_string(game.font, Vector2(rect.position.x, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
+				line = word
+				y += size + 4
+				if y > rect.end.y:
+					return
+			else:
+				line = test
+		if line != "" and y <= rect.end.y:
+			game.draw_string(game.font, Vector2(rect.position.x, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
 
 
 static func _draw_wrapped_clamped(game: Node2D, text: String, rect: Rect2, size: int, color: Color, max_lines: int) -> void:
@@ -2990,6 +3120,10 @@ static func _draw_graphics_settings(game: Node2D, viewport: Vector2) -> void :
 			game._draw_settings_card(game.settings_buttons[key], "VOLTAR", "retornar as configuracoes", Color(1.0, 0.26, 0.36), game.settings_selected == i)
 			continue
 		game._draw_gameplay_preference(game.settings_buttons[key], game._graphics_setting_title(key), game._graphics_setting_subtitle(key), game._graphics_setting_value(key), game._graphics_setting_color(key), game.settings_selected == i)
+		if key == "range_opacity":
+			var accent: Color = game._graphics_setting_color(key)
+			game._draw_small_rect_button(game._range_opacity_minus_rect(game.settings_buttons[key]), "-", Color(accent, 0.12), accent)
+			game._draw_small_rect_button(game._range_opacity_plus_rect(game.settings_buttons[key]), "+", Color(accent, 0.12), accent)
 
 
 static func _draw_online_create_room(game: Node2D, viewport: Vector2) -> void:
@@ -3116,6 +3250,8 @@ static func _draw_lobby_online_host(game: Node2D, viewport: Vector2) -> void :
 		status = "CONECTADO AO SERVIDOR" if game.online_connected else "INICIANDO SERVIDOR..."
 	game._draw_centered(status, panel.position + Vector2(panel.size.x * 0.38, 82.0), 15, Color(0.82, 0.94, 1.0, 0.92))
 	game.buttons["lobby_mode"] = Rect2(panel.end.x - 268.0, panel.position.y + 62.0, 234.0, 38.0)
+	game.buttons["lobby_chips"] = Rect2(panel.position.x + 34.0, panel.position.y + 62.0, 226.0, 38.0)
+	game._draw_big_button(game.buttons["lobby_chips"], "CHIPS DA EQUIPE (%d)" % game._quantum_chips().selected_count(), Color(0.19, 0.09, 0.3, 0.78), Color(0.78, 0.6, 1.0))
 	var mode_accent := Color(1.0, 0.68, 0.18) if game.selected_run_mode == game.RUN_MODE_DROP else Color(0.18, 0.86, 0.78)
 	game._draw_big_button(game.buttons["lobby_mode"], "MODO: " + game.selected_run_mode.to_upper(), Color(mode_accent.r, mode_accent.g, mode_accent.b, 0.12), mode_accent)
 
@@ -3139,6 +3275,7 @@ static func _draw_lobby_online_host(game: Node2D, viewport: Vector2) -> void :
 		game.draw_rect(game.buttons["lobby_mode"].grow(3.0), Color.WHITE, false, 2.0)
 	if game.run_mode_popup_open:
 		_draw_run_mode_popup(game, viewport)
+	RTQuantumChipUI.draw(game, viewport)
 
 
 static func _draw_lobby_online_client(game: Node2D, viewport: Vector2) -> void :

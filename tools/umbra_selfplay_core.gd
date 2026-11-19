@@ -234,10 +234,10 @@ func _scenario_for_episode(index: int, rng: RandomNumberGenerator, options: Dict
 			"difficulty": 1.18
 		},
 		{
-			"id": "ancorada_impulsiva_fase5",
-			"manifestation": "ancorada",
+			"id": "parasitica_impulsiva_fase5",
+			"manifestation": "parasitica",
 			"spectrum": "impulsiva",
-			"cards": [{"id": "ancora", "count": 2}, {"id": "petro", "count": 2}, {"id": "mercenaria", "count": 2}],
+			"cards": [{"id": "veneno", "count": 2}, {"id": "petro", "count": 2}, {"id": "mercenaria", "count": 2}],
 			"player_hp": 1180.0,
 			"player_damage": 92.0,
 			"player_speed": 218.0,
@@ -738,9 +738,9 @@ func _apply_manifestation_action(state: Dictionary, scenario: Dictionary, stats:
 		"prismatica":
 			state["player_hp"] = minf(float(state["player_hp_max"]), float(state["player_hp"]) + 65.0 + _card_count(scenario, "espelho") * 12.0)
 			state["apolo_reward"] = float(state.get("apolo_reward", 0.0)) + 0.35
-		"ancorada":
+		"parasitica":
 			if pos.distance_to(umbra_pos) < 340.0:
-				_damage_umbra(state, base_damage * 1.15, "manifest_ancorada", stats, "USAR_MANIFESTACAO")
+				_damage_umbra(state, base_damage * 1.15, "manifest_parasitica", stats, "USAR_MANIFESTACAO")
 				state["umbra_pos"] = Vector2(state["umbra_pos"]).lerp(pos, 0.18)
 			else:
 				_add_action_reward(stats, "USAR_MANIFESTACAO", -0.14)
@@ -1184,7 +1184,7 @@ func _manifest_use_chance(manifestation: String, distance: float) -> float:
 			return 0.28 if distance < 520.0 else 0.1
 		"prismatica":
 			return 0.18
-		"ancorada":
+		"parasitica":
 			return 0.32 if distance < 360.0 else 0.06
 		_:
 			return 0.16

@@ -70,18 +70,20 @@ func _run() -> void:
 	game.last_attack_time = game.time_alive - 0.10
 	game.henry_attack_visual_stage = 1
 	await _capture("01_normal_combo_1280x720.png", Vector2i(1280, 720))
+	game.player_hp = int(game.player_hp_max * 0.45)
+	owner.fury = owner.FLASK_FURY_COST
 	owner.begin_skill(game.player_pos + Vector2.RIGHT * 100.0)
-	owner.guard_elapsed = owner.GUARD_WINDOW * 0.38
-	game.henry_skill_cast_elapsed = owner.guard_elapsed
-	await _capture("02_normal_guard_1280x720.png", Vector2i(1280, 720))
-	owner.modify_incoming_damage(100.0, "visual_fixture")
-	await _capture("02b_guard_contact_1280x720.png", Vector2i(1280, 720))
-	owner.update(0.02)
-	await _capture("02c_counter_1280x720.png", Vector2i(1280, 720))
+	owner.flask_elapsed = owner.FLASK_DURATION * 0.45
+	game.henry_skill_cast_elapsed = owner.flask_elapsed
+	await _capture("02_normal_flask_1280x720.png", Vector2i(1280, 720))
+	owner.reinforcement_cooldown = 0.0
+	owner.activate_reinforcement()
+	await _capture("02b_normal_reinforcement_1280x720.png", Vector2i(1280, 720))
 	owner.reset()
 	game.player_pos = Vector2(640.0, 390.0)
 
-	owner.cast_ultimate()
+	owner.fury = owner.FURY_MAX
+	owner.update(0.01)
 	for capture in [["03_growth_early_1280x720.png", 0.14], ["04_growth_mid_1280x720.png", 0.52], ["05_growth_final_1280x720.png", 0.94]]:
 		owner.transform_elapsed = owner.TRANSFORM_DURATION * float(capture[1])
 		game.henry_ultimate_cast_elapsed = owner.transform_elapsed
@@ -111,6 +113,10 @@ func _run() -> void:
 	game._update_effects(0.4)
 	owner.charge_active = false
 	game.henry_skill_cast_active = false
+	owner.begin_leap(game.player_pos + Vector2.RIGHT * 400.0)
+	owner.update(owner.LEAP_DURATION * 0.5)
+	await _capture("10c_giant_leap_apex_1280x720.png", Vector2i(1280, 720))
+	owner.update(owner.LEAP_DURATION * 0.55)
 
 	for index in range(owner.LASTRO_REQUIRED - 1):
 		game.enemies[0]["henry_lastro_stacks"] = index + 1
@@ -172,11 +178,19 @@ func _run() -> void:
 		"canonical_state": {"manifestation_key": "colosso"},
 	}]
 	await _capture("15_remote_charge_late_1280x720.png", Vector2i(1280, 720))
+	game.net_ability_visuals = [{
+		"schema": 3, "source": 22, "sequence": 3, "action": game.NET_ABILITY_TELEPORT,
+		"manifestation": game.HENRY_SELECTION_INDEX, "manifestation_key": "colosso",
+		"origin": Vector2(480.0, 430.0), "target": Vector2(700.0, 430.0),
+		"life": 0.46, "max": 0.92, "extra": 142.0,
+		"canonical_state": {"manifestation_key": "colosso"},
+	}]
+	await _capture("16_remote_leap_apex_1280x720.png", Vector2i(1280, 720))
 	_check(Presentation._meshes.size() == mesh_ids.size(), "mesh pool grew during rendering")
 	for index in range(mesh_ids.size()):
 		_check(Presentation._meshes[index].get_instance_id() == mesh_ids[index], "mesh recreated during rendering")
 
-	print("HENRY_COLOSSUS_VISUAL_OK captures=%d desktop=1280x720 low=960x540 nearest_x4=true growth=true normal_giant=true local_remote=true mesh_pool_stable=true output=" % captures + ProjectSettings.globalize_path(OUTPUT))
+	print("HENRY_COLOSSUS_VISUAL_OK captures=%d desktop=1280x720 low=960x540 nearest_x4=true growth=true fury_hud=true flask=true reinforcement=true giant_leap=true normal_giant=true local_remote=true mesh_pool_stable=true output=" % captures + ProjectSettings.globalize_path(OUTPUT))
 	game._cleanup_runtime_resources()
 	game.queue_free()
 	await process_frame

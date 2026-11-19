@@ -1,5 +1,10 @@
 # UMBRA Headless Self-Play
 
+> Audit 2026-11-16: this uses a separate simplified simulator. The Apolo
+> chooser does not consume the accumulated `apolo_memory`; a visual memory
+> table is not evidence of mutual learning. See
+> [the TCC audit and executable evidence workflow](UMBRA_APOLO_TCC_AUDIT.md).
+
 This lab runs APOLO and UMBRA against each other without loading the main scene. It is meant to train and validate the boss mind with the same combat categories the player brings into phase 5: cards, manifestation, spectrum, movement, projectiles, hazards, transmutation, cooldowns, and survival rewards.
 
 Run a quick local generation batch:

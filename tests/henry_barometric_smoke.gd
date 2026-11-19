@@ -172,9 +172,15 @@ func _run() -> void:
 	# Mutation and Effect are independent axes, not a hard-coded pair.
 	game.mutation_key = "barometrico"
 	game.effect_key = "incandescencia"
-	game.player_hp_max = 400.0
-	game.henry_incendiary_ability_controller.on_player_damaged(40)
-	_check(is_equal_approx(game.henry_friction, 10.0), "Incandescence stopped working with Barometric")
+	# Combustao com outra Mutacao: cada 3o golpe confirmado no mesmo alvo acende 1 Queimadura.
+	game.enemies.clear()
+	game._spawn_enemy(game.ENEMY_COMMON, game.player_pos + Vector2(200.0, 0.0))
+	var ignite_target: Dictionary = game.enemies[-1]
+	ignite_target["hp"] = 5000.0
+	ignite_target["max_hp"] = 5000.0
+	for _hit in range(3):
+		game._damage_enemy(ignite_target, 5.0, "henry_pressure", false, false, game.player_pos, "basic_attack")
+	_check(int(ignite_target.get("henry_burn_stacks", 0)) == 1, "Combustion did not ignite on the third Barometric hit")
 	game.henry_incendiary_ability_controller.reset()
 	owner.reset()
 	game.mutation_key = "incendiario"

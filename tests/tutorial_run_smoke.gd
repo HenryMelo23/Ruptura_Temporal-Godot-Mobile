@@ -42,9 +42,8 @@ func _run() -> void:
 	game.shop_auto_enabled = true
 	game.score = game.card_cost * 2
 	game._update_button_layout(Vector2(1280, 720))
-	_check(game.buttons.has("shop_manual"), "development phase hid manual shop behind automatic mode")
-	game._try_open_manual_shop()
-	_check(game.mode == "shop_opening", "development phase manual shop did not open")
+	_check(not game.buttons.has("shop_manual"), "development phase restored the retired manual shop")
+	_check(game.shop_rift_controller.enabled(), "development phase disabled the merchant rift")
 	game.forced_initial_phase = 0
 	game._start_game()
 	game.set_process(false)
@@ -60,6 +59,20 @@ func _run() -> void:
 	await process_frame
 
 	game._accept_tutorial_offer(true)
+	_check(game.tutorial_state == RTTutorialGuide.STATE_CONTROLS, "tutorial did not open controls summary")
+	_check(game.enemies.is_empty(), "controls summary spawned enemies early")
+	game.desktop_attack_aim_mode = game.DESKTOP_ATTACK_AIM_AUTO
+	game.desktop_teleport_mode = game.DESKTOP_TELEPORT_CURSOR
+	_check(game._effective_desktop_teleport_mode() == game.DESKTOP_TELEPORT_LAST_DIRECTION, "auto attack kept cursor teleport")
+	_check(game.player_control_controller.desktop_dash_mode() == game.DESKTOP_TELEPORT_LAST_DIRECTION, "dash mode ignored auto attack rule")
+	_check(not game._tutorial_guide().allowed_teleport_modes().has(game.DESKTOP_TELEPORT_CURSOR), "settings still offer cursor teleport with auto attack")
+	game.desktop_attack_aim_mode = game.DESKTOP_ATTACK_AIM_CURSOR
+	_check(game._effective_desktop_teleport_mode() == game.DESKTOP_TELEPORT_CURSOR, "cursor attack did not free cursor teleport")
+	game.desktop_attack_aim_mode = game.DESKTOP_ATTACK_AIM_AUTO
+	var controls_text: Dictionary = game._tutorial_step_text(RTTutorialGuide.STATE_CONTROLS)
+	_check(String(controls_text.get("hint", "")).find("CONFIGURA") >= 0, "controls step does not point to settings")
+	await _capture("tutorial_controls_1280x720.png")
+	game._continue_tutorial_story()
 	_check(game.tutorial_state == game.TUTORIAL_STATE_ATTACK, "tutorial did not enter attack step")
 	_check(game.enemies.size() == 1, "attack step did not create one training enemy")
 	_check(bool(game.enemies[0].get("tutorial", false)), "training enemy was not marked")
@@ -96,8 +109,24 @@ func _run() -> void:
 	game._tutorial_note_action("secondary")
 	_check(game.tutorial_state == game.TUTORIAL_STATE_DASH, "secondary action did not advance to dash")
 	game.tutorial_action_grace = 0.0
+	_check(not game._tutorial_guide().action_allowed("dash") or true, "")
 	game._tutorial_note_action("dash")
-	_check(game.tutorial_state == game.TUTORIAL_STATE_MANIFESTATION, "dash action did not advance to manifestation context")
+	_check(game.tutorial_state == RTTutorialGuide.STATE_DASH_LINE, "dash action did not open the damage line step")
+	var guide: RTTutorialGuide = game._tutorial_guide()
+	var hp_before: int = int(game.player_hp)
+	game.last_dash_time = -100.0
+	game.player_pos = Vector2(guide.line_x + 10.0, game.player_pos.y)
+	guide.update(0.016)
+	_check(game.player_pos.x < guide.line_x, "walking through the line was not pushed back")
+	_check(int(game.player_hp) < hp_before, "walking through the line did no damage")
+	await _capture("tutorial_dash_line_1280x720.png")
+	hp_before = int(game.player_hp)
+	game.last_dash_time = game.time_alive
+	game.player_pos = Vector2(guide.line_x + 60.0, game.player_pos.y)
+	guide.update(0.016)
+	guide.update(1.0)
+	_check(int(game.player_hp) == hp_before, "teleport through the line dealt damage")
+	_check(game.tutorial_state == game.TUTORIAL_STATE_MANIFESTATION, "teleport across line did not advance to manifestation context")
 	await _capture("tutorial_manifestation_1280x720.png")
 	game._continue_tutorial_story()
 	_check(game.tutorial_state == game.TUTORIAL_STATE_AURA, "manifestation context did not advance to aura")
@@ -111,11 +140,19 @@ func _run() -> void:
 	_check(game.tutorial_state == game.TUTORIAL_STATE_ESSENCE, "aura context did not advance to essence")
 	await _capture("tutorial_essence_1280x720.png")
 	game._continue_tutorial_story()
-	_check(game.tutorial_state == game.TUTORIAL_STATE_FINISH, "essence context did not advance to finish")
+	_check(game.tutorial_state == RTTutorialGuide.STATE_MISSION, "essence did not advance to mission")
+	await _capture("tutorial_mission_1280x720.png")
+	game._continue_tutorial_story()
+	_check(game.tutorial_state == game.TUTORIAL_STATE_FINISH, "mission context did not advance to finish")
 	game._continue_tutorial_story()
 	_check(game.tutorial_state == game.TUTORIAL_STATE_NONE, "tutorial did not finish")
 	_check(is_zero_approx(game.spawn_timer), "normal spawn was not released after tutorial")
 	_check(not game.run_tutorial_enabled, "completed tutorial did not disable future offers")
+	_check(game._tutorial_guide().mission_active, "mission tracker did not start after tutorial")
+	_check(String(game._tutorial_guide().mission_text()[0]) == "FIQUE MAIS FORTE", "mission does not start with get stronger")
+	await _capture("tutorial_mission_hud_1280x720.png")
+	game._tutorial_guide().strong_until = game.time_alive - 1.0
+	_check(String(game._tutorial_guide().mission_text()[0]) == "CHAME O CHEFE", "mission did not move to call boss")
 
 	game._start_game()
 	game.set_process(false)

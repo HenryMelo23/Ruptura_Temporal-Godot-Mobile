@@ -42,9 +42,11 @@ func _expect_fire_pose(direction: Vector2, expected_key: String, expected_flip: 
 	var frames: Array = game.textures.get(expected_key, [])
 	_check(String(info.get("key", "")) == expected_key, expected_key + " wrong direction")
 	_check(bool(info.get("flip_h", false)) == expected_flip, expected_key + " wrong flip")
-	_check(frames.size() == 2 and frames[0] != frames[1], expected_key + " needs two distinct frames")
-	for frame in range(2):
-		game.time_alive = game.last_attack_time + frame * game.PLAYER_FIRE_FRAME_SECONDS + 0.005
+	# Arte antiga: 2 quadros; Geovana v2: 4 (preparo, carga, disparo, recuo).
+	_check(frames.size() >= 2 and frames[0] != frames[1], expected_key + " needs distinct frames")
+	var frame_seconds: float = game.PLAYER_FIRE_FRAME_SECONDS * 2.0 / float(maxi(1, frames.size()))
+	for frame in range(frames.size()):
+		game.time_alive = game.last_attack_time + frame * frame_seconds + 0.005
 		var tex: Texture2D = game._player_texture()
 		_check(tex == frames[frame], expected_key + " wrong frame")
 		var snapshot: Vector2i = game._network_player_animation_snapshot(12345)
@@ -55,9 +57,14 @@ func _expect_fire_pose(direction: Vector2, expected_key: String, expected_flip: 
 		_check(game._net_player_texture() == tex, "legacy remote direction/frame differs")
 		if expected_key != "player_fire":
 			var image: Image = tex.get_image()
-			_check(image.get_size() == Vector2i(256, 430), "direction canvas dimensions differ")
+			if RTGeovanaV2.is_v2(tex):
+				# v2: canvas unico 256x256, pes na linha FEET_Y (o desenho compensa).
+				_check(image.get_size() == Vector2i(256, 256), "direction canvas dimensions differ")
+				_check(absi(image.get_used_rect().end.y - int(RTGeovanaV2.FEET_Y)) <= 4, "feet are not anchored at the v2 feet line")
+			else:
+				_check(image.get_size() == Vector2i(256, 430), "direction canvas dimensions differ")
+				_check(image.get_used_rect().end.y == 430, "feet are not anchored at canvas bottom")
 			_check(image.get_pixel(0, 0).a == 0.0, "background is opaque")
-			_check(image.get_used_rect().end.y == 430, "feet are not anchored at canvas bottom")
 			_check(bool(game._player_draw_profile().get("preserve_height", false)), "direction is stretched")
 	game.time_alive = game.last_attack_time + 0.185
 	_check(game.textures["player_idle"].has(game._player_texture()), "shot did not recover to idle")
@@ -68,7 +75,7 @@ func _run() -> void:
 	var lacerante_frames: Array = game.textures.get("player_lacerar", [])
 	var right_frames: Array = game.textures.get("player_right", [])
 	_check(not fire_frames.is_empty(), "player_fire frames missing")
-	_check(game.textures["player_fire_network"].size() == 14, "network direction table incomplete")
+	_check(game.textures["player_fire_network"].size() == 7 * game.EntityVisualProfiles._player_fire_frames_per_direction(game), "network direction table incomplete")
 	_check(not lacerante_frames.is_empty(), "player_lacerar frames missing")
 	_check(not right_frames.is_empty(), "player_right frames missing")
 

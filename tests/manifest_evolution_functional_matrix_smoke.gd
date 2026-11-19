@@ -97,6 +97,10 @@ func _run_teleport_behavior(key: String, entry: Dictionary) -> void:
 
 
 func _run() -> void:
+	if not game.MANIFEST_EVOLUTIONS_ENABLED:
+		print("MANIFEST_EVOLUTION_FUNCTIONAL_OK disabled=true roster=%d" % game.MANIFESTATIONS.size())
+		quit(0)
+		return
 	game._start_game()
 	game.mode = "game"
 	var checked := 0

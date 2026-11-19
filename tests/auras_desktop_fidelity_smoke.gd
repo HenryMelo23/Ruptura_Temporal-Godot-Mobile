@@ -42,7 +42,7 @@ func _initialize() -> void:
 	burning["aura_burn"] = 8.0
 	burning["aura_burn_tick"] = 0.0
 	events = AuraSystem.update(vanguard, 0.1, {"player_pos": Vector2.ZERO, "enemies": [burning]})
-	_check(events.any(func(e): return String(e["type"]) == "enemy_damage" and float(e["amount"]) == 16.0), "Vanguarda burn formula diverged")
+	_check(events.any(func(e): return String(e["type"]) == "enemy_damage" and is_equal_approx(float(e["amount"]), 16.0 * 1.2)), "Vanguarda burn formula diverged (calor 1 = +20%)")
 
 	var insane := AuraSystem.create("Insana", 2)
 	insane["insane_ready"] = 0.0
@@ -72,12 +72,23 @@ func _initialize() -> void:
 	_check(float(abyss["abyss_tide"]) > 0.0, "Abissal did not trigger Black Tide at full Depth")
 
 	var prophecy := AuraSystem.create("Profetica", 1)
-	prophecy["prophecy_next"] = 0.0
-	var marked := _enemy(70)
-	AuraSystem.update(prophecy, 0.01, {"player_pos": Vector2.ZERO, "enemies": [marked]})
-	_check(int(prophecy["prophecy_uid"]) == 70, "Profetica did not mark an available target")
-	var prophecy_hit := AuraSystem.on_enemy_hit(prophecy, marked, {}, 100.0)
-	_check(float(prophecy_hit["damage"]) > 120.0, "Profetica marked-target reward was not applied")
+	prophecy["prophecy_vision_cd"] = 0.0
+	events = AuraSystem.update(prophecy, 0.01, {"player_pos": Vector2.ZERO, "enemies": []})
+	_check(float(prophecy["prophecy_vision"]) > 0.0 and events.any(func(e): return String(e["type"]) == "prophecy_vision"), "Profetica did not open the Vision")
+	_check(AuraSystem.prophecy_register_dodge(prophecy), "Profetica did not store a dodge as Fate")
+	var fated_shot := {"damage": 100.0}
+	AuraSystem.on_attack(prophecy, fated_shot)
+	_check(float(fated_shot["damage"]) > 150.0 and bool(fated_shot.get("prophecy_crit", false)), "Profetica Fate did not crit the next attack")
+
+	var devour := AuraSystem.create("Voraz", 1)
+	var low := AuraSystem.voracious_devour_threshold(devour)
+	devour["voracious_hunger"] = AuraSystem.hunger_max(devour) * 0.9
+	_check(AuraSystem.voracious_devour_threshold(devour) > low, "Voraz devour limit does not grow with Hunger")
+
+	var vguard := AuraSystem.create("Vanguarda", 2)
+	var vhit := AuraSystem.on_player_hit(vguard, 20.0, 100.0, 100.0)
+	_check(Array(vhit["events"]).any(func(e): return String(e["type"]) == "vanguard_wave"), "Vanguarda did not release the Heat Wave")
+	_check(int(vguard["vanguard_heat"]) == 1, "Vanguarda did not heat up")
 
 	var blood := AuraSystem.create("Sanguinaria", 1)
 	var wounded := _enemy(80)

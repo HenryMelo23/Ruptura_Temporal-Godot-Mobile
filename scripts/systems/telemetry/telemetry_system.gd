@@ -75,6 +75,10 @@ func start_report() -> void:
 	game.run_behavior_player_last_sample_pos = game.player_pos
 	game.run_behavior_move_samples = 0
 	game.run_behavior_stationary_samples = 0
+	game.run_last_damage_source = ""
+	game.run_death_source = ""
+	game.run_death_cause = ""
+	game.run_death_phase = 0
 	for phase in range(1, 6):
 		game.run_damage_to_boss_by_phase[phase] = 0.0
 		game.run_boss_reached[phase] = false
@@ -428,6 +432,9 @@ func build_run_report_payload(result: String) -> Dictionary:
 		"started_unix": game.run_started_unix,
 		"ended_unix": int(Time.get_unix_time_from_system()),
 		"result": result,
+		"death_cause": game.run_death_cause,
+		"death_source": game.run_death_source,
+		"death_phase": game.run_death_phase,
 		"duration": game._run_time_text(),
 		"duration_seconds": int(round(game.time_alive)),
 		"phase": game.current_phase,
@@ -455,7 +462,9 @@ func build_run_report_payload(result: String) -> Dictionary:
 			"defense": game.player_defense,
 			"crit_chance": game.player_crit_chance,
 			"lifesteal": game.player_lifesteal,
-			"luck": game.luck
+			"luck": game._effective_luck(),
+			"card_luck": game.luck,
+			"temporal_luck": game._temporal_luck()
 		},
 		"enemy_scaling": {
 			"limit": game._enemy_limit(),
@@ -479,6 +488,9 @@ func build_run_report_payload(result: String) -> Dictionary:
 			"cells": game._run_heatmap_report_rows()
 		},
 		"behavior_metrics": game._run_behavior_report(),
+		"umbra_knowledge": game.umbra_memory_controller.knowledge_report(game),
+		"umbra_combat": game.umbra_mind.last_report.duplicate(true) if game.umbra_mind != null and not game.is_multiplayer else {},
+		"umbra_phase_lessons": game._umbra_phase_observer().lessons.duplicate(true) if not game.is_multiplayer else [],
 		"boss_damage_total": game._total_boss_damage_report(),
 		"boss_report": game._boss_report_text(),
 		"boss_detail": game._boss_report_rows(),

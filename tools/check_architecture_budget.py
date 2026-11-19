@@ -28,6 +28,8 @@ DEFAULT_TARGETS = [
     "scripts/systems/online/net_contract.gd",
     "scripts/systems/audio/audio_lifecycle.gd",
     "scripts/systems/enemy_manager.gd",
+    "scripts/systems/combat/runtime_targeting_controller.gd",
+    "scripts/systems/enemies/regular_enemy_balance.gd",
     "scripts/systems/modern_boss_controller.gd",
     "scripts/presentation/combat_effects_presentation.gd",
     "scripts/presentation/menus_presentation.gd",

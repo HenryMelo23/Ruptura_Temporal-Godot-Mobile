@@ -69,8 +69,8 @@ func _run() -> void:
 	for card in [zero, necro]:
 		_check(game._is_rare_card(card), "card_not_rare_%s" % game._card_id(card))
 		_check(game._card_max_count(card) >= 999999, "card_not_infinite_%s" % game._card_id(card))
-		_check(game.textures.get("card_" + String(card["name"])) != null, "missing_frame_1_%s" % game._card_id(card))
-		_check(game.textures.get("card_" + String(card["name"]) + "_2") != null, "missing_frame_2_%s" % game._card_id(card))
+		_check(game._get_texture("card_" + String(card["name"])) != null, "missing_frame_1_%s" % game._card_id(card))
+		_check(game._get_texture("card_" + String(card["name"]) + "_2") != null, "missing_frame_2_%s" % game._card_id(card))
 
 	for i in range(12):
 		game._apply_card(zero)

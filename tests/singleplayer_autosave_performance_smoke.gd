@@ -73,6 +73,10 @@ func _run() -> void:
 	game.is_dead = false
 	game.player_hp = maxf(1.0, float(game.player_hp_max))
 	game.mode = "game"
+	# The synthetic late-run payload intentionally omits renderer-only fields.
+	game.preview_capture_mode = true
+	game.visible = false
+	game.set_process(false)
 	_populate_late_run_fixture()
 
 	var started := Time.get_ticks_usec()
@@ -93,6 +97,10 @@ func _run() -> void:
 	game.interrupted_run_autosave_timer = 0.0
 	started = Time.get_ticks_usec()
 	game._update_interrupted_run_autosave(0.02)
+	var dispatch_ms := _elapsed_ms(started)
+	while game.save_controller.interrupted_run_save_thread != null:
+		await process_frame
+		game.save_controller._poll_interrupted_run_save(false)
 	var save_ms := _elapsed_ms(started)
 	var save_size := FileAccess.get_file_as_bytes(game.INTERRUPTED_RUN_SAVE_PATH).size()
 	var loaded: Dictionary = game._load_interrupted_run_snapshot()
@@ -106,7 +114,7 @@ func _run() -> void:
 	_check(Array(loaded_fields.get("run_damage_events", [])).size() <= 256, "periodic autosave retained unbounded telemetry")
 	_check(compact_binary.size() * 3 < binary_encoded.size(), "compact autosave did not materially reduce payload")
 	print(
-		"SINGLEPLAYER_AUTOSAVE_PERFORMANCE_OK legacy_build_ms=%.2f legacy_text_encode_ms=%.2f legacy_binary_encode_ms=%.2f legacy_text_bytes=%d legacy_binary_bytes=%d compact_build_ms=%.2f compact_encode_ms=%.2f autosave_ms=%.2f autosave_bytes=%d bullets=%d effects=%d telemetry=%d" % [
+		"SINGLEPLAYER_AUTOSAVE_PERFORMANCE_OK legacy_build_ms=%.2f legacy_text_encode_ms=%.2f legacy_binary_encode_ms=%.2f legacy_text_bytes=%d legacy_binary_bytes=%d compact_build_ms=%.2f compact_encode_ms=%.2f autosave_dispatch_ms=%.2f autosave_total_ms=%.2f autosave_bytes=%d bullets=%d effects=%d telemetry=%d" % [
 			build_ms,
 			encode_ms,
 			binary_encode_ms,
@@ -114,6 +122,7 @@ func _run() -> void:
 			binary_encoded.size(),
 			compact_build_ms,
 			compact_encode_ms,
+			dispatch_ms,
 			save_ms,
 			save_size,
 			game.bullets.size(),

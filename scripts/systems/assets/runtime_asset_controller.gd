@@ -1,8 +1,8 @@
 class_name RTRuntimeAssetController
 extends RefCounted
 
-# Keeps full-resolution phase art out of low-memory devices until the phase or
-# catalog actually needs it. Desktop keeps the historical eager preload path.
+# Keeps full-resolution art out of memory until the active phase or catalog
+# actually needs it. Streaming changes residency only, never texture quality.
 
 const PHASE_TEXTURE_SPECS := {
 	1: {
@@ -80,11 +80,43 @@ const PHASE_TEXTURE_SPECS := {
 		"boss3_flask": "disparo_boss3.png",
 	},
 	4: {
+		"enemy_phase_4_cartografo": ["phase4_enemies/cartografo_vazio_01.png", "phase4_enemies/cartografo_vazio_02.png"],
+		"enemy_phase_4_cronofago": ["phase4_enemies/cronofago_01.png", "phase4_enemies/cronofago_02.png"],
+		"enemy_phase_4_refrator": ["phase4_enemies/refrator_hostil_01.png", "phase4_enemies/refrator_hostil_02.png"],
+		"enemy_phase_4_tecelao": ["phase4_enemies/tecelao_vetorial_01.png", "phase4_enemies/tecelao_vetorial_02.png"],
+		"enemy_phase_4_eco": ["phase4_enemies/eco_entropico_01.png", "phase4_enemies/eco_entropico_02.png"],
 		"enemy_phase_4_left": ["inimigo_direita4-1.png", "inimigo_direita4-2.png"],
 		"enemy_phase_4_right": ["inimigo_esquerda4-1.png", "inimigo_esquerda4-2.png"],
 		"enemy_phase_4_bullet": ["Magia_inimigo1.png", "Magia_inimigo2.png"],
-		"boss4": ["Boss4_1.png", "Boss4_3.png"],
-		"boss4_attack": "Boss4_2.png",
+		"boss4": ["boss4_rework/boss4_idle_00.png", "boss4_rework/boss4_idle_01.png", "boss4_rework/boss4_idle_02.png", "boss4_rework/boss4_idle_03.png"],
+		"boss4_rework_hop": ["boss4_rework/boss4_hop_00.png", "boss4_rework/boss4_hop_01.png", "boss4_rework/boss4_hop_02.png", "boss4_rework/boss4_hop_03.png", "boss4_rework/boss4_hop_04.png", "boss4_rework/boss4_hop_05.png"],
+		"boss4_rework_tongue_v2": ["boss4_rework/boss4_tongue_v2_00.png", "boss4_rework/boss4_tongue_v2_01.png", "boss4_rework/boss4_tongue_v2_02.png", "boss4_rework/boss4_tongue_v2_03.png", "boss4_rework/boss4_tongue_v2_04.png"],
+		"boss4_tongue_segment": "boss4_rework/boss4_tongue_segment.png",
+		"boss4_rework_comet_v2": ["boss4_rework/boss4_comet_v2_00.png", "boss4_rework/boss4_comet_v2_01.png", "boss4_rework/boss4_comet_v2_02.png", "boss4_rework/boss4_comet_v2_03.png", "boss4_rework/boss4_comet_v2_04.png"],
+		"boss4_beam_segment": "boss4_rework/boss4_beam_segment.png",
+		"boss4_rework_gravity_v2": ["boss4_rework/boss4_gravity_v2_00.png", "boss4_rework/boss4_gravity_v2_01.png", "boss4_rework/boss4_gravity_v2_02.png", "boss4_rework/boss4_gravity_v2_03.png"],
+		"boss4_singularity_core": "boss4_rework/boss4_singularity_core.png",
+		"boss4_singularity_swirl": "boss4_rework/boss4_singularity_swirl.png",
+		"boss4_singularity_burst": "boss4_rework/boss4_singularity_burst.png",
+		"boss4_beam_origin": "boss4_rework/boss4_beam_origin.png",
+		"boss4_beam_impact": "boss4_rework/boss4_beam_impact.png",
+		"boss4_tongue_tip": "boss4_rework/boss4_tongue_tip.png",
+		"boss4_rework_idle": ["boss4_rework/boss4_idle_00.png", "boss4_rework/boss4_idle_01.png", "boss4_rework/boss4_idle_02.png", "boss4_rework/boss4_idle_03.png"],
+		"boss4_rework_walk": ["boss4_rework/boss4_walk_00.png", "boss4_rework/boss4_walk_01.png", "boss4_rework/boss4_walk_02.png", "boss4_rework/boss4_walk_03.png"],
+		"boss4_rework_hit": ["boss4_rework/boss4_hit_00.png", "boss4_rework/boss4_hit_01.png"],
+		"boss4_rework_jump": ["boss4_rework/boss4_jump_00.png", "boss4_rework/boss4_jump_01.png"],
+		"boss4_rework_land": ["boss4_rework/boss4_land_00.png", "boss4_rework/boss4_land_01.png"],
+		"boss4_rework_slam": ["boss4_rework/boss4_slam_00.png", "boss4_rework/boss4_slam_01.png", "boss4_rework/boss4_slam_02.png", "boss4_rework/boss4_slam_03.png"],
+		"boss4_rework_tongue": ["boss4_rework/boss4_tongue_00.png", "boss4_rework/boss4_tongue_01.png", "boss4_rework/boss4_tongue_02.png", "boss4_rework/boss4_tongue_03.png"],
+		"boss4_rework_comet": ["boss4_rework/boss4_comet_00.png", "boss4_rework/boss4_comet_01.png", "boss4_rework/boss4_comet_02.png", "boss4_rework/boss4_comet_03.png"],
+		"boss4_rework_gravity": ["boss4_rework/boss4_gravity_00.png", "boss4_rework/boss4_gravity_01.png", "boss4_rework/boss4_gravity_02.png", "boss4_rework/boss4_gravity_03.png"],
+		"boss4_rework_transition_2": ["boss4_rework/boss4_hp_transition_00.png", "boss4_rework/boss4_hp_transition_01.png", "boss4_rework/boss4_hp_transition_02.png", "boss4_rework/boss4_hp_transition_03.png"],
+		"boss4_rework_transition_3": ["boss4_rework/boss4_hp_transition_00.png", "boss4_rework/boss4_hp_transition_01.png", "boss4_rework/boss4_hp_transition_02.png", "boss4_rework/boss4_hp_transition_03.png"],
+		"boss4_rework_transition_4": ["boss4_rework/boss4_hp_transition_00.png", "boss4_rework/boss4_hp_transition_01.png", "boss4_rework/boss4_hp_transition_02.png", "boss4_rework/boss4_hp_transition_03.png"],
+		"boss4_rework_ultimate": ["boss4_rework/boss4_ultimate_00.png", "boss4_rework/boss4_ultimate_01.png", "boss4_rework/boss4_ultimate_02.png"],
+		"boss4_rework_ultimate_interrupted": ["boss4_rework/boss4_ultimate_interrupted_00.png", "boss4_rework/boss4_ultimate_interrupted_01.png"],
+		"boss4_rework_ultimate_failure": ["boss4_rework/boss4_ultimate_failure_00.png", "boss4_rework/boss4_ultimate_failure_01.png"],
+		"boss4_rework_death": ["boss4_rework/boss4_death_00.png", "boss4_rework/boss4_death_01.png", "boss4_rework/boss4_death_02.png", "boss4_rework/boss4_death_03.png", "boss4_rework/boss4_death_04.png", "boss4_rework/boss4_death_05.png"],
 		"boss4_planet": ["Planet1_1.png", "Planet1_2.png"],
 		"boss4_vortex": ["Vortex1_1.png", "Vortex1_2.png"],
 	},
@@ -102,6 +134,23 @@ const PHASE_TEXTURE_SPECS := {
 		"boss6_form_1": ["Boss6-1-1.png", "Boss6-1-2.png", "Boss6-1-3.png", "Boss6-1-4.png"],
 		"boss6_form_2": ["Boss6-2-1.png", "Boss6-2-2.png", "Boss6-2-3.png", "Boss6-2-4.png"],
 		"boss6_form_3": ["Boss6-3-1.png", "Boss6-3-2.png", "Boss6-3-3.png", "Boss6-3-4.png"],
+		"boss6_rework_idle": ["boss6_rework/boss6_idle_00.png", "boss6_rework/boss6_idle_01.png", "boss6_rework/boss6_idle_02.png", "boss6_rework/boss6_idle_03.png"],
+		"boss6_rework_crawl": ["boss6_rework/boss6_crawl_00.png", "boss6_rework/boss6_crawl_01.png", "boss6_rework/boss6_crawl_02.png", "boss6_rework/boss6_crawl_03.png", "boss6_rework/boss6_crawl_04.png", "boss6_rework/boss6_crawl_05.png"],
+		"boss6_rework_submerge": ["boss6_rework/boss6_submerge_00.png", "boss6_rework/boss6_submerge_01.png", "boss6_rework/boss6_submerge_02.png"],
+		"boss6_rework_emerge": ["boss6_rework/boss6_emerge_00.png", "boss6_rework/boss6_emerge_01.png", "boss6_rework/boss6_emerge_02.png"],
+		"boss6_rework_scythe": ["boss6_rework/boss6_scythe_00.png", "boss6_rework/boss6_scythe_01.png", "boss6_rework/boss6_scythe_02.png", "boss6_rework/boss6_scythe_03.png", "boss6_rework/boss6_scythe_04.png"],
+		"boss6_bone_shard": "boss6_rework/boss6_bone_shard.png",
+		"boss6_rework_spit": ["boss6_rework/boss6_spit_00.png", "boss6_rework/boss6_spit_01.png", "boss6_rework/boss6_spit_02.png", "boss6_rework/boss6_spit_03.png"],
+		"boss6_rework_tail": ["boss6_rework/boss6_tail_00.png", "boss6_rework/boss6_tail_01.png", "boss6_rework/boss6_tail_02.png"],
+		"boss6_acid_glob": "boss6_rework/boss6_acid_glob.png",
+		"boss6_acid_splash": "boss6_rework/boss6_acid_splash.png",
+		"boss6_spark": "boss6_rework/boss6_spark.png",
+		"boss6_scythe_slash": "boss6_rework/boss6_scythe_slash.png",
+		"boss6_burrow_mound": "boss6_rework/boss6_burrow_mound.png",
+		"boss6_emerge_burst": "boss6_rework/boss6_emerge_burst.png",
+		"boss6_rework_stage1_attack": ["boss6_rework/boss6_stage1_attack_00.png", "boss6_rework/boss6_stage1_attack_01.png", "boss6_rework/boss6_stage1_attack_02.png", "boss6_rework/boss6_stage1_attack_03.png"],
+		"boss6_rework_stage2_attack": ["boss6_rework/boss6_stage2_attack_00.png", "boss6_rework/boss6_stage2_attack_01.png", "boss6_rework/boss6_stage2_attack_02.png", "boss6_rework/boss6_stage2_attack_03.png"],
+		"boss6_rework_stage3_attack": ["boss6_rework/boss6_stage3_attack_00.png", "boss6_rework/boss6_stage3_attack_01.png", "boss6_rework/boss6_stage3_attack_02.png", "boss6_rework/boss6_stage3_attack_03.png"],
 	},
 	7: {
 		"enemy_phase_7_cinerido_mov": ["cinerido-mov-1.png", "cinerido-mov-2.png", "cinerido-mov-3.png", "cinerido-mov-4.png"],
@@ -113,19 +162,133 @@ const PHASE_TEXTURE_SPECS := {
 		"boss7_dive": ["boss7_fenix/fenix_down_01.png", "boss7_fenix/fenix_down_02.png", "boss7_fenix/fenix_down_03.png", "boss7_fenix/fenix_down_04.png"],
 		"boss7_core": ["boss7_fenix/fenix_egg_01.png", "boss7_fenix/fenix_egg_02.png", "boss7_fenix/fenix_egg_03.png", "boss7_fenix/fenix_egg_04.png"],
 	},
+	8: {
+		"s8_jabuti": ["sertao/s8_jabuti_0.png", "sertao/s8_jabuti_1.png", "sertao/s8_jabuti_2.png", "sertao/s8_jabuti_3.png"],
+		"s8_mandacaru": ["sertao/s8_mandacaru_0.png", "sertao/s8_mandacaru_1.png", "sertao/s8_mandacaru_2.png", "sertao/s8_mandacaru_3.png"],
+		"s8_morteiro": ["sertao/s8_morteiro_0.png", "sertao/s8_morteiro_1.png", "sertao/s8_morteiro_2.png", "sertao/s8_morteiro_3.png"],
+		"s8_piao": ["sertao/s8_piao_0.png", "sertao/s8_piao_1.png", "sertao/s8_piao_2.png", "sertao/s8_piao_3.png"],
+		"s8_cangaceiro": ["sertao/s8_cangaceiro_0.png", "sertao/s8_cangaceiro_1.png", "sertao/s8_cangaceiro_2.png", "sertao/s8_cangaceiro_3.png", "sertao/s8_cangaceiro_4.png", "sertao/s8_cangaceiro_5.png", "sertao/s8_cangaceiro_6.png", "sertao/s8_cangaceiro_7.png", "sertao/s8_cangaceiro_8.png", "sertao/s8_cangaceiro_9.png", "sertao/s8_cangaceiro_10.png", "sertao/s8_cangaceiro_11.png", "sertao/s8_cangaceiro_12.png", "sertao/s8_cangaceiro_13.png", "sertao/s8_cangaceiro_14.png", "sertao/s8_cangaceiro_15.png"],
+		"s8_egg": ["sertao/s8_egg_0.png", "sertao/s8_egg_1.png"],
+		"boss8_walk": ["sertao/boss8_walk_0.png", "sertao/boss8_walk_1.png", "sertao/boss8_walk_2.png", "sertao/boss8_walk_3.png"],
+		"boss8_cast": ["sertao/boss8_cast_0.png", "sertao/boss8_cast_1.png", "sertao/boss8_cast_2.png", "sertao/boss8_cast_3.png"],
+		"boss8_retract": ["sertao/boss8_retract_0.png", "sertao/boss8_retract_1.png"],
+		"boss8_roll": ["sertao/boss8_roll_0.png", "sertao/boss8_roll_1.png"],
+		"boss8_eclipse": ["sertao/boss8_eclipse_0.png", "sertao/boss8_eclipse_1.png", "sertao/boss8_eclipse_2.png", "sertao/boss8_eclipse_3.png"],
+		"boss8_death": ["sertao/boss8_death_0.png", "sertao/boss8_death_1.png", "sertao/boss8_death_2.png", "sertao/boss8_death_3.png"],
+		"boss8_hurt": ["sertao/boss8_hurt_0.png"],
+		"boss8_sun": ["sertao/boss8_sun_0.png"],
+	},
 }
 
 
-static func should_stream_phase_assets(is_mobile_runtime: bool, memory_saver_active: bool) -> bool:
-	# Streaming is a memory policy, not a visual-quality policy. Mobile keeps the
-	# authored frames for the active phase while releasing assets from other phases.
-	return is_mobile_runtime or memory_saver_active
+static var _prefetch_pending: Dictionary = {}
+static var _prefetch_ready: Dictionary = {}
+static var _prefetch_phase: int = -1
+static var _registered_texture_waiting: Dictionary = {}
+static var _registered_texture_pending: Dictionary = {}
+static var _registered_texture_failed: Dictionary = {}
 
 
-static func should_lazy_gallery_assets(is_mobile_runtime: bool, memory_saver_active: bool) -> bool:
+static func prefetch_paths_for_phase(phase: int, base_path: String, limit: int = 10) -> PackedStringArray:
+	var result := PackedStringArray()
+	if not PHASE_TEXTURE_SPECS.has(phase) or limit <= 0:
+		return result
+	var specs: Dictionary = PHASE_TEXTURE_SPECS[phase]
+	# Dictionary insertion order is authored: common silhouettes and boss idle
+	# arrive before optional action sheets. This keeps prefetch bounded and useful.
+	for key in specs:
+		var spec: Variant = specs[key]
+		var paths: Array = spec if spec is Array else [spec]
+		for relative_path in paths:
+			var path := base_path + String(relative_path)
+			if not result.has(path):
+				result.append(path)
+			if result.size() >= limit:
+				return result
+	return result
+
+
+static func schedule_phase_prefetch(phase: int, base_path: String, limit: int = 10) -> int:
+	if phase == _prefetch_phase:
+		return 0
+	_prefetch_phase = phase
+	_prefetch_ready.clear()
+	var scheduled := 0
+	for path in prefetch_paths_for_phase(phase, base_path, limit):
+		if _prefetch_pending.has(path) or not ResourceLoader.exists(path):
+			continue
+		var error := ResourceLoader.load_threaded_request(path, "Texture2D", true, ResourceLoader.CACHE_MODE_REUSE)
+		if error == OK:
+			_prefetch_pending[path] = phase
+			scheduled += 1
+	return scheduled
+
+
+static func poll_prefetch(max_results: int = 2) -> int:
+	var completed := 0
+	for raw_path in _prefetch_pending.keys():
+		if completed >= maxi(1, max_results):
+			break
+		var path := String(raw_path)
+		var status := ResourceLoader.load_threaded_get_status(path)
+		if status == ResourceLoader.THREAD_LOAD_LOADED:
+			var resource := ResourceLoader.load_threaded_get(path)
+			if resource is Texture2D and int(_prefetch_pending[raw_path]) == _prefetch_phase:
+				_prefetch_ready[path] = resource
+			_prefetch_pending.erase(raw_path)
+			completed += 1
+		elif status == ResourceLoader.THREAD_LOAD_FAILED or status == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+			_prefetch_pending.erase(raw_path)
+			completed += 1
+	return completed
+
+
+static func prefetch_snapshot() -> Dictionary:
+	return {
+		"phase": _prefetch_phase,
+		"pending": _prefetch_pending.size(),
+		"ready": _prefetch_ready.size(),
+	}
+
+
+static func reset_prefetch_for_test() -> void:
+	_prefetch_pending.clear()
+	_prefetch_ready.clear()
+	_prefetch_phase = -1
+	_registered_texture_waiting.clear()
+	_registered_texture_pending.clear()
+	_registered_texture_failed.clear()
+
+
+static func shutdown_prefetch() -> void:
+	# A threaded request cannot be cancelled in Godot. Resolve the small bounded
+	# queue during runtime teardown so the loader does not retain orphaned RIDs.
+	for raw_path in _prefetch_pending.keys():
+		var path := String(raw_path)
+		if ResourceLoader.load_threaded_get_status(path) != ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+			ResourceLoader.load_threaded_get(path)
+	_prefetch_pending.clear()
+	_prefetch_ready.clear()
+	_prefetch_phase = -1
+	for raw_key in _registered_texture_pending.keys():
+		var path := String(_registered_texture_pending[raw_key])
+		if ResourceLoader.load_threaded_get_status(path) != ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+			ResourceLoader.load_threaded_get(path)
+	_registered_texture_waiting.clear()
+	_registered_texture_pending.clear()
+	_registered_texture_failed.clear()
+
+
+static func should_stream_phase_assets(_is_mobile_runtime: bool, _memory_saver_active: bool) -> bool:
+	# Every platform keeps the authored frames for the active phase while
+	# releasing future/past phases. The parameters remain for API compatibility.
+	return true
+
+
+static func should_lazy_gallery_assets(_is_mobile_runtime: bool, _memory_saver_active: bool) -> bool:
 	# Card/manifestation/aura art is presentation-only and can be restored from
 	# its registered path. Lazy residency keeps the authored texture untouched.
-	return is_mobile_runtime or memory_saver_active
+	return true
 
 
 static func release_transient_gallery_assets(game: Node) -> int:
@@ -163,6 +326,69 @@ static func ensure_key(game: Node, key: String, base_path: String) -> bool:
 	return false
 
 
+static func registered_texture_available(game: Node, key: String) -> bool:
+	# Reward-pool construction only needs to know whether an authored texture can
+	# be loaded. Loading every card image while an enemy is dying creates a
+	# visible main-thread hitch; the selected drops are loaded afterwards.
+	if game.textures.get(key) != null:
+		return true
+	return game.lazy_texture_paths.has(key)
+
+
+static func request_registered_texture(game: Node, key: String) -> bool:
+	if game.textures.get(key) != null:
+		return true
+	if _registered_texture_failed.has(key) or not game.lazy_texture_paths.has(key):
+		return false
+	var path := String(game.lazy_texture_paths[key])
+	if not _registered_texture_waiting.has(key) and not _registered_texture_pending.has(key):
+		_registered_texture_waiting[key] = path
+	return false
+
+
+static func poll_registered_textures(game: Node, max_starts: int = 1, max_results: int = 2) -> int:
+	var started := 0
+	for raw_key in _registered_texture_waiting.keys():
+		if started >= maxi(1, max_starts):
+			break
+		var key := String(raw_key)
+		var path := String(_registered_texture_waiting[raw_key])
+		_registered_texture_waiting.erase(raw_key)
+		if not ResourceLoader.exists(path):
+			_registered_texture_failed[key] = true
+			continue
+		var error := ResourceLoader.load_threaded_request(path, "Texture2D", true, ResourceLoader.CACHE_MODE_REUSE)
+		if error == OK:
+			_registered_texture_pending[key] = path
+			started += 1
+		else:
+			_registered_texture_failed[key] = true
+	var completed := 0
+	for raw_key in _registered_texture_pending.keys():
+		if completed >= maxi(1, max_results):
+			break
+		var key := String(raw_key)
+		var path := String(_registered_texture_pending[raw_key])
+		var status := ResourceLoader.load_threaded_get_status(path)
+		if status == ResourceLoader.THREAD_LOAD_LOADED:
+			var resource := ResourceLoader.load_threaded_get(path)
+			_registered_texture_pending.erase(raw_key)
+			if resource is Texture2D:
+				game.textures[key] = resource
+			else:
+				_registered_texture_failed[key] = true
+			completed += 1
+		elif status == ResourceLoader.THREAD_LOAD_FAILED or status == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+			_registered_texture_pending.erase(raw_key)
+			_registered_texture_failed[key] = true
+			completed += 1
+	return started + completed
+
+
+static func registered_texture_failed(key: String) -> bool:
+	return _registered_texture_failed.has(key)
+
+
 static func phase_keys(phase: int) -> Array:
 	if not PHASE_TEXTURE_SPECS.has(phase):
 		return []
@@ -183,6 +409,8 @@ static func _load_phase(game: Node, phase: int, base_path: String, skip_optional
 				texture_spec = _compact_boss1_animation_spec(texture_key, texture_spec)
 			if skip_optional_animation_sets and texture_key.begins_with("boss2_anim_") and texture_spec is Array:
 				texture_spec = _compact_boss2_animation_spec(texture_key, texture_spec)
+			if skip_optional_animation_sets and texture_key.begins_with("boss4_rework_") and texture_spec is Array:
+				texture_spec = _compact_boss4_animation_spec(texture_key, texture_spec)
 			_load_key(game, texture_key, texture_spec, base_path)
 
 
@@ -208,21 +436,39 @@ static func _compact_boss2_animation_spec(key: String, spec: Array) -> Array:
 	return [spec[0], spec[-1]]
 
 
+static func _compact_boss4_animation_spec(key: String, spec: Array) -> Array:
+	if spec.size() <= 2:
+		return spec
+	if key.ends_with("_death") or key.contains("transition"):
+		return [spec[0], spec[int(spec.size() / 2)], spec[-1]]
+	if key.ends_with("_slam") or key.ends_with("_tongue") or key.ends_with("_comet") or key.ends_with("_gravity"):
+		return [spec[0], spec[mini(2, spec.size() - 1)], spec[-1]]
+	return [spec[0], spec[-1]]
+
+
 static func _load_key(game: Node, key: String, spec: Variant, base_path: String) -> void:
 	if key == "boss2":
 		var preferred_frames: Array = []
 		for index in range(1, 5):
-			preferred_frames.append(game._safe_load("res://Boss2-%d.png" % index))
+			preferred_frames.append(_load_texture(game, "res://Boss2-%d.png" % index))
 		if not preferred_frames.any(func(frame): return frame == null):
 			game.textures[key] = preferred_frames
 			return
 	if spec is Array:
 		var frames: Array = []
 		for relative_path in spec:
-			frames.append(game._safe_load(base_path + String(relative_path)))
+			frames.append(_load_texture(game, base_path + String(relative_path)))
 		game.textures[key] = frames
 	else:
-		game.textures[key] = game._safe_load(base_path + String(spec))
+		game.textures[key] = _load_texture(game, base_path + String(spec))
+
+
+static func _load_texture(game: Node, path: String) -> Texture2D:
+	if _prefetch_ready.has(path):
+		var resource: Texture2D = _prefetch_ready[path]
+		_prefetch_ready.erase(path)
+		return resource
+	return game._safe_load(path)
 
 
 static func _release_inactive(game: Node, active_phase: int) -> void:

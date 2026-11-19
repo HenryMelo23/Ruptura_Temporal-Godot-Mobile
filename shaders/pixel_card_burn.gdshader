@@ -8,6 +8,8 @@ uniform float burn_width : hint_range(0.0, 0.2) = 0.05;
 uniform float pixel_factor : hint_range(8.0, 512.0) = 128.0; // Pixel art resolution
 uniform vec2 noise_scroll_speed = vec2(0.0, -0.2);
 uniform float ember_pulse_speed : hint_range(0.0, 10.0) = 4.0;
+// 0..1: quanto fogo vivo sobe pela carta (cresce com as cargas de Cinzas).
+uniform float heat : hint_range(0.0, 1.0) = 0.0;
 
 void fragment() {
     // 1. Pixelate UV coordinates
@@ -44,6 +46,25 @@ void fragment() {
     // Apply alpha mask (discard fully burned pixels)
     final_color.a *= alpha_cutoff;
     
+    // Carvao perto da borda queimada.
+    float char_mask = smoothstep(active_dissolve + 0.12, active_dissolve, noise_val) * alpha_cutoff;
+    final_color.rgb *= 1.0 - char_mask * 0.45;
+
+    // Chamas vivas subindo da base: mais cargas = mais fogo, a arte nunca some.
+    if (heat > 0.0) {
+        float rise = 1.0 - grid_uv.y;
+        float flame_noise = texture(dissolve_texture, grid_uv * vec2(1.6, 0.8) + vec2(0.0, TIME * 0.55)).r;
+        float flame_height = 0.12 + heat * 0.38;
+        float shape = rise + (flame_noise - 0.5) * 0.3;
+        float flame = 1.0 - smoothstep(flame_height * 0.45, flame_height, shape);
+        float core = clamp(1.0 - shape / max(flame_height, 0.001), 0.0, 1.0);
+        vec4 flame_color = texture(palette_ramp, vec2(0.35 + core * 0.65, 0.0));
+        flame_color.rgb *= 1.25 * pulse;
+        float flame_a = flame * (0.55 + 0.35 * heat);
+        final_color.rgb = mix(final_color.rgb, flame_color.rgb, flame_a);
+        final_color.a = max(final_color.a, flame * 0.85);
+    }
+
     // Output final color
     COLOR = final_color;
 }

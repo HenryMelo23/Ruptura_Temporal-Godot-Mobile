@@ -7,18 +7,23 @@ var failed := false
 
 class FakeGame extends Node:
 	var enemies: Array = []
-	var necronada_remnants: Array = []
 	var boss_active := false
 	var boss_hp := 0.0
 	var boss_pos := Vector2.ZERO
 	var player_pos := Vector2(1500.0, 800.0)
 	var WORLD_SIZE := Vector2(1600.0, 900.0)
+	var current_phase := 1
+	var ENEMY_COMMON := "comum"
+	var phase_elapsed := 0.0
 
 	func _entity_physical_radius(entity: Dictionary) -> float:
 		return float(entity.get("radius", 22.0))
 
 	func _local_player_targetable() -> bool:
 		return true
+
+	func _phase_elapsed_time() -> float:
+		return phase_elapsed
 
 
 func _check(condition: bool, message: String) -> void:
@@ -59,22 +64,34 @@ func _run() -> void:
 		_entity(2, Vector2(214.0, 200.0)),
 		_entity(3, Vector2(700.0, 500.0))
 	]
-	game.necronada_remnants = [
-		_entity(101, Vector2(420.0, 300.0), 8.0),
-		_entity(102, Vector2(440.0, 300.0), 8.0)
-	]
 	var distant_before: Vector2 = game.enemies[2]["pos"]
 	manager.apply_entity_separation(1.0 / 60.0)
 	_check(Vector2(game.enemies[0]["pos"]).distance_to(Vector2(game.enemies[1]["pos"])) >= 43.9, "overlapping enemies were not separated with the existing radii")
-	_check(Vector2(game.necronada_remnants[0]["pos"]).distance_to(Vector2(game.necronada_remnants[1]["pos"])) >= 49.9, "remnant-specific 50px separation was lost")
 	_check(Vector2(game.enemies[2]["pos"]).is_equal_approx(distant_before), "distant entity moved without a nearby collision")
-	for entity in game.enemies + game.necronada_remnants:
+	for entity in game.enemies:
 		var pos := Vector2(entity["pos"])
 		_check(pos.x >= 40.0 and pos.y >= 40.0 and pos.x <= 1560.0 and pos.y <= 860.0, "separation escaped world bounds")
-
 	manager.rebuild_spatial_index()
-	var ordered := manager.nearby_entity_indices(Vector2(210.0, 200.0), 100.0, false)
+	var ordered := manager.nearby_entity_indices(Vector2(210.0, 200.0), 100.0)
 	_check(ordered == [0, 1], "nearby enemy order changed and could alter avoidance determinism")
+	var retained_bucket_count := manager.spatial_cells.size()
+	manager.rebuild_spatial_index()
+	_check(manager.spatial_cells.size() == retained_bucket_count, "spatial rebuild allocated duplicate buckets")
+
+	game.current_phase = 2
+	game.phase_elapsed = 0.0
+	game.enemies.clear()
+	for uid in [5, 1, 4, 2, 3]:
+		var common := _entity(uid, Vector2(100.0 + uid * 30.0, 300.0))
+		common["type"] = game.ENEMY_COMMON
+		game.enemies.append(common)
+	manager._refresh_phase2_common_shooters()
+	var active_shooters: Array[int] = []
+	for common in game.enemies:
+		if manager.phase2_common_penguin_can_shoot(common):
+			active_shooters.append(int(common["uid"]))
+	active_shooters.sort()
+	_check(active_shooters == [1, 2], "phase 2 shooter cache changed the deterministic first pair")
 
 	print("ENEMY_SPATIAL_GRID_OK entities=400 brute_candidates=%d spatial_candidates=%d reduction=%.1fx" % [
 		brute_checks,

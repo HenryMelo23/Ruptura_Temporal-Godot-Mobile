@@ -31,6 +31,17 @@ func _run() -> void:
 	game.vol_sfx = 1.0
 	game.vol_shots = 1.0
 	game._ensure_card_unlock_defaults()
+	game._ensure_card_unlock_rule_metric_index()
+	game._rebuild_card_unlock_next_thresholds()
+	_check(not Array(game.card_unlock_rules_by_metric.get("survive_seconds", [])).is_empty(), "survival unlock rules were not indexed")
+	_check(not Array(game.card_unlock_rules_by_metric.get("enemy_kills", [])).is_empty(), "enemy-kill unlock rules were not indexed")
+	game.time_alive = game.CARD_UNLOCK_RUNTIME_SAMPLE_INTERVAL - 0.1
+	game._update_card_unlock_runtime(game.CARD_UNLOCK_RUNTIME_SAMPLE_INTERVAL - 0.1)
+	_check(not game.card_unlock_progress.has("survive_seconds"), "runtime progress wrote a one-second survival event")
+	game.time_alive = game.CARD_UNLOCK_RUNTIME_SAMPLE_INTERVAL
+	game._update_card_unlock_runtime(0.1)
+	_check(is_equal_approx(float(game.card_unlock_progress.get("survive_seconds", 0.0)), game.CARD_UNLOCK_RUNTIME_SAMPLE_INTERVAL), "runtime progress lost the five-second survival checkpoint")
+	game.card_unlock_progress.clear()
 	_check(game.audio_streams.has("unlock_notification"), "unlock notification sfx was not registered")
 	game.player_progress_pending_events.clear()
 	game.player_progress_sync_sent_event_ids.clear()
@@ -47,6 +58,18 @@ func _run() -> void:
 	_check(game.player_progress_pending_events.size() == 2, "runtime mutated a shot batch already in flight")
 	game.player_progress_pending_events.clear()
 	game.player_progress_sync_sent_event_ids.clear()
+	game.player_progress_pending_unlock_index.clear()
+	game.player_progress_deferred_unlock_progress.clear()
+	game.player_progress_sync_in_flight = true
+	game._queue_player_progress_unlock_event("survive_seconds", 45.0, true)
+	_check(game.player_progress_pending_events.is_empty(), "runtime appended to the immutable in-flight queue")
+	_check(game.player_progress_deferred_unlock_progress.size() == 1, "in-flight progress was not coalesced")
+	game.player_progress_sync_in_flight = false
+	game._flush_deferred_player_progress_unlocks()
+	_check(game.player_progress_deferred_unlock_progress.is_empty(), "coalesced progress remained deferred after sync")
+	_check(game.player_progress_pending_events.size() == 1 and is_equal_approx(float(game.player_progress_pending_events[0].get("amount", 0.0)), 45.0), "coalesced progress changed while returning to the durable queue")
+	game.player_progress_pending_events.clear()
+	game.player_progress_pending_unlock_index.clear()
 
 	var base_card: Dictionary = game._find_card_by_id("Speed Boost")
 	var locked_card: Dictionary = game._find_card_by_id("Poison")

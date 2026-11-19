@@ -121,8 +121,8 @@ static func snapshot(host: Node, now_ms: int) -> Vector2i:
 	# Share the exact state/frame selection between local drawing and replication.
 	if host.player_freeze_visual_timer > 0.0:
 		return Vector2i(host.NET_ANIM_FROZEN, clampi(host._frozen_player_frame_index(), 0, 1))
-	var damage_elapsed: float = host.time_alive - host.last_damage_time
-	if damage_elapsed >= 0.0 and damage_elapsed < 0.35:
+	if host._player_damage_pose_active():
+		var damage_elapsed: float = host.time_alive - host.last_damage_time
 		return Vector2i(host.NET_ANIM_DAMAGE, clampi(int(damage_elapsed / 0.07), 0, 3))
 	var ultimate_frame := _ultimate_frame(host)
 	if ultimate_frame >= 0:
@@ -146,3 +146,69 @@ static func snapshot(host: Node, now_ms: int) -> Vector2i:
 	if move.y > 0.1:
 		return Vector2i(host.NET_ANIM_DOWN, int(now_ms / 120) % 2)
 	return Vector2i(host.NET_ANIM_RIGHT, (3 if move.x < 0.0 else 0) + int(now_ms / 105) % 3)
+
+
+# --- Fenda do Mercador ---------------------------------------------------------
+## Quadros da Lacerante caindo/saindo pela fenda. Placeholder montado com o atlas
+## atual (susto = quadros de dano, estilo = giro da ultimate/Q) ate chegar a arte
+## dedicada pedida em .agents/codex_requests/lacerante_rift_fall.md; quando os
+## arquivos rift/lacerante_<humor>_<fase>_<n>.png existirem, eles tem prioridade.
+const RIFT_FRAME_SECONDS := 0.09
+
+
+static func _cycle(host: Node, key: String, indices: Array, now: float) -> Texture2D:
+	var frames: Array = host.textures.get(PREFIX + key, [])
+	if frames.is_empty() or indices.is_empty():
+		return null
+	var pick: int = int(indices[posmod(int(floor(now / RIFT_FRAME_SECONDS)), indices.size())])
+	return frames[clampi(pick, 0, frames.size() - 1)]
+
+
+static func _hold(host: Node, key: String, index: int) -> Texture2D:
+	var frames: Array = host.textures.get(PREFIX + key, [])
+	return frames[clampi(index, 0, frames.size() - 1)] if not frames.is_empty() else null
+
+
+static func rift_texture(host: Node, mood: String, phase: String, p: float, ip: float) -> Texture2D:
+	var now: float = float(host.time_alive)
+	var airborne: bool = ip > 0.0 and ip < 1.0 and p < ip
+	var stylish: bool = mood == "stylish"
+	var resigned: bool = mood == "resigned"
+	match phase:
+		"dive":
+			if stylish:
+				return _hold(host, "ultimate", 0 if p < 0.3 else 1) if p < 0.7 else _cycle(host, "ultimate", [2, 3, 4, 5], now)
+			if resigned:
+				return _cycle(host, "idle", [0, 1, 2, 3], now * 0.6) if p < 0.72 else _hold(host, "down", 0)
+			return _cycle(host, "damage", [0, 1, 2, 3], now)
+		"land":
+			if airborne:
+				if stylish:
+					return _cycle(host, "ultimate", [2, 3, 4, 5], now)
+				if resigned:
+					return _hold(host, "down", 1)
+				return _cycle(host, "damage", [1, 2, 3, 2], now)
+			if stylish:
+				return _hold(host, "ultimate", 6 if p < (ip + 1.0) * 0.5 else 7)
+			if resigned:
+				return _cycle(host, "idle", [0, 1, 2, 3], now * 0.6)
+			return _hold(host, "damage", 3)
+		"exit_dive":
+			if stylish:
+				return _cycle(host, "q_cast", [0, 1, 2, 3, 4, 5], now)
+			if resigned:
+				return _hold(host, "up", 0)
+			return _cycle(host, "damage", [0, 1, 2, 3], now)
+		"emerge":
+			if airborne:
+				if stylish:
+					return _cycle(host, "q_cast", [2, 3, 4, 5], now)
+				if resigned:
+					return _cycle(host, "down", [0, 1], now * 0.7)
+				return _cycle(host, "damage", [0, 1, 2, 3], now)
+			if stylish:
+				return _hold(host, "ultimate", 7)
+			if resigned:
+				return _cycle(host, "idle", [0, 1, 2, 3], now * 0.6)
+			return _hold(host, "damage", 3) if p < (ip + 1.0) * 0.5 else _cycle(host, "idle", [0, 1, 2, 3], now)
+	return null

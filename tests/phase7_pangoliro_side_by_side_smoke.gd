@@ -21,7 +21,7 @@ func _initialize() -> void:
 func _run() -> void:
 	await process_frame
 	game.gameplay_cheat_text = "FASE7"
-	game._try_unlock_retornante_cheat()
+	game._try_apply_gameplay_cheat()
 	game.selected_manifestation = 0
 	game.selected_aura = 0
 	game._start_game()

@@ -22,8 +22,10 @@ func _run() -> void:
 	game.card_cost = 500
 	game._open_shop(false)
 	game.shop_cards = [game.CARDS[2].duplicate(true), game.CARDS[3].duplicate(true), game.CARDS[9].duplicate(true)]
+	game.shop_locked_slots[game._shop_locked_key(1)] = {"card": game.shop_cards[1].duplicate(true), "price": 500}
 	game.shop_selected = 0
 	var starting_score: int = game.score
+	var generation_before: int = game.shop_generation_index
 	game._buy_selected_card()
 	_check(game._shop_purchase_animating(), "purchase animation did not start")
 	_check(is_equal_approx(game.shop_purchase_anim_timer, game.SHOP_PURCHASE_ANIM_TIME), "purchase animation duration drifted")
@@ -33,6 +35,10 @@ func _run() -> void:
 	game._update_shop(game.SHOP_PURCHASE_ANIM_TIME)
 	_check(not game._shop_purchase_animating(), "purchase animation did not commit")
 	_check(game.score < starting_score, "purchase did not deduct points after confirmation")
+	_check(game.shop_generation_index == generation_before + 1, "purchase did not generate a full new shop")
+	_check(String(game.shop_last_generation_telemetry.get("generation_type", "")) == "purchase", "purchase still used a single-slot refill")
+	_check(game.shop_locked_slots.is_empty(), "purchase preserved a reserved legacy offer")
+	_check(game.shop_cards.size() == 3, "purchase did not restore three fresh offers")
 	game._finish_shop()
 	_check(game.mode == "shop_return", "shop did not enter return state")
 	_check(is_equal_approx(game.shop_return_timer, game.SHOP_RETURN_TIME), "network return window changed")

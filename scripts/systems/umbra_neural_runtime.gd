@@ -165,7 +165,12 @@ static func _flatten_nested(matrix: Array) -> Array:
 static func _tensor_shape_error(tensors: Dictionary, key: String, expected_shape: Array) -> String:
 	var tensor: Dictionary = Dictionary(tensors.get(key, {}))
 	var shape: Array = Array(tensor.get("shape", []))
-	if shape != expected_shape:
+	# JSON.parse_string devolve numeros como float: compara pelo valor inteiro.
+	var same := shape.size() == expected_shape.size()
+	for i in range(mini(shape.size(), expected_shape.size())):
+		if not (shape[i] is float or shape[i] is int) or int(shape[i]) != int(expected_shape[i]) or float(shape[i]) != float(int(shape[i])):
+			same = false
+	if not same:
 		return "%s shape expected=%s actual=%s" % [key, expected_shape, shape]
 	var expected_values := 1
 	for size_value in shape:

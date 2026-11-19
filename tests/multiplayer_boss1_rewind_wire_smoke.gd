@@ -9,6 +9,8 @@ var rewind_event := ""
 
 
 func _result_path(result_role: String) -> String:
+	if result_dir != "":
+		return result_dir.path_join("%s_result.txt" % result_role)
 	return "res://.agent_logs/boss1_rewind_wire_%d_%s.txt" % [port, result_role]
 
 

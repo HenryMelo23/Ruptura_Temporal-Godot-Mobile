@@ -22,7 +22,6 @@ func _reset_tp(kind: String) -> void:
 	game.tp_cooldown_pending = false
 	game.tp_cooldown_override = -1.0
 	game.tp_cooldown_release_time = -1.0
-	game.retornante_tp_window = 0.0
 	game.player_pos = Vector2(500, 400)
 	game.enemies.clear()
 	game.boss_active = false
@@ -51,19 +50,6 @@ func _run() -> void:
 	game._start_game()
 	game.mode = "game"
 
-	_reset_tp("lacerante")
-	var q_enemy := _enemy(game.player_pos + Vector2(110, 0), 20000.0)
-	game.player_hp_max = 1000
-	game.player_hp = 400
-	game.last_skill_time = -100.0
-	game._use_skill()
-	game._update_effects(0.01)
-	var hp_after_first: float = float(q_enemy["hp"])
-	var heal_after_first: int = game.player_hp
-	game._update_effects(0.31)
-	_check(float(q_enemy["hp"]) < hp_after_first, "lacerante Q did not damage again on the next rotation")
-	_check(game.player_hp > heal_after_first, "lacerante Q did not heal again on the next rotation")
-
 	_reset_tp("prismatica")
 	game.player_dash_cooldown = game.PLAYER_BASE_DASH_COOLDOWN
 	_check(is_equal_approx(game._current_dash_cooldown(), 4.0), "prismatic TP cooldown is not 4s")
@@ -75,15 +61,6 @@ func _run() -> void:
 	_advance_tp(0.2)
 	_check(not game.tp_cooldown_pending and game.last_dash_time == prism_dash_stamp, "prismatic TP did not release after 4s from activation")
 	_check(not game.tp_effects.is_empty(), "prismatic visual ended together with the direct cooldown")
-
-	_reset_tp("retornante")
-	var return_origin: Vector2 = game.player_pos
-	game._execute_teleport(Vector2(760, 400))
-	_check(is_equal_approx(game.retornante_tp_window, 0.85), "return window is not 850ms")
-	game._try_dash()
-	_check(game.player_pos == return_origin, "returning TP did not go back to origin")
-	_advance_tp(0.02)
-	_check(not game.tp_cooldown_pending, "returning TP did not begin cooldown after returning")
 
 	_reset_tp("parasitica")
 	var parasite_enemy := _enemy(Vector2(455, 400))
@@ -112,10 +89,20 @@ func _run() -> void:
 	game.boss_attacks.clear()
 
 	_reset_tp("gravitante")
-	var gravity_enemy := _enemy(Vector2(560, 400))
-	var gravity_before: Vector2 = gravity_enemy["pos"]
-	game._execute_teleport(Vector2(720, 400))
-	_check(Vector2(gravity_enemy["pos"]).distance_to(gravity_before) >= 140.0, "gravity TP did not push nearby enemies")
+	# Rework: Poco de Partida puxa para a origem, marca e colapsa com dano.
+	var tp_origin: Vector2 = game.player_pos
+	var gravity_enemy := _enemy(tp_origin + Vector2(150, 0))
+	var gravity_before_dist: float = Vector2(gravity_enemy["pos"]).distance_to(tp_origin)
+	var gravity_hp: float = float(gravity_enemy["hp"])
+	game._execute_teleport(tp_origin + Vector2(0, 260))
+	_check(game._gravitante().wells.size() == 1, "gravity TP did not open a well")
+	for _w in range(30):
+		game._gravitante().update(1.0 / 30.0)
+	_check(Vector2(gravity_enemy["pos"]).distance_to(tp_origin) < gravity_before_dist - 40.0, "gravity well did not pull")
+	_check(int(game._gravitante().mass_by_uid().get(int(gravity_enemy["uid"]), 0)) >= 1, "gravity well did not mark")
+	for _w2 in range(60):
+		game._gravitante().update(1.0 / 30.0)
+	_check(game._gravitante().wells.is_empty() and float(gravity_enemy["hp"]) < gravity_hp, "gravity well did not collapse with damage")
 
 	_reset_tp("lacerante")
 	var single_cut_enemy := _enemy(Vector2(610, 400), 10000.0)
@@ -173,5 +160,9 @@ func _run() -> void:
 	game._damage_boss(100.0, "test")
 	_check(not game.rain_audio_player.playing and game.rain_audio_fade_mode == "", "rain audio continued after boss1 died")
 
-	print("MANIFESTATION_TP_OK q=multi_hit_heal prism=large return=850ms parasite=stun gravity=push lacerante=cuts electric=ticks rain=stopped")
+	print("MANIFESTATION_TP_OK prism=large parasite=stun gravity=well lacerante=cuts electric=ticks rain=stopped")
+	game.visible = false
+	game.set_process(false)
+	game.set_physics_process(false)
+	game._cleanup_runtime_resources()
 	quit(0)

@@ -46,7 +46,7 @@ func _run() -> void:
 	_check(game.audio_streams.has("atk_lacerante_1") and game.audio_streams.has("lacerante_kill"), "missing Lacerante recordings")
 	_check(game.audio_streams["player_shot"] is AudioStreamMP3, "player shot is not the root MP3 recording")
 	_check(game.audio_streams["atk_lacerante_1"] is AudioStreamMP3, "Lacerante attack is not the root MP3 recording")
-	for old_key in ["atk_eletrica", "atk_eletrica_charged", "atk_prismatica", "atk_retornante", "atk_parasitica", "atk_gravitante", "atk_ancorada", "ult_eletrica", "ult_gravitante", "Disparo_Geo.wav", "Disparo.MP3"]:
+	for old_key in ["atk_eletrica", "atk_eletrica_charged", "atk_prismatica", "atk_parasitica", "atk_gravitante", "ult_eletrica", "ult_gravitante", "Disparo_Geo.wav", "Disparo.MP3"]:
 		_check(not game.audio_streams.has(old_key), "legacy weapon sfx was loaded: " + old_key)
 	game.vol_master = 1.0
 	game.vol_shots = 1.0

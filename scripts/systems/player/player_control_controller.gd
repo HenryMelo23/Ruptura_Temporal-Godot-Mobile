@@ -53,6 +53,14 @@ func right_aim_vector() -> Vector2:
 
 
 func aim_direction() -> Vector2:
+	return _resolved_aim_direction(false)
+
+
+func ability_aim_direction() -> Vector2:
+	return _resolved_aim_direction(true)
+
+
+func _resolved_aim_direction(for_ability: bool) -> Vector2:
 	if core._apolo_phase5_exhibition_active():
 		if core.apolo_phase5_exhibition_aim.length() > 0.05:
 			return core.apolo_phase5_exhibition_aim.normalized()
@@ -69,7 +77,7 @@ func aim_direction() -> Vector2:
 		var to_cursor: Vector2 = desktop_aim_target_world() - core.player_pos
 		if to_cursor.length() > 0.05:
 			return to_cursor.normalized()
-	var target: Vector2 = core._nearest_target()
+	var target: Vector2 = core._nearest_ability_target() if for_ability else core._nearest_target()
 	if target != Vector2.ZERO:
 		var to_target: Vector2 = target - core.player_pos
 		if to_target.length() > 0.05:
@@ -112,7 +120,7 @@ func should_ignore_emulated_mouse() -> bool:
 
 
 func mouse_release_has_active_action() -> bool:
-	return core.move_touch_index == -2 or core.attack_drag_touch_index == -2 or core.skill_touch_index == -2 or core.secondary_touch_index == -2 or core.dash_touch_index == -2 or core.bombastica_detonator_touch_index == -2 or core.manifest_drag_touch_index == -2 or core.deck_drag_touch_index == -2
+	return core.move_touch_index == -2 or core.attack_drag_touch_index == -2 or core.skill_touch_index == -2 or core.secondary_touch_index == -2 or core.dash_touch_index == -2 or core.manifest_drag_touch_index == -2 or core.deck_drag_touch_index == -2
 
 
 func sync_touch_state() -> void:
@@ -131,12 +139,6 @@ func sync_touch_state() -> void:
 	if core.dash_touch_index >= 0 and not core.active_screen_touches.has(core.dash_touch_index):
 		core.dash_touch_index = -1
 		core.teleport_dragging = false
-	if core.bombastica_detonator_touch_index >= 0 and not core.active_screen_touches.has(core.bombastica_detonator_touch_index):
-		core.bombastica_detonator_touch_index = -1
-		core.bombastica_detonator_hold = 0.0
-	elif core.bombastica_detonator_touch_index == -2 and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		core.bombastica_detonator_touch_index = -1
-		core.bombastica_detonator_hold = 0.0
 	if core.active_screen_touches.is_empty() and core.move_touch_index == -1:
 		core.pointer_down = false
 
@@ -226,11 +228,11 @@ func claim_action_touch(index: int) -> void:
 
 
 func touch_index_has_action(index: int) -> bool:
-	return index == core.attack_drag_touch_index or index == core.skill_touch_index or index == core.secondary_touch_index or index == core.dash_touch_index or index == core.bombastica_detonator_touch_index or index == core.dance_wheel_touch_index
+	return index == core.attack_drag_touch_index or index == core.skill_touch_index or index == core.secondary_touch_index or index == core.dash_touch_index or index == core.dance_wheel_touch_index
 
 
 func try_start_move_touch(index: int, pos: Vector2, viewport: Vector2) -> bool:
-	if core._local_player_controls_locked():
+	if core._local_player_movement_locked():
 		return false
 	if core.move_touch_index != -1:
 		if index != core.move_touch_index and move_touch_is_stale(900):
@@ -258,17 +260,15 @@ func handle_touch_press(index: int, pos: Vector2, viewport: Vector2) -> void:
 	if core.mode not in ["game", "shop_countdown", "boss_call", "pause_countdown"]:
 		core._handle_press(pos, viewport)
 		return
-	if core._local_player_controls_locked():
-		cancel_combat_aim_state(true)
+	if core._local_player_controls_locked() and not core.henry_incendiary_ability_controller.channel_interruptible():
+		if not try_start_move_touch(index, pos, viewport):
+			cancel_combat_aim_state(false)
 		return
 	if core.buttons.has("lacerante_empower") and core.buttons["lacerante_empower"].has_point(pos):
 		claim_action_touch(index)
-		if core.manifestation_key == "eclipsada": core._toggle_eclipsada_form()
-		elif core.manifestation_key == "necronada": core._try_arm_necronada_empower()
+		if core.active_character_key == core.CHARACTER_HENRY and core.mutation_key == "colosso": core.henry_colossus_ability_controller.activate_reinforcement()
 		else: core._try_arm_lacerante_empower()
 		return
-	if core.buttons.has("bombastica_detonator") and core.buttons["bombastica_detonator"].has_point(pos):
-		claim_action_touch(index); core.bombastica_detonator_touch_index = index; core.bombastica_detonator_hold = 0.0; return
 	if core._uses_touch_ui() and core._local_revival_altar_method() != "" and core.buttons.get("attack", Rect2()).has_point(pos):
 		claim_action_touch(index); core._handle_revival_mobile_tap(); return
 	if core.buttons["attack"].has_point(pos):
@@ -280,7 +280,6 @@ func handle_touch_press(index: int, pos: Vector2, viewport: Vector2) -> void:
 	if core.buttons["dash"].has_point(pos):
 		claim_action_touch(index); core.dash_touch_index = index; core.teleport_dragging = true; core.teleport_drag_origin = pos; core.teleport_drag_screen = pos; return
 	if core.buttons["pause"].has_point(pos): core._start_pause_countdown(); return
-	if core.buttons.has("shop_manual") and core.buttons["shop_manual"].has_point(pos): core._try_open_manual_shop(); return
 	if core.buttons["boss"].has_point(pos): core._start_boss_call(); return
 	if not try_start_move_touch(index, pos, viewport):
 		core.dance_wheel_touch_index = index; core.dance_wheel_start_pos = pos; core.dance_wheel_hold_timer = 0.0; core.dance_wheel_active = false
@@ -318,9 +317,7 @@ func handle_touch_release(index: int, pos: Vector2, viewport: Vector2) -> void:
 		if core._ability_cancel_has_point(pos, viewport): core._add_text("CANCELADO", core.player_pos + Vector2(0, -84), Color(1.0, 0.3, 0.3), 0.55, 17)
 		elif combat_active:
 			var profile = core._ground_target_profile(false)
-			if core.manifestation_key == "parasitica" and _parasitica_skill_quick_release(pos):
-				_use_parasitica_quick_skill(not core._uses_touch_ui())
-			elif profile.is_empty(): core._use_skill()
+			if profile.is_empty(): core._use_skill()
 			else: core._use_skill(core._ground_target_world(pos, viewport, false))
 		core.skill_touch_index = -1
 		skill_press_started_msec = 0
@@ -329,7 +326,7 @@ func handle_touch_release(index: int, pos: Vector2, viewport: Vector2) -> void:
 		if core._ability_cancel_has_point(pos, viewport): core._add_text("CANCELADO", core.player_pos + Vector2(0, -84), Color(1.0, 0.3, 0.3), 0.55, 17)
 		elif combat_active:
 			var profile = core._ground_target_profile(true)
-			if core.manifestation_key == "lacerante" and _lacerante_ultimate_quick_release(pos):
+			if QUICK_TARGET_ULTIMATES.has(String(core.manifestation_key)) and _lacerante_ultimate_quick_release(pos):
 				_use_lacerante_quick_ultimate(not core._uses_touch_ui())
 			elif profile.is_empty(): core._use_secondary_skill()
 			else: core._use_secondary_skill(core._ground_target_world(pos, viewport, true))
@@ -340,22 +337,17 @@ func handle_touch_release(index: int, pos: Vector2, viewport: Vector2) -> void:
 		if core._ability_cancel_has_point(pos, viewport): core._add_text("CANCELADO", core.player_pos + Vector2(0, -84), Color(1.0, 0.3, 0.3), 0.55, 17)
 		elif combat_active: core._try_dash_to_screen(pos, viewport)
 		core.dash_touch_index = -1; core.teleport_dragging = false
-	if index == core.bombastica_detonator_touch_index:
-		if combat_active and core.bombastica_detonator_hold < 0.62: core._trigger_bombastica_detonator(false)
-		core.bombastica_detonator_touch_index = -1; core.bombastica_detonator_hold = 0.0
 
 
 func handle_mouse_press(pos: Vector2, viewport: Vector2) -> void:
 	if core._handle_revive_overlay_press(pos) or core._handle_pause_mp_overlay_press(pos, viewport) or core._handle_shop_mp_overlay_press(pos, viewport) or core._handle_boss_mp_overlay_press(pos, viewport) or core._handle_phase_mp_overlay_press(pos, viewport): return
 	if core.mode in ["game", "shop_countdown", "boss_call", "pause_countdown"]:
-		if core._local_player_controls_locked(): cancel_combat_aim_state(true); return
+		if core._local_player_controls_locked() and not core.henry_incendiary_ability_controller.channel_interruptible(): cancel_combat_aim_state(true); return
 		if core.buttons.has("lacerante_empower") and core.buttons["lacerante_empower"].has_point(pos):
 			claim_action_touch(-2)
-			if core.manifestation_key == "eclipsada": core._toggle_eclipsada_form()
-			elif core.manifestation_key == "necronada": core._try_arm_necronada_empower()
+			if core.active_character_key == core.CHARACTER_HENRY and core.mutation_key == "colosso": core.henry_colossus_ability_controller.activate_reinforcement()
 			else: core._try_arm_lacerante_empower()
 			return
-		if core.buttons.has("bombastica_detonator") and core.buttons["bombastica_detonator"].has_point(pos): claim_action_touch(-2); core.bombastica_detonator_touch_index = -2; core.bombastica_detonator_hold = 0.0; return
 		if core.buttons["attack"].has_point(pos): handle_touch_press(-2, pos, viewport); return
 		if core.buttons["dash"].has_point(pos): handle_touch_press(-2, pos, viewport); return
 		if core.buttons["skill"].has_point(pos): handle_touch_press(-2, pos, viewport); return
@@ -403,7 +395,8 @@ func desktop_skill_mode() -> String:
 
 
 func desktop_dash_mode() -> String:
-	return core._sanitize_desktop_teleport_mode(core.desktop_teleport_mode)
+	# Ataque em mira automatica (sem mouse) => teleporte nunca usa cursor.
+	return core._effective_desktop_teleport_mode()
 
 
 func desktop_aim_target_world() -> Vector2:
@@ -415,7 +408,7 @@ func desktop_cursor_ground_target(secondary: bool) -> Variant:
 	if core._ground_target_profile(secondary).is_empty(): return null
 	var profile: Dictionary = core._ground_target_profile(secondary)
 	var delta: Vector2 = desktop_aim_target_world() - core.player_pos
-	if delta.length() <= 0.05: delta = aim_direction() * float(profile.get("default", 160.0))
+	if delta.length() <= 0.05: delta = ability_aim_direction() * float(profile.get("default", 160.0))
 	if delta.length() <= 0.05: delta = Vector2.RIGHT * float(profile.get("default", 160.0))
 	return core.player_pos + delta.normalized() * clampf(delta.length(), float(profile.get("minimum", 0.0)), float(profile.get("range", core.PLAYER_DASH_DISTANCE)))
 
@@ -466,18 +459,18 @@ func execute_desktop_action(action: String) -> void:
 			elif desktop_dash_mode() == core.DESKTOP_TELEPORT_LAST_DIRECTION: core._try_dash_to_world(desktop_last_direction_teleport_target())
 			else: core._try_dash_to_world(desktop_dash_target())
 		"lacerante_empower":
-			if core.manifestation_key == "bombastica": core._trigger_bombastica_detonator(false)
-			elif core.manifestation_key == "eclipsada": core._toggle_eclipsada_form()
-			elif core.manifestation_key == "necronada": core._try_arm_necronada_empower()
+			if core.active_character_key == core.CHARACTER_HENRY and core.mutation_key == "colosso": core.henry_colossus_ability_controller.activate_reinforcement()
 			else: core._try_arm_lacerante_empower()
 		"dance": core._toggle_player_dance()
 		"interact": core._try_interact_revival_altar()
 		"pause": core._start_pause_countdown()
-		"shop": core._try_open_manual_shop()
 		"boss": core._start_boss_call()
 
 
 func desktop_action_uses_aim(action: String) -> bool:
+	# Simbiose Predatoria e aplicada sobre Geovana: sem mira/reticulo.
+	if action == "skill" and core.manifestation_key == "parasitica":
+		return false
 	return action in ["skill", "secondary", "dash"]
 
 
@@ -518,9 +511,6 @@ func cancel_desktop_aim_feedback() -> void:
 
 func handle_desktop_aim_press(action: String, binding: String) -> bool:
 	if not desktop_action_uses_aim(action): execute_desktop_action(action); return true
-	if action == "skill" and core.manifestation_key == "parasitica":
-		begin_desktop_aim(action, binding, true)
-		return true
 	if action == "secondary" and core.manifestation_key == "lacerante":
 		begin_desktop_aim(action, binding, true)
 		return true
@@ -536,14 +526,6 @@ func handle_desktop_aim_press(action: String, binding: String) -> bool:
 
 func handle_desktop_aim_release(event: InputEvent) -> bool:
 	if core.desktop_aim_action == "" or not core.desktop_aim_is_hold or desktop_event_binding(event) != core.desktop_aim_event_binding: return false
-	if core.desktop_aim_action == "skill" and core.manifestation_key == "parasitica":
-		var quick_release := _parasitica_skill_quick_release(core.get_viewport().get_mouse_position())
-		clear_desktop_aim_state(); core.skill_touch_index = -1
-		if quick_release: _use_parasitica_quick_skill(true)
-		else: use_desktop_skill(false)
-		skill_press_started_msec = 0
-		skill_press_origin = Vector2.ZERO
-		return true
 	if core.desktop_aim_action == "secondary" and core.manifestation_key == "lacerante":
 		var quick_release := _lacerante_ultimate_quick_release(core.get_viewport().get_mouse_position())
 		clear_desktop_aim_state(); core.secondary_touch_index = -1
@@ -566,9 +548,28 @@ func _use_parasitica_quick_skill(use_configured_priority: bool) -> void:
 	else: core._use_skill()
 
 
+## Ultimates de area que, no toque rapido (sem arrastar), saem no inimigo
+## escolhido pela prioridade de alvo (mira automatica).
+const QUICK_TARGET_ULTIMATES: Array[String] = ["lacerante", "gravitante"]
+
+
+func secondary_quick_target_preview() -> Variant:
+	if core.secondary_touch_index == -1 or not QUICK_TARGET_ULTIMATES.has(String(core.manifestation_key)):
+		return null
+	var pointer: Vector2 = core.get_viewport().get_mouse_position() if core.desktop_aim_action == "secondary" else core.secondary_touch_pos
+	if not _lacerante_ultimate_quick_release(pointer):
+		return null
+	return core._quick_ground_target(true, not core._uses_touch_ui())
+
+
 func _lacerante_ultimate_quick_release(release_pos: Vector2) -> bool:
+	var within: bool = release_pos.distance_to(secondary_press_origin) <= core.ABILITY_TARGET_DRAG_DEADZONE
+	# Toque: sem arrastar e sempre mira automatica (segurar parado nao mira nada).
+	# Desktop: segurar mira pelo cursor, entao so o toque curto e automatico.
+	if core.desktop_aim_action != "secondary":
+		return within
 	var held_msec := maxi(0, Time.get_ticks_msec() - secondary_press_started_msec)
-	return held_msec < LACERANTE_ULTIMATE_HOLD_MSEC and release_pos.distance_to(secondary_press_origin) <= core.ABILITY_TARGET_DRAG_DEADZONE
+	return held_msec < LACERANTE_ULTIMATE_HOLD_MSEC and within
 
 
 func _use_lacerante_quick_ultimate(use_configured_priority: bool) -> void:
@@ -624,6 +625,8 @@ func handle_gamepad_ui_action(action: String) -> void:
 		elif action in ["attack", "dash"]: core._buy_selected_card()
 		elif action == "skill": core._reroll_shop()
 		elif action == "secondary": core._open_deck("shop")
+		elif action == "lacerante_empower": core._burn_shop_card(core.shop_selected)
+		elif action == "boss": core._reserve_shop_card(core.shop_selected)
 		return
 	if action in ["pause", "secondary"]: simulate_key_press(KEY_ESCAPE)
 	elif action in ["attack", "dash", "skill"]: simulate_key_press(KEY_ENTER)
@@ -642,14 +645,11 @@ func handle_gamepad_virtual_button(button_id: String, pressed: bool, viewport: V
 		elif combat_active and action == "secondary" and core.buttons.has("secondary"): handle_touch_press(-5, core.buttons["secondary"].get_center(), viewport)
 		elif combat_active and action == "dash" and core.buttons.has("dash"): handle_touch_press(-6, core.buttons["dash"].get_center(), viewport)
 		elif combat_active and action == "pause": core._start_pause_countdown()
-		elif combat_active and action == "shop": core._try_open_manual_shop()
 		elif combat_active and action == "boss": core._start_boss_call()
 		elif combat_active and action == "lacerante_empower" and core.buttons.has("lacerante_empower"): handle_touch_press(-8, core.buttons["lacerante_empower"].get_center(), viewport)
-		elif combat_active and action == "bombastica_detonator" and core.buttons.has("bombastica_detonator"): handle_touch_press(-9, core.buttons["bombastica_detonator"].get_center(), viewport)
 		elif not combat_active: handle_gamepad_ui_action(action)
 	else:
 		if action == "attack" and core.buttons.has("attack"): handle_touch_release(-3, core.buttons["attack"].get_center(), viewport)
 		elif action == "skill" and core.buttons.has("skill"): handle_touch_release(-4, core.buttons["skill"].get_center(), viewport)
 		elif action == "secondary" and core.buttons.has("secondary"): handle_touch_release(-5, core.buttons["secondary"].get_center(), viewport)
 		elif action == "dash" and core.buttons.has("dash"): handle_touch_release(-6, core.buttons["dash"].get_center(), viewport)
-		elif action == "bombastica_detonator" and core.buttons.has("bombastica_detonator"): handle_touch_release(-9, core.buttons["bombastica_detonator"].get_center(), viewport)
