@@ -39,7 +39,12 @@ const CASULO_TIME := 3.0
 const CASULO_LOST_SEGMENTS := 2
 const FAST_FACTOR := 0.87
 
-var baile: RTBaileController
+## O controller da fase e dono desta Lagartona; guardar ele forte fecharia um
+## ciclo de RefCounted (baile -> lagartona -> baile) que vaza ao sair do jogo.
+var _baile_ref: WeakRef = null
+var baile: RTBaileController:
+	get:
+		return _baile_ref.get_ref() as RTBaileController if _baile_ref != null else null
 var core: Node
 var trail: Array = []          # historico da cabeca (mais recente primeiro)
 var segments: Array = []       # posicoes dos segmentos (calculadas do rastro)
@@ -55,7 +60,7 @@ var seg_count := SEGMENTS
 
 
 func configure(p_baile: RTBaileController, p_core: Node) -> void:
-	baile = p_baile
+	_baile_ref = weakref(p_baile)
 	core = p_core
 
 
