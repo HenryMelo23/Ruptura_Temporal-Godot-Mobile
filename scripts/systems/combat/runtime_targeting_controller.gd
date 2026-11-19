@@ -42,7 +42,7 @@ func ability_target_position() -> Vector2:
 	var candidates: Array[Dictionary] = []
 	for enemy_value in core.enemies:
 		var enemy: Dictionary = enemy_value
-		if float(enemy.get("hp", 0.0)) <= 0.0 or bool(enemy.get("untargetable", false)):
+		if float(enemy.get("hp", 0.0)) <= 0.0 or bool(enemy.get("untargetable", false)) or core._stalker_camouflaged(enemy):
 			continue
 		var position := Vector2(enemy.get("pos", core.player_pos))
 		candidates.append(_candidate(position, float(enemy.get("hp", INF)), float(enemy.get("max_hp", INF))))
@@ -79,7 +79,7 @@ func auto_target_enemy() -> Dictionary:
 	var best_distance := INF
 	for enemy_value in core.enemies:
 		var enemy: Dictionary = enemy_value
-		if bool(enemy.get("untargetable", false)):
+		if bool(enemy.get("untargetable", false)) or core._stalker_camouflaged(enemy):
 			continue
 		var distance: float = core.player_pos.distance_squared_to(enemy["pos"])
 		if distance > core._auto_attack_range_squared():

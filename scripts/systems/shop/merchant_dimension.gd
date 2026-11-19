@@ -65,6 +65,8 @@ var mp_budget_cards := 0
 ## inteira, senao o relogio correria so para metade dos jogadores.
 var mp_room_stable := false
 var mp_last_second_announced := -1
+## Fisica local dos moveis soltos e do proprio Mercador.
+var physics := RTMerchantWorkshopPhysics.new()
 
 
 func configure(runtime_core: Node) -> void:
@@ -180,6 +182,10 @@ func enter() -> bool:
 	core.player_pos = PLAYER_ENTRY
 	core.camera_follow_initialized = false
 	core.spawn_timer = 99999.0
+	physics.setup(RTMerchantDimensionPresentation.PROPS, [
+		["counter", RTMerchantDimensionPresentation.COUNTER_POS + Vector2(0.0, -24.0), 62.0],
+		["teleporter", TELEPORTER_POS + Vector2(0.0, 40.0), 72.0],
+	], WORLD_SIZE, MERCHANT_POS)
 	active = true
 	entry_age = 0.0
 	# Multiplayer skips narrative: the first approach must open the counter
@@ -240,8 +246,11 @@ func leave(expelled: bool) -> void:
 		core._merchant_npc().on_player_expelled()
 	core.WORLD_SIZE = Vector2(saved.get("world", core.DEFAULT_WORLD_SIZE))
 	core.player_pos = Vector2(saved.get("player_pos", core.player_pos))
-	core.enemies.assign(Array(saved.get("enemies", [])))
-	core.enemy_bullets.assign(Array(saved.get("enemy_bullets", [])))
+	# Boss ja chamado/ativo: a horda guardada nao volta (a chamada do boss
+	# sempre limpa a fase).
+	var boss_started: bool = bool(core.boss_active) or String(core.mode) == "boss_call" or float(core.boss_call_timer) >= 0.0
+	core.enemies.assign([] if boss_started else Array(saved.get("enemies", [])))
+	core.enemy_bullets.assign([] if boss_started else Array(saved.get("enemy_bullets", [])))
 	core.bullets.assign(Array(saved.get("bullets", [])))
 	core.heal_orbs.assign(Array(saved.get("heal_orbs", [])))
 	core.spawn_timer = float(saved.get("spawn_timer", 2.0))
@@ -267,6 +276,10 @@ func update(delta: float) -> void:
 	_refresh_mp_expectation()
 	var npc: RTMerchantNpc = core._merchant_npc()
 	npc.update(delta)
+	physics.apply_bullets(core.bullets)
+	physics.update(delta)
+	if physics.consume_complaint() and not core._dialogue().busy():
+		npc.complain_bump()
 	if core._rift_transition().busy_in_dimension():
 		# Chegando ou saindo pela fenda: o relogio e a bancada esperam a cena.
 		return
@@ -281,7 +294,9 @@ func update(delta: float) -> void:
 	# escolher carta tambem gasta o tempo dela. Conversa de historia pausa; o
 	# menu do balcao (comprar/perguntar) e decisao de compra e gasta tempo.
 	if not stable() and (not core._dialogue().busy() or not core._dialogue().choices().is_empty()):
-		timer += delta
+		# Dilatacao da Racional (e qualquer aura que desacelere o mundo)
+		# tambem segura o relogio da fenda.
+		timer += delta * AuraSystem.world_multiplier(core.aura_state)
 		_tick_countdown_feedback()
 		if timer >= limit:
 			_begin_collapse()
@@ -381,7 +396,7 @@ func _open_counter() -> void:
 
 
 func save_state() -> Dictionary:
-	return {"active": active, "timer": timer, "limit": limit, "confiscated": confiscated, "talked": talked_this_visit, "collapses": collapses, "rift_entries": core._rift_transition().entries if core != null else 0}
+	return {"active": active, "timer": timer, "limit": limit, "confiscated": confiscated, "talked": talked_this_visit, "collapses": collapses, "rift_entries": core._rift_transition().entries if core != null else 0, "npc_run": core._merchant_npc().run_state() if core != null else {}}
 
 
 func load_state(data: Dictionary) -> void:
@@ -392,3 +407,4 @@ func load_state(data: Dictionary) -> void:
 	collapses = int(data.get("collapses", 0))
 	if core != null:
 		core._rift_transition().load_state({"entries": int(data.get("rift_entries", 0))})
+		core._merchant_npc().load_run_state(Dictionary(data.get("npc_run", {})))

@@ -850,8 +850,10 @@ const BOSS_HP_DURABILITY_BY_PHASE: Dictionary = {
 	8: 9.5,
 	9: 10.0
 }
-const BOSS_TIME_HP_GROWTH_RATE: = 0.06
-const BOSS_TIME_HP_GROWTH_EXPONENT: = 0.85
+# 2026-11-18: curva super-linear (expoente > 1) — cada minuto a mais pesa mais
+# que o anterior. 10 min ~x1.9, 25 min ~x3.4, 60 min ~x7.3 (antes x1.4/x1.9/x2.9).
+const BOSS_TIME_HP_GROWTH_RATE: = 0.07
+const BOSS_TIME_HP_GROWTH_EXPONENT: = 1.1
 const BOSS_ARMOR: = 0.528
 const BOSS_ARMOR_TIME_PER_MIN: = 0.00055
 const BOSS_ARMOR_KILL_RATE: = 0.000025
@@ -1149,7 +1151,18 @@ const ENEMY_STALKER: = "espreitador"
 const ENEMY_PROJECTOR: = "projetador"
 const ENEMY_CRYSTAL: = "cristalizador"
 const STALKER_OPACITY_MULT: = 0.75
+## Camuflagem do Espreitador: distancia em que se revela, recarga apos se
+## revelar e transparencia (antes 0.32..0.72 de alfa base; agora mais sumido).
+const STALKER_CAMO_REVEAL_DISTANCE: float = 300.0
+const STALKER_CAMO_COOLDOWN: float = 5.0
+const STALKER_CAMO_ALPHA_MIN: float = 0.14
+const STALKER_CAMO_ALPHA_PULSE: float = 0.22
 const PROJECTOR_ATTACK_RANGE: = 420.0
+## Cadencia e velocidade do disparo do Projetador (antes 2.5 s e 210 u/s).
+const PROJECTOR_SHOOT_INTERVAL: float = 1.6
+const PROJECTOR_BULLET_SPEED_MULT: float = 1.5
+## Mantem o alcance do projetil (~670 u) com a velocidade maior.
+const PROJECTOR_BULLET_LIFE: float = 3.2 / PROJECTOR_BULLET_SPEED_MULT
 const CRYSTAL_DAMAGE_TAKEN_MULT: = 0.50
 const ENEMY_CURATER: = "curater"
 const ENEMY_LARAPIO: = "larapio"
@@ -1587,8 +1600,13 @@ const BOSS5_MIASMA_DURATION: = 4.5
 const BOSS5_DISCHARGE_WARNING: = 0.85
 const BOSS5_DISCHARGE_DURATION: = 1.25
 const BOSS5_THORNS_DURATION: = 3.4
-const BOSS5_OVERLOAD_LASER_ROTATION_FAST: = PI * 0.25
-const BOSS5_OVERLOAD_LASER_ROTATION_SLOW: = PI * 0.10
+# 2026-11-18: giro mais rapido (antes PI*0.25 / PI*0.10).
+const BOSS5_OVERLOAD_LASER_ROTATION_FAST: = PI * 0.40
+const BOSS5_OVERLOAD_LASER_ROTATION_SLOW: = PI * 0.17
+## Arrancada da UMBRA ate o centro ao iniciar a Rajada/Overdrive (antes 240 u/s).
+const BOSS5_OVERLOAD_LASER_DASH_SPEED: float = 680.0
+## Margem extra para o feixe desenhado passar da borda do mapa em qualquer angulo.
+const BOSS5_OVERLOAD_LASER_LENGTH_MARGIN: float = 400.0
 const BOSS5_RAT_DURATION: = 8.0
 const BOSS5_RAT_SPEED: = 212.0
 const BOSS5_RAT_DAMAGE: = 24
@@ -1761,7 +1779,7 @@ const CARDS: = [
 	{"name": "Mercenaria", "nick": "Contrato de Guerra", "desc": "Cada abate paga +2 pontos por copia desde o primeiro. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.", "icon": "Deck/carta_mercenaria1.png", "frame_2": "Deck/carta_mercenaria2.png", "color": Color(1.0, 0.62, 0.16)},
 	{"id": "devorador_destinos", "name": "Devorador de Destinos", "nick": "Devorador de Destinos", "desc": "Marca o inimigo mais poderoso. Sua queda devora destinos ao redor, amedronta sobreviventes e protege Geovana.", "icon": "Deck/carta-Devorador_de_Destinos1.png", "frame_2": "Deck/carta-Devorador_de_Destinos2.png", "color": Color(0.92, 0.1, 0.72)},
 	{"id": "tregua_regenerativa", "name": "Trégua Regenerativa", "nick": "Paz Tecidual", "rarity": CARD_RARITY_RARE, "desc": "Sem receber dano, regenera vida passivamente.", "icon": "Deck/carta-Tr_guaRegenerativa1.png", "frame_2": "Deck/carta-Tr_guaRegenerativa2.png", "color": Color(0.38, 1.0, 0.72)},
-	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "rarity": CARD_RARITY_UNCOMMON, "desc": "Consumivel incomum. Queima uma carta comum da loja. Quando essa carta voltar, ela vem chamuscada fortalecendo os atributos proprios daquela carta de forma acumulavel; o bonus se consolida ao compra-la.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)},
+	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "rarity": CARD_RARITY_UNCOMMON, "desc": "Item raro de energia: nao aparece na loja. So anomalias com muita energia (inimigos supremos: Larapio, Sineiro, Suturador, Arauto, Aguilhao) a geram, e ela sempre cai quando uma delas e derrotada. Queima uma carta comum da loja e outra carta aleatoria nasce no lugar. Quando a queimada voltar, vem chamuscada fortalecendo os atributos proprios dela de forma acumulavel; o bonus se consolida ao compra-la.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)},
 	{"id": "reserva_pulso", "name": "Reserva de Pulso", "nick": "Cura Guardada", "desc": "Guarda cura excedente e a libera em situacao critica.", "icon": "Deck/carta-ReservadePulso1.png", "frame_2": "Deck/carta-ReservadePulso2.png", "color": Color(0.44, 0.92, 1.0)},
 	{"id": "casulo_reativo", "name": "Casulo Reativo", "nick": "Defesa de Rajada", "desc": "Ao sofrer rajada de dano, forma um casulo protetor.", "icon": "Deck/carta-CasuloReativo1.png", "frame_2": "Deck/carta-CasuloReativo2.png", "color": Color(0.54, 1.0, 0.86)},
 	{"id": "passagem_intangivel", "name": "Passagem Intangível", "nick": "Fase Fantasma", "desc": "Apos o teleporte, atravesse inimigos sem sofrer contato.", "icon": "Deck/carta-PassagemIntang_vel1.png", "frame_2": "Deck/carta-PassagemIntang_vel2.png", "color": Color(0.72, 0.9, 1.0)},
@@ -1869,6 +1887,10 @@ const FERROLHO_RUPTURA_COOLDOWN: = 8.0
 const CHOQUE_FONTES_TARGET_COOLDOWN: = 4.0
 const CARD_TREGUA_ID: = "tregua_regenerativa"
 const CARD_CINZAS_ID: = "cinzas_escolha"
+const CARD_MOEDA_ESTAVEL_ID: = "moeda_estavel"
+## Cartas que nunca saem da loja nem de sorteios de recompensa: Cinzas so cai
+## de inimigos supremos; Moeda Estavel so vem das missoes do Mercador.
+const SHOP_EXCLUDED_CARD_IDS: Array[String] = [CARD_CINZAS_ID, CARD_MOEDA_ESTAVEL_ID]
 const CARD_ESCOLHA_ADIADA_ID: = "escolha_adiada"
 const RETIRED_CARD_IDS: Array[String] = [CARD_ESCOLHA_ADIADA_ID, "leitura_instante", "margem_segura", "solo_consolidado"]
 const CARD_RESERVA_ID: = "reserva_pulso"
@@ -3302,6 +3324,11 @@ var gamepad_bindings: Dictionary = {
 	"boss": JOY_BUTTON_BACK
 }
 var gamepad_mapping_action: String = ""
+## Slot "ALEATORIA" do carrossel de montagem: indice sentinela, foco por etapa
+## ("manifest", "aura", "mutation", "effect") e sorteios feitos em silencio.
+const BUILD_RANDOM_INDEX: int = -7
+var build_random_focus: Dictionary = {}
+var build_random_hidden: Dictionary = {}
 var keyboard_bindings: Dictionary = {
 	"attack": INPUT_BIND_MOUSE_PREFIX + str(MOUSE_BUTTON_LEFT),
 	"skill": INPUT_BIND_MOUSE_PREFIX + str(MOUSE_BUTTON_RIGHT),

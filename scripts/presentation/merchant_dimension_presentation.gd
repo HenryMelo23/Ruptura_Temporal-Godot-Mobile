@@ -229,7 +229,17 @@ static func _draw_decals(game: Node2D, camera: Vector2, view: Rect2) -> void:
 static func _draw_props(game: Node2D, camera: Vector2) -> void:
 	var view := Rect2(camera - Vector2(300.0, 300.0), Vector2(game.get_viewport_rect().size) + Vector2(600.0, 600.0))
 	_draw_decals(game, camera, view)
-	for entry in PROPS:
+	# Com a fisica pronta os moveis saem dos corpos (posicao e balanco vivos),
+	# em ordem de profundidade; sem ela, do cenario fixo.
+	var physics: RTMerchantWorkshopPhysics = game._merchant_dimension().physics
+	var entries: Array = []
+	if physics.is_ready():
+		for body in physics.drawable_bodies():
+			entries.append([String(body["name"]), Vector2(body["pos"]), float(body["height"]), bool(body["flip"]), float(body["tilt"]), float(body["shade"])])
+		entries.sort_custom(func(a, b): return Vector2(a[1]).y < Vector2(b[1]).y)
+	else:
+		entries = PROPS
+	for entry in entries:
 		var pos: Vector2 = entry[1]
 		if not view.has_point(pos):
 			continue
@@ -305,7 +315,8 @@ static func _draw_merchant(game: Node2D, camera: Vector2, t: float, dim: RTMerch
 		var s: Vector2 = tex.get_size()
 		var scale: float = (118.0 * LOOP_BOX_H if looped else 118.0) / maxf(1.0, s.y)
 		var pad: float = s.y * LOOP_FOOT_PAD / LOOP_BOX_H if looped else 0.0
-		game.draw_set_transform(at, 0.0, Vector2(scale, scale))
+		# Cambaleio do esbarrao (fisica da oficina): gira em torno do pe.
+		game.draw_set_transform(at, dim.physics.merchant_lean, Vector2(scale, scale))
 		game.draw_texture(tex, Vector2(-s.x * 0.5, -s.y + pad))
 		game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	else:
@@ -436,10 +447,64 @@ static func draw_overlay(game: Node2D, viewport: Vector2) -> void:
 		_draw_team_wait(game, viewport, dim)
 	if dim.active and not talking:
 		_draw_mission(game, viewport)
+	if not dim.active and String(game.mode) == "game":
+		_draw_order_tracker(game, viewport)
 	if dim.active and dim.collapsing > 0.0:
 		var k: float = clampf(dim.collapsing / RTMerchantDimension.COLLAPSE_TIME, 0.0, 1.0)
 		game.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.5, 0.08, 0.12, 0.45 * (1.0 - k)), true)
 	_draw_dialogue(game, viewport)
+
+
+## Encomenda do Bussola no mapa da fase: a marca (zona) e as engrenagens.
+static func draw_mission_world(game: Node2D, camera: Vector2) -> void:
+	if game._merchant_dimension().active:
+		return
+	var missions: RTMerchantMissionController = game._merchant_npc().missions
+	var t: float = float(game.time_alive)
+	var gold := Color(1.0, 0.82, 0.3)
+	if missions.active() and missions.kind() == RTMerchantMissionController.KIND_ZONE and not missions.ready_to_turn_in() and int(missions.mission.get("zone_phase", -1)) == int(game.current_phase):
+		var center: Vector2 = Vector2(missions.mission.get("zone_pos", Vector2.ZERO)) - camera
+		var r: float = RTMerchantMissionController.ZONE_RADIUS
+		game.draw_circle(center, r, Color(gold, 0.06))
+		game.draw_arc(center, r, t * 0.4, t * 0.4 + TAU, 72, Color(gold, 0.7), 3.0)
+		for i in range(8):
+			var a: float = t * 0.4 + float(i) * TAU / 8.0
+			game.draw_line(center + Vector2.from_angle(a) * (r - 18.0), center + Vector2.from_angle(a) * (r + 6.0), Color(gold, 0.85), 3.0)
+		game._draw_centered("MARCA DO BÚSSOLA", center + Vector2(0.0, -r - 14.0), 14, Color(gold, 0.9))
+	for gear in missions.gears:
+		var at: Vector2 = Vector2(gear["pos"]) - camera
+		var spin: float = float(gear["spin"])
+		var blink: float = 1.0 if float(gear["life"]) > 4.0 else (0.4 + 0.6 * absf(sin(t * 10.0)))
+		game.draw_circle(at, 13.0, Color(0.32, 0.24, 0.1, 0.9 * blink))
+		for k in range(8):
+			var a: float = spin + float(k) * TAU / 8.0
+			game.draw_line(at + Vector2.from_angle(a) * 10.0, at + Vector2.from_angle(a) * 17.0, Color(gold, blink), 4.0)
+		game.draw_circle(at, 5.0, Color(1.0, 0.95, 0.8, blink))
+
+
+## Fora da oficina: uma linha discreta com a encomenda aberta e uma seta
+## para a marca quando ela esta fora da tela.
+static func _draw_order_tracker(game: Node2D, viewport: Vector2) -> void:
+	var missions: RTMerchantMissionController = game._merchant_npc().missions
+	if not missions.active():
+		return
+	var text: String = missions.objective_text()
+	if text == "":
+		return
+	var w: float = minf(viewport.x - 32.0, game.font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 34.0)
+	var rect := Rect2(Vector2((viewport.x - w) * 0.5, HUD_BAND + 8.0), Vector2(w, 26.0))
+	game.draw_rect(rect, Color(0.03, 0.04, 0.07, 0.72), true)
+	game.draw_rect(rect, Color(1.0, 0.82, 0.34, 0.55), false, 1.2)
+	game._draw_centered(text, rect.get_center() + Vector2(0.0, 5.0), 13, Color(1.0, 0.88, 0.5))
+	if missions.kind() == RTMerchantMissionController.KIND_ZONE and not missions.ready_to_turn_in():
+		var camera: Vector2 = game._camera(viewport)
+		var target: Vector2 = Vector2(missions.mission.get("zone_pos", Vector2.ZERO)) - camera
+		var screen := Rect2(Vector2.ZERO, viewport).grow(-40.0)
+		if not screen.has_point(target):
+			var center: Vector2 = viewport * 0.5
+			var dir: Vector2 = (target - center).normalized()
+			var tip: Vector2 = center + dir * minf(viewport.x, viewport.y) * 0.42
+			game.draw_colored_polygon(PackedVector2Array([tip + dir * 14.0, tip + dir.orthogonal() * 9.0, tip - dir.orthogonal() * 9.0]), Color(1.0, 0.82, 0.3, 0.85))
 
 
 ## Objetivo da missao "estabilizar a fenda". So aparece dentro da oficina, para

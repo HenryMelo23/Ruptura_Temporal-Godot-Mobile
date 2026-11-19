@@ -1,6 +1,7 @@
 class_name RTCharacterSelectPresentation
 extends RefCounted
 
+const MenusPresentation = preload("res://scripts/presentation/menus_presentation.gd")
 const CYAN := Color(0.12, 0.94, 1.0)
 const ORANGE := Color(1.0, 0.42, 0.08)
 const HENRY_AMBER := Color(1.0, 0.76, 0.22)
@@ -44,15 +45,26 @@ static func _henry_build_model(game: Node2D) -> Dictionary:
 		var key: String = String(entry.get("key", ""))
 		items.append({"index": i, "key": key, "name": String(entry.get("name", "")), "color": entry.get("accent", HENRY_AMBER), "texture": _henry_choice_icon_texture(key), "unlocked": true, "unread": false})
 	var key_selected: String = String(source[selected].get("key", ""))
+	# Slot "ALEATORIA" no fim: sorteio oculto, o jogador descobre na partida.
+	var random_selected: bool = game._build_random_shown("mutation" if mutation_step else "effect")
+	items.append(MenusPresentation.random_build_item(not mutation_step, true))
+	var selected_slot: int = items.size() - 1 if random_selected else selected
+	var dossier: Dictionary = RTBuildChoiceDossier.mutation(key_selected) if mutation_step else RTBuildChoiceDossier.effect(key_selected)
+	if random_selected:
+		dossier = MenusPresentation.random_build_dossier(not mutation_step, true)
+	var mutation_name: String = "???" if bool(game.build_random_hidden.get("mutation", false)) else String(game.HENRY_MUTATIONS[clampi(game.selected_mutation, 0, game.HENRY_MUTATIONS.size() - 1)].get("name", "")).to_upper()
+	var primary_label: String = "CONTINUAR" if mutation_step else "INICIAR"
+	if random_selected:
+		primary_label = "SORTEAR E SEGUIR" if mutation_step else "SORTEAR E INICIAR"
 	return {
 		"theme": "henry",
 		"step": 0 if mutation_step else 1,
 		"items": items,
-		"selected_slot": selected,
-		"target_scroll": float(selected),
-		"dossier": RTBuildChoiceDossier.mutation(key_selected) if mutation_step else RTBuildChoiceDossier.effect(key_selected),
-		"summary": "" if mutation_step else "MUTAÇÃO: " + String(game.HENRY_MUTATIONS[clampi(game.selected_mutation, 0, game.HENRY_MUTATIONS.size() - 1)].get("name", "")).to_upper(),
-		"primary_label": "CONTINUAR" if mutation_step else "INICIAR",
+		"selected_slot": selected_slot,
+		"target_scroll": float(selected_slot),
+		"dossier": dossier,
+		"summary": "" if mutation_step else "MUTAÇÃO: " + mutation_name,
+		"primary_label": primary_label,
 		"primary_enabled": true,
 		"preview_enabled": false,
 		"hint": "A / D OU TOQUE NUMA PLACA",

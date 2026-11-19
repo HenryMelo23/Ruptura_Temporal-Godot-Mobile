@@ -74,6 +74,13 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Shop purchase feedback | `func update` purchase completion | `scripts/ui/shop_controller.gd:738`; successful completion emits `shop_spend` once after charging the pending price |
 | Shop paid reroll cost | `next_paid_reroll_cost` | `scripts/ui/shop_controller.gd:135` |
 | Shop drawing | `func draw` | `scripts/ui/shop_presentation.gd:382` |
+| Shop input hints (keyboard/gamepad/touch) | `input_hints`, `draw_input_hints` | `scripts/ui/shop_presentation.gd`; `KEY_R` reserva, gamepad `lacerante_empower` queima e `boss` reserva na loja |
+| Burned shop slot refill | `_burn_shop_card` -> `_refill_shop_slot_after_purchase(index, [burned_id])` | `scripts/main_runtime_core.gd` |
+| Shop-excluded cards (Cinzas, Moeda Estavel) | `SHOP_EXCLUDED_CARD_IDS`, `_spawn_supreme_cinzas_drop` | `scripts/main_runtime_state.gd`, `scripts/main_runtime_core.gd`; Cinzas cai de Larapio/Sineiro/Suturador/Arauto |
+| Hidden random build slot | `BUILD_RANDOM_INDEX`, `_build_random_slot_enabled`, `_resolve_build_random_pick`, `_step_manifest_build_selection`, `_step_henry_build_selection` | `scripts/main_runtime_core.gd`; models in `menus_presentation.gd:_geovana_build_model` and `character_select_presentation.gd:_henry_build_model` |
+| Merchant orders (Moeda Estavel) | `class_name RTMerchantMissionController` | `scripts/systems/shop/merchant_mission_controller.gd`; menu in `RTMerchantNpc._mission_talk`; run-scoped via `RTMerchantNpc.begin_run/run_state` |
+| Merchant workshop physics | `class_name RTMerchantWorkshopPhysics` | `scripts/systems/shop/merchant_workshop_physics.gd`; player collision through `_clamp_player_world` |
+| Stalker camouflage | `_stalker_camouflaged`, `STALKER_CAMO_*` | `scripts/main_runtime_core.gd` (`_update_stalker`, `_damage_enemy`, bullet loop), targeting skip in `runtime_targeting_controller.gd` |
 | Triggered point/critical card owner | `class_name RTRoguelikePointCardController` | `scripts/systems/cards/roguelike_point_card_controller.gd`; kill drop, damage reward, final critical multiplier and non-legendary duplication contracts |
 | Card power/danger feedback owner | `on_card_acquired`, `on_damage_confirmed`, `on_lifesteal`, `on_player_hit` | `scripts/systems/cards/card_power_feedback_controller.gd`; queues shop acquisitions until gameplay and caps primitive-only feedback |
 | Legacy shop drawing | `func draw_legacy` | `scripts/ui/shop_presentation.gd:502` |

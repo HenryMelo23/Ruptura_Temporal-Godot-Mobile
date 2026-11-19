@@ -947,6 +947,8 @@ static func _draw_spectrum_reveal_fragments(game: Node2D, center_x: float, cente
 		var rect = Rect2(pos_x - card_w * scale * 0.5, center_y - card_h * scale * 0.5, card_w * scale, card_h * scale)
 		var manifest_idx: int = game._manifest_selection_index_for_slot(manifest_slot + diff, false)
 		var aura_idx: int = game._manifest_selection_index_for_slot(aura_slot + diff, true)
+		if manifest_idx < 0 or aura_idx < 0:
+			continue
 		var manifest_item: Dictionary = game.MANIFESTATIONS[manifest_idx]
 		var aura_item: Dictionary = game.AURAS[aura_idx]
 		var manifest_color = game._manifest_select_item_color(manifest_item, false)
@@ -1569,10 +1571,27 @@ static func _geovana_build_model(game: Node2D) -> Dictionary:
 			"unlocked": game._manifest_select_item_unlocked(index, aura_view),
 			"unread": game._content_is_unread("specter" if aura_view else "manifestation", key),
 		})
+	var random_enabled: bool = game._build_random_slot_enabled()
+	var random_view: String = game._build_random_view(aura_view)
+	var random_selected: bool = random_enabled and game._build_random_shown(random_view)
+	if random_enabled:
+		items.append(random_build_item(aura_view))
 	var selected_slot: int = maxi(0, game._manifest_selection_slot_for_index(selected, aura_view))
+	if random_selected:
+		selected_slot = items.size() - 1
 	var selected_entry: Dictionary = source[clampi(selected, 0, source.size() - 1)]
-	var unlocked: bool = game._manifest_select_item_unlocked(selected, aura_view)
+	var unlocked: bool = true if random_selected else game._manifest_select_item_unlocked(selected, aura_view)
 	var dossier: Dictionary = RTBuildChoiceDossier.spectrum(String(selected_entry.get("name", ""))) if aura_view else RTBuildChoiceDossier.manifestation(String(selected_entry.get("key", "")))
+	if random_selected:
+		dossier = random_build_dossier(aura_view)
+	var manifest_hidden: bool = bool(game.build_random_hidden.get("manifest", false))
+	var manifest_name: String = "???" if manifest_hidden else String(game.MANIFESTATIONS[game.selected_manifestation].get("name", "")).to_upper()
+	var keys: Dictionary = {"primary": "manifest_start", "back": "manifest_back", "preview": "manifest_preview", "pick_prefix": "build_pick_", "prev": "build_prev", "next": "build_next", "chips": "build_chips"}
+	if not random_enabled:
+		keys["random"] = "build_random"
+	var primary_label: String = ("INICIAR" if aura_view else "ESCOLHER ESPECTRO") if unlocked else "BLOQUEADO"
+	if random_selected:
+		primary_label = "SORTEAR E INICIAR" if aura_view else "SORTEAR E SEGUIR"
 	return {
 		"theme": "geovana",
 		"step": 1 if aura_view else 0,
@@ -1581,14 +1600,43 @@ static func _geovana_build_model(game: Node2D) -> Dictionary:
 		"target_scroll": float(game.aura_scroll_pos if aura_view else game.manifest_scroll_pos) if bool(game.manifest_is_dragging) else float(selected_slot),
 		"dossier": dossier,
 		"locked_text": game._manifest_select_unlock_objective_text(selected, aura_view, true),
-		"summary": ("MANIFESTAÇÃO: " + String(game.MANIFESTATIONS[game.selected_manifestation].get("name", "")).to_upper()) if aura_view else "",
-		"primary_label": ("INICIAR" if aura_view else "ESCOLHER ESPECTRO") if unlocked else "BLOQUEADO",
+		"summary": ("MANIFESTAÇÃO: " + manifest_name) if aura_view else "",
+		"primary_label": primary_label,
 		"primary_enabled": unlocked,
-		"preview_enabled": unlocked and not aura_view and game.manifest_select_stage == game.MANIFEST_STAGE_MANIFESTATION,
+		"preview_enabled": unlocked and not random_selected and not aura_view and game.manifest_select_stage == game.MANIFEST_STAGE_MANIFESTATION,
 		"hint": "A / D, ARRASTE OU TOQUE NUMA CARTA",
-		"keys": {"primary": "manifest_start", "back": "manifest_back", "preview": "manifest_preview", "pick_prefix": "build_pick_", "prev": "build_prev", "next": "build_next", "random": "build_random", "chips": "build_chips"},
+		"keys": keys,
 		"chips_label": "CHIPS QUANTICOS (%d)" % game._quantum_chips().selected_count(),
 		"random_label": "ESPECTRO ALEATORIO" if aura_view else "MANIFESTACAO ALEATORIA",
+	}
+
+
+## Carta "ALEATORIA" do carrossel: sem arte, um "?" grande desenhado pela tela.
+static func random_build_item(second_step: bool, henry: bool = false) -> Dictionary:
+	var label: String = ("EFEITO ALEATÓRIO" if second_step else "MUTAÇÃO ALEATÓRIA") if henry else ("ESPECTRO ALEATÓRIO" if second_step else "MANIFESTAÇÃO ALEATÓRIA")
+	return {
+		"index": -7,
+		"key": "random",
+		"name": label,
+		"color": Color(1.0, 0.86, 0.32) if henry else Color(0.4, 0.95, 1.0),
+		"texture": null,
+		"unlocked": true,
+		"unread": false,
+		"random": true,
+	}
+
+
+static func random_build_dossier(second_step: bool, henry: bool = false) -> Dictionary:
+	var what: String = ("um efeito" if second_step else "uma mutação") if henry else ("um espectro desbloqueado" if second_step else "uma manifestação desbloqueada")
+	return {
+		"style": "Escolha às cegas",
+		"tagline": "Sorteia %s e segue direto." % what,
+		"rows": [
+			{"label": "SORTEIO", "title": "Sem revelar", "text": "Confirme e o jogo segue sem mostrar o que saiu."},
+			{"label": "PARTIDA", "title": "Descoberta", "text": "Você só descobre a escolha dentro da partida."},
+		],
+		"note": "Boa sorte. A Ruptura escolhe por você.",
+		"difficulty": 0,
 	}
 
 

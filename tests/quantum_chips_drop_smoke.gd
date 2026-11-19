@@ -208,12 +208,10 @@ func _test_random_and_save() -> void:
 	# Aleatorio na selecao de manifestacao.
 	game.mode = "manifest"
 	game.manifest_select_stage = game.MANIFEST_STAGE_MANIFESTATION
-	var before: int = game.selected_manifestation
-	var changed := false
-	for i in range(6):
-		RTQuantumChipUI.pick_random_build(game)
-		if game.selected_manifestation != before:
-			changed = true
-			break
-	_check(changed, "random manifestation pick did nothing")
+	# Solo: R leva o foco ao slot ALEATORIA (sorteio oculto na confirmacao).
+	game._clear_build_random()
+	RTQuantumChipUI.pick_random_build(game)
+	_check(game._build_random_focused("manifest"), "random manifestation pick did not focus the random slot")
+	_check(game._resolve_build_random_pick(false) and game._manifestation_unlocked(game.selected_manifestation), "random manifestation pick did not resolve to an unlocked choice")
+	game._clear_build_random()
 	game.mode = "game"

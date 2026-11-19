@@ -1089,6 +1089,8 @@ static func _draw_phase5_environment(game: Node2D, camera: Vector2) -> void :
 				var fase_str: String = String(hazard.get("fase", "caminhando"))
 				var curr_ang: float = float(hazard.get("angle", 0.0))
 				var num_beams: int = int(hazard.get("num_beams", 2))
+				# O feixe atravessa o mapa inteiro, de qualquer ponto do centro.
+				var beam_length: float = Vector2(game.WORLD_SIZE).length() + game.BOSS5_OVERLOAD_LASER_LENGTH_MARGIN
 
 				if fase_str in ["esfera_carga_1", "esfera_recolher_1", "esfera_recolher_2"]:
 					var st: float = float(hazard.get("stage_timer", 1.0))
@@ -1104,7 +1106,7 @@ static func _draw_phase5_environment(game: Node2D, camera: Vector2) -> void :
 					for b in range(num_beams):
 						var b_ang: float = curr_ang + float(b) * step_ang
 						var b_dir: Vector2 = Vector2.from_angle(b_ang)
-						game.draw_line(start, start + b_dir * 1400.0, Color(1.0, 0.2, 0.15, warn_pulse), 3.0)
+						game.draw_line(start, start + b_dir * beam_length, Color(1.0, 0.2, 0.15, warn_pulse), 3.0)
 				elif fase_str in ["laser_2", "laser_4", "laser_6_ccw", "laser_6_cw"]:
 					var width: float = 38.0 if num_beams == 2 else (32.0 if num_beams == 4 else 26.0)
 					var step_ang: float = TAU / float(num_beams)
@@ -1114,7 +1116,7 @@ static func _draw_phase5_environment(game: Node2D, camera: Vector2) -> void :
 					for b in range(num_beams):
 						var b_ang: float = curr_ang + float(b) * step_ang
 						var b_dir: Vector2 = Vector2.from_angle(b_ang)
-						var end_pt: Vector2 = start + b_dir * 1400.0
+						var end_pt: Vector2 = start + b_dir * beam_length
 
 						game.draw_line(start, end_pt, Color(0.4, 0.02, 0.05, 0.85), width)
 						game.draw_line(start, end_pt, Color(0.95, 0.1, 0.15, 0.95), width * 0.6)

@@ -328,6 +328,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	RTSuturerThreatPresentation.draw_world(game, camera)
 	game._draw_larapio_coin_drops(camera)
 	game._draw_arauto_card_drops(camera)
+	RTMerchantDimensionPresentation.draw_mission_world(game, camera)
 	game._draw_arauto_evolution_fragment(camera)
 	game._draw_aura_world(camera)
 	game._draw_remote_aura_world(camera)

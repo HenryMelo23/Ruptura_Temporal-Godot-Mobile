@@ -139,6 +139,15 @@ static func handle_key(game: Node2D, keycode: int) -> bool:
 ## Sorteia uma opcao desbloqueada da etapa atual (Manifestacao ou Espectro).
 static func pick_random_build(game: Node2D) -> void:
 	var aura_view: bool = game.manifest_select_stage == game.MANIFEST_STAGE_AURA
+	# Solo: R leva o foco ao slot ALEATORIA do carrossel (sorteio oculto).
+	if game._build_random_slot_enabled():
+		if aura_view:
+			game._set_selected_aura(game.BUILD_RANDOM_INDEX, true)
+			game.aura_scroll_pos = float(game._manifest_selection_slot_for_index(game.selected_aura, true))
+		else:
+			game._set_selected_manifestation(game.BUILD_RANDOM_INDEX, true)
+			game.manifest_scroll_pos = float(game._manifest_selection_slot_for_index(game.selected_manifestation, false))
+		return
 	var current: int = game.selected_aura if aura_view else game.selected_manifestation
 	var options: Array = []
 	for value in game._manifest_selection_visible_indices(aura_view):

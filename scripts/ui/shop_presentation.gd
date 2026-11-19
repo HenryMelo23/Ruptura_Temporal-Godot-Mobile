@@ -101,6 +101,103 @@ func reserve_visible(g) -> bool:
 	return g._new_common_card_count(g.CARD_ESCOLHA_ADIADA_ID) > 0 or g._shop_slot_locked(g.shop_selected)
 
 
+## Nome curto de um botao de controle para a faixa de atalhos.
+static func joy_button_label(button_index: int) -> String:
+	match button_index:
+		JOY_BUTTON_A: return "A"
+		JOY_BUTTON_B: return "B"
+		JOY_BUTTON_X: return "X"
+		JOY_BUTTON_Y: return "Y"
+		JOY_BUTTON_LEFT_SHOULDER: return "LB"
+		JOY_BUTTON_RIGHT_SHOULDER: return "RB"
+		JOY_BUTTON_BACK: return "SELECT"
+		JOY_BUTTON_START: return "START"
+		JOY_BUTTON_DPAD_LEFT, JOY_BUTTON_DPAD_RIGHT: return "◀▶"
+	return "B%d" % button_index
+
+
+func _pad(g, action_name: String) -> String:
+	return joy_button_label(int(g.gamepad_bindings.get(action_name, -1)))
+
+
+## Pares [tecla/botao, funcao] da loja para o dispositivo em uso. Queimar e
+## reservar so aparecem quando a carta de suporte correspondente esta no deck.
+func input_hints(g) -> Array:
+	var hints: Array = []
+	var burn: bool = burn_visible(g)
+	var reserve: bool = reserve_visible(g)
+	if bool(g.is_gamepad_active):
+		hints.append(["◀▶", "ESCOLHER"])
+		hints.append([_pad(g, "attack"), "COMPRAR"])
+		hints.append([_pad(g, "skill"), "TROCAR"])
+		if burn:
+			hints.append([_pad(g, "lacerante_empower"), "QUEIMAR"])
+		if reserve:
+			hints.append([_pad(g, "boss"), "TRAVAR"])
+		hints.append([_pad(g, "secondary"), "DECK"])
+		hints.append([_pad(g, "pause"), "SAIR"])
+	elif g._uses_touch_ui():
+		hints.append(["TOQUE NA CARTA", "ESCOLHER"])
+		hints.append(["COMPRAR", "LEVA A CARTA"])
+		if burn:
+			hints.append(["QUEIMAR", "TROCA A CARTA"])
+		if reserve:
+			hints.append(["RESERVAR", "TRAVA A VAGA"])
+	else:
+		hints.append(["A/D", "ESCOLHER"])
+		hints.append(["ENTER", "COMPRAR"])
+		hints.append(["Q", "TROCAR"])
+		if burn:
+			hints.append(["B", "QUEIMAR"])
+		if reserve:
+			hints.append(["R", "TRAVAR"])
+		hints.append(["E", "DECK"])
+		hints.append(["ESC", "SAIR"])
+	return hints
+
+
+## Faixa de atalhos: chip com a tecla + funcao, quebrando em ate duas linhas.
+func draw_input_hints(g, rect: Rect2, hints: Array, size: int = 13) -> void:
+	if rect.size.x < 80.0 or hints.is_empty():
+		return
+	var face: Font = g.menu_ui_font
+	var row_h: float = float(size) + 10.0
+	var rows: int = 1
+	var x: float = 0.0
+	var widths: Array[float] = []
+	for hint in hints:
+		var w: float = face.get_string_size(String(hint[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, size).x + 12.0 + 5.0 + face.get_string_size(String(hint[1]), HORIZONTAL_ALIGNMENT_LEFT, -1, size).x + 14.0
+		widths.append(w)
+		if x > 0.0 and x + w > rect.size.x:
+			rows += 1
+			x = 0.0
+		x += w
+	if rows > 2:
+		size = maxi(10, size - 2)
+		row_h = float(size) + 8.0
+	var top: float = rect.position.y + maxf(0.0, (rect.size.y - row_h * float(mini(rows, 2))) * 0.5)
+	var cursor := Vector2(rect.position.x, top)
+	var tone: Color = accent()
+	for i in range(hints.size()):
+		var key := String(hints[i][0])
+		var label := String(hints[i][1])
+		var key_w: float = face.get_string_size(key, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x + 12.0
+		var label_w: float = face.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+		var w: float = key_w + 5.0 + label_w + 14.0
+		if cursor.x > rect.position.x and cursor.x + w - 14.0 > rect.end.x:
+			cursor = Vector2(rect.position.x, cursor.y + row_h)
+			if cursor.y + row_h > rect.end.y + row_h * 0.5:
+				return
+		var chip := Rect2(cursor + Vector2(0, 1), Vector2(key_w, row_h - 4.0))
+		var style := _style(Color(tone, 0.16), Color(tone, 0.75), 5)
+		style.set_border_width_all(1)
+		g.draw_style_box(style, chip)
+		var baseline: float = chip.position.y + (chip.size.y + face.get_ascent(size) - face.get_descent(size)) * 0.5
+		g.draw_string(face, Vector2(chip.position.x, baseline), key, HORIZONTAL_ALIGNMENT_CENTER, chip.size.x, size, PAPER)
+		g.draw_string(face, Vector2(chip.end.x + 5.0, baseline), label, HORIZONTAL_ALIGNMENT_LEFT, -1, size, MUTED)
+		cursor.x += w
+
+
 func text(g, value: String, rect: Rect2, size: int, color: Color, centered: bool = false) -> void:
 	var face: Font = g.menu_ui_font
 	var fitted := size
@@ -734,6 +831,9 @@ func draw(g, viewport: Vector2) -> void:
 	elif g.is_multiplayer:
 		exit_label = "PRONTO"
 	button(g, areas.exit, exit_label, accent(), g._shop_can_exit())
+	var hint_left: float = Rect2(areas.exit).end.x + 14.0
+	var hint_rect := Rect2(hint_left, Rect2(areas.exit).position.y - 4.0, Rect2(areas.buy).position.x - hint_left - 14.0, Rect2(areas.exit).size.y + 8.0)
+	draw_input_hints(g, hint_rect, input_hints(g), 12 if small else 13)
 	g.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if action == "reroll":
 		draw_reroll_scan(g, visor, t)

@@ -309,7 +309,12 @@ static func _draw_card(game: Node2D, card: Rect2, theme: Dictionary, henry: bool
 	_draw_frame(game, card, theme, henry, Color(color, (0.95 if selected else 0.4) * alpha), 0.0, 2.6 if selected else 1.2)
 	var icon_rect := Rect2(card.position + Vector2(card.size.x * 0.14, card.size.y * 0.1), Vector2(card.size.x * 0.72, card.size.y * 0.56))
 	var tex: Texture2D = item.get("texture", null)
-	if not unlocked:
+	if bool(item.get("random", false)):
+		# Slot de sorteio: um "?" grande e pulsante no lugar da arte.
+		var pulse_q: float = 0.85 + sin(now * 3.2) * 0.15
+		game.draw_circle(icon_rect.get_center(), minf(icon_rect.size.x, icon_rect.size.y) * 0.38, Color(color, 0.12 * alpha))
+		game._draw_centered("?", icon_rect.get_center() + Vector2(0.0, icon_rect.size.y * 0.2), int(icon_rect.size.y * 0.6 * pulse_q), Color(color, alpha))
+	elif not unlocked:
 		game._draw_catalog_locked_card_icon(icon_rect.grow(-6.0), false)
 	elif tex != null:
 		game._draw_texture_contain(tex, icon_rect, Color(1, 1, 1, alpha))
@@ -458,6 +463,13 @@ static func _draw_footer(game: Node2D, viewport: Vector2, theme: Dictionary, mod
 		var mid_l: float = back.end.x + 10.0
 		var mid_r: float = primary.position.x - 10.0
 		var mid_w: float = (mid_r - mid_l - 10.0) * 0.5
+		if not keys.has("random") and mid_r - mid_l >= 96.0:
+			# Aleatorio virou um slot do carrossel: so os chips ficam no rodape.
+			var chips_w: float = minf(mid_r - mid_l, 300.0)
+			var chips_only := Rect2((mid_l + mid_r - chips_w) * 0.5, y, chips_w, h)
+			_set_button(game, String(keys.get("chips", "build_chips")), chips_only)
+			_draw_button(game, chips_only, String(model.get("chips_label", "CHIPS")), false, Color(0.74, 0.5, 1.0), theme, henry)
+			return
 		if mid_w >= 96.0:
 			var rnd := Rect2(mid_l, y, mid_w, h)
 			var chp := Rect2(mid_l + mid_w + 10.0, y, mid_w, h)

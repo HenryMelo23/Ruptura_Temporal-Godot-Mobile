@@ -109,6 +109,7 @@ func _run() -> void:
 	_check(qte_presses == RTUmbraIntro.QTE_COUNT, "qte deveria pedir 4 desvios, pediu %d" % qte_presses)
 	_check(intro.qte_dodges == 3 and intro.qte_hits == 1, "resultado do qte %d/%d" % [intro.qte_dodges, intro.qte_hits])
 	_check(int(game.player_hp) < hp_before and int(game.player_hp) >= 1, "o meteoro errado deveria machucar sem matar")
+	_check(hp_before - int(game.player_hp) >= int(round(float(game.player_hp_max) * 0.2)), "errar o desvio deveria causar dano alto (20 por cento da vida maxima)")
 	_check(game.mode == "game", "deveria voltar ao jogo")
 	_check(game.boss_active and game.boss_name == "UMBRA", "a batalha deveria comecar")
 	_check(Vector2(game.boss_pos).distance_to(Vector2(intro.umbra["pos"])) < 2.0, "a UMBRA deveria lutar onde terminou a cena")

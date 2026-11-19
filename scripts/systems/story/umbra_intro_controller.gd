@@ -27,7 +27,8 @@ const QTE_COUNT := 4
 const QTE_WINDOWS := [1.6, 1.3, 1.15, 1.0]
 const QTE_DODGE := 150.0
 const QTE_DODGE_TIME := 0.2
-const QTE_FAIL_DAMAGE := 0.08
+## Errar o desvio custa caro: ~22% da vida maxima por meteoro (nunca mata: piso 1 HP).
+const QTE_FAIL_DAMAGE := 0.22
 const SKIP_HOLD := 0.9
 const DIRS := {"up": Vector2.UP, "down": Vector2.DOWN, "left": Vector2.LEFT, "right": Vector2.RIGHT}
 

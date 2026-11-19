@@ -180,7 +180,7 @@ func step_text(state: String) -> Dictionary:
 			var where: String = "Vá até o altar (siga a seta na borda da tela) para chamar o chefe." if core.experimental_phase_controller.uses_definitive_world() else "Use %s para chamar o chefe." % key("boss")
 			return {"title": "CHAMAR O CHEFE", "body": "Você escolhe quando enfrentar o chefe. " + where + " Ficar mais tempo deixa Geovana mais forte, mas a dimensão também fica mais perigosa.", "hint": "Chamar é decisão sua."}
 		STATE_EXTRAORDINARY:
-			return {"title": "INIMIGO EXTRAORDINÁRIO", "body": "Alguns inimigos são raros e bem mais fortes que a horda: têm mecânicas próprias, um nome sobre a cabeça e uma barra de vida. Derrotá-los rende recompensas maiores; ignorá-los também é uma escolha.", "hint": "Fique atenta ao padrão de ataque antes de chegar perto."}
+			return {"title": "INIMIGO SUPREMO", "body": "Alguns inimigos são raros e bem mais fortes que a horda: têm mecânicas próprias, um nome sobre a cabeça e uma barra de vida. Derrotá-los rende recompensas maiores, sempre com uma Cinzas da Escolha; ignorá-los também é uma escolha.", "hint": "Fique atenta ao padrão de ataque antes de chegar perto."}
 	return Dictionary(core.TUTORIAL_STEP_TEXTS.get(state, {}))
 
 

@@ -1544,6 +1544,10 @@ func _manifest_selection_visible_items(aura_view: bool) -> Array:
 
 func _manifest_selection_slot_for_index(index: int, aura_view: bool) -> int:
 	var visible_indices: Array = _manifest_selection_visible_indices(aura_view)
+	# Slot "aleatorio" no fim do carrossel: vale para o indice sentinela e para
+	# a escolha atual enquanto o foco estiver nele.
+	if _build_random_slot_enabled() and (index == BUILD_RANDOM_INDEX or (_build_random_shown(_build_random_view(aura_view)) and index == (selected_aura if aura_view else selected_manifestation))):
+		return visible_indices.size()
 	var slot: int = visible_indices.find(index)
 	return slot if slot >= 0 else 0
 
@@ -1552,7 +1556,131 @@ func _manifest_selection_index_for_slot(slot: int, aura_view: bool) -> int:
 	var visible_indices: Array = _manifest_selection_visible_indices(aura_view)
 	if visible_indices.is_empty():
 		return 0
+	if _build_random_slot_enabled():
+		var wrapped: int = posmod(slot, visible_indices.size() + 1)
+		return BUILD_RANDOM_INDEX if wrapped == visible_indices.size() else int(visible_indices[wrapped])
 	return int(visible_indices[posmod(slot, visible_indices.size())])
+
+
+## Quantidade de slots do carrossel (cartas visiveis + slot aleatorio no solo).
+func _manifest_selection_slot_count(aura_view: bool) -> int:
+	return _manifest_selection_visible_indices(aura_view).size() + (1 if _build_random_slot_enabled() else 0)
+
+
+# ------------------------------------------------- escolha aleatoria oculta
+## O carrossel de montagem (Geovana: manifestacao/espectro; Henry: mutacao/
+## efeito) ganha um slot "ALEATORIA". Confirmar nele sorteia em silencio e
+## segue: o jogador so descobre o que saiu dentro da partida.
+func _build_random_slot_enabled() -> bool:
+	return mode in ["manifest", "mutation_select", "effect_select"]
+
+
+func _build_random_view(aura_view: bool) -> String:
+	if mode in ["mutation_select", "effect_select"]:
+		return "effect" if aura_view else "mutation"
+	return "aura" if aura_view else "manifest"
+
+
+func _build_random_focused(view: String) -> bool:
+	return bool(build_random_focus.get(view, false))
+
+
+## Foco no slot ou sorteio ja feito e ainda escondido (transicao de etapa).
+func _build_random_shown(view: String) -> bool:
+	return _build_random_focused(view) or bool(build_random_hidden.get(view, false))
+
+
+func _set_build_random_focus(view: String, on: bool) -> void:
+	build_random_focus[view] = on
+	if on:
+		build_random_hidden[view] = false
+
+
+## Sorteia em silencio a escolha da etapa se o foco estiver no slot aleatorio.
+## Retorna false quando nao ha nenhuma opcao desbloqueada para sortear.
+func _resolve_build_random_pick(aura_view: bool) -> bool:
+	var view: String = _build_random_view(aura_view)
+	if not _build_random_slot_enabled() or not _build_random_focused(view):
+		return true
+	var options: Array[int] = []
+	match view:
+		"mutation":
+			for i in range(HENRY_MUTATIONS.size()):
+				options.append(i)
+		"effect":
+			for i in range(HENRY_EFFECTS.size()):
+				options.append(i)
+		_:
+			for value in _manifest_selection_visible_indices(aura_view):
+				var idx: int = int(value)
+				if _manifest_select_item_unlocked(idx, aura_view) and not _manifest_choice_taken(idx, aura_view):
+					options.append(idx)
+	if options.is_empty():
+		return false
+	var pick: int = options[rng.randi_range(0, options.size() - 1)]
+	match view:
+		"mutation":
+			selected_mutation = pick
+		"effect":
+			selected_effect = pick
+		"aura":
+			selected_aura = pick
+		_:
+			selected_manifestation = pick
+	build_random_focus[view] = false
+	build_random_hidden[view] = true
+	return true
+
+
+## Desliga o sorteio oculto (volta de etapa, nova run, menu).
+func _clear_build_random(view: String = "") -> void:
+	if view == "":
+		build_random_focus.clear()
+		build_random_hidden.clear()
+		return
+	build_random_focus[view] = false
+	build_random_hidden[view] = false
+
+
+## Henry solo: anda pelas placas e pelo slot aleatorio (ultimo). Na sala
+## multiplayer mantem o giro antigo, sem slot aleatorio.
+func _step_henry_build_selection(effect_step: bool, direction: int) -> void:
+	var count: int = HENRY_EFFECTS.size() if effect_step else HENRY_MUTATIONS.size()
+	var view: String = "effect" if effect_step else "mutation"
+	var current: int = selected_effect if effect_step else selected_mutation
+	var next: int
+	if _build_random_slot_enabled():
+		var slot: int = count if _build_random_focused(view) else current
+		next = posmod(slot + direction, count + 1)
+		_set_build_random_focus(view, next == count)
+		if next == count:
+			next = current
+	else:
+		next = posmod(current + direction, count)
+	if effect_step:
+		selected_effect = next
+		aura_scroll_pos = float(next)
+	else:
+		selected_mutation = next
+		manifest_scroll_pos = float(next)
+
+
+func _restore_henry_random_mutation_focus() -> void:
+	_clear_build_random("effect")
+	if bool(build_random_hidden.get("mutation", false)):
+		_set_build_random_focus("mutation", true)
+
+
+## Anda um slot no carrossel da Geovana (inclui o slot aleatorio no solo).
+func _step_manifest_build_selection(aura_view: bool, direction: int) -> void:
+	var current: int = selected_aura if aura_view else selected_manifestation
+	var next_index: int = _manifest_selection_index_for_slot(_manifest_selection_slot_for_index(current, aura_view) + direction, aura_view)
+	if aura_view:
+		_set_selected_aura(next_index, true)
+		aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
+	else:
+		_set_selected_manifestation(next_index, true)
+		manifest_scroll_pos = float(_manifest_selection_slot_for_index(selected_manifestation, false))
 
 
 func _manifestation_key(index: int) -> String:
@@ -1848,6 +1976,9 @@ func _card_unlocked(card: Dictionary) -> bool:
 
 func _card_available_for_reward(card: Dictionary, include_rare: = true, require_drop_texture: = false) -> bool:
 	if card.is_empty() or _card_at_max(card) or not _card_unlocked(card):
+		return false
+	# Fontes exclusivas: Cinzas (inimigos supremos) e Moeda Estavel (Mercador).
+	if SHOP_EXCLUDED_CARD_IDS.has(_card_id(card)):
 		return false
 	# The Drop journey has no shop, so its dedicated pool may award legendary
 	# cards after the same phase/luck gate. Other reward paths stay shop-only.
@@ -6791,6 +6922,7 @@ func _play_phase3_music_random() -> void :
 
 func _go_to_menu() -> void :
 	_save_interrupted_run(true)
+	_clear_build_random()
 	_clear_boss_reward_reveal()
 	_stop_qa_streaming("menu")
 	_stop_battle_music_for_screen_transition()
@@ -7115,6 +7247,9 @@ func _reset_card_proc_state() -> void :
 
 func _start_game(clear_interrupted_save: = true) -> void :
 	var perf_start_ms: = Time.get_ticks_msec()
+	_clear_build_random()
+	# Fenda estabilizada e encomendas do Bussola valem so para a run.
+	_merchant_npc().begin_run()
 	_ensure_runtime_controllers_bound()
 	player_shove.reset()
 	fossil_pustule_tether.reset()
@@ -9937,7 +10072,7 @@ func _update_manifest_selection_flow(delta: float) -> void :
 		else:
 			var selected_index: int = selected_aura if aura_view else selected_manifestation
 			target = float(_manifest_selection_slot_for_index(selected_index, aura_view))
-			count = _manifest_selection_visible_indices(aura_view).size()
+			count = _manifest_selection_slot_count(aura_view)
 		if count <= 0:
 			return
 		var scroll_value = aura_scroll_pos if manifest_select_stage == MANIFEST_STAGE_AURA else manifest_scroll_pos
@@ -9995,6 +10130,7 @@ func _update_game(delta: float) -> void :
 		runtime_event_director.update(delta, runtime_event_director.context_from_game(self), _is_world_authority())
 		point_boost_pickup_controller.update(delta, _is_world_authority())
 		_field_artifacts().update(delta)
+		_merchant_npc().missions.update(delta)
 		phase3_ritual_pulse_controller.update(delta, _is_world_authority())
 		phase4_instability_pulse_controller.update(delta, _is_world_authority())
 		_update_bargain_capsule(delta)
@@ -13281,7 +13417,7 @@ func _choose_phase2_enemy_type() -> String:
 	var elapsed: = _phase_elapsed_time()
 	if elapsed < _phase2_kamikaze_unlock_time():
 		return ENEMY_COMMON
-	if elapsed >= _phase2_pyro_unlock_time() and _enemy_type_count(ENEMY_PYRO_PENGUIN) < PHASE2_PYRO_LIMIT:
+	if elapsed >= _phase2_pyro_unlock_time():
 		if rng.randf() < 0.18:
 			return ENEMY_PYRO_PENGUIN
 	if _enemy_type_count(ENEMY_KAMIKAZE) < PHASE2_KAMIKAZE_LIMIT and rng.randf() < 0.28:
@@ -14382,6 +14518,7 @@ func _finish_arauto() -> void :
 			_spawn_enemy_desfragmentation(Vector2(enemy.get("pos", pos)), _enemy_shard_color(enemy), 12)
 			enemies.erase(enemy)
 	_spawn_arauto_card_rewards(pos)
+	_spawn_supreme_cinzas_drop(pos)
 	_add_text("AGUILHAO DESFEITO" if was_aguilhao else "ARAUTO DESFEITO", pos + Vector2(-138 if was_aguilhao else -118, -108), Color(0.72, 1.0, 0.38) if was_aguilhao else Color(0.82, 0.94, 1.0), 2.1, 30)
 	_add_text("+%s PONTOS" % _format_points(point_reward), pos + Vector2(-82, -174), Color(1.0, 0.84, 0.28), 2.1, 22)
 	_add_text("+4 CARTAS NO MAPA", pos + Vector2(-116, -146), Color(1.0, 0.86, 0.24), 2.1, 22)
@@ -14477,6 +14614,20 @@ func _spawn_random_card_drops(pos: Vector2, count: int, rare_slots: int) -> void
 				return
 			var angle: = TAU * float(i) / float(max(1, count)) + rng.randf_range(-0.34, 0.34)
 			_append_owned_card_drop(card, pos, angle, peer_id, 20.0, 54.0, 92.0, 84.0, 146.0)
+
+
+## Inimigos supremos (Larapio, Sineiro, Suturador, Arauto/Aguilhao) sempre
+## deixam uma Cinzas da Escolha para cada jogador: so anomalias com muita
+## energia geram esse item.
+func _spawn_supreme_cinzas_drop(pos: Vector2) -> void:
+	if _is_drop_game_mode() or not _is_world_authority():
+		return
+	var card: Dictionary = _find_card_by_id(CARD_CINZAS_ID)
+	if card.is_empty():
+		return
+	for peer_id in _reward_peer_ids():
+		_append_owned_card_drop(card, pos, -PI * 0.5 + rng.randf_range(-0.3, 0.3), peer_id, 30.0, 24.0, 48.0, 28.0, 52.0, {"no_rupture_token": true, "supreme_cinzas": true})
+	_add_text("CINZAS DA ESCOLHA", pos + Vector2(-96, -206), Color(1.0, 0.58, 0.28), 2.0, 20)
 
 
 func _reward_peer_ids() -> Array[int]:
@@ -14608,8 +14759,6 @@ func _spawn_enemy(kind: String, pos: Vector2) -> void :
 	# atualizacao, mas qualquer caminho direto (miniboss, evento, chamada de
 	# rede) ainda tentaria nascer aqui com as coordenadas da fase.
 	if _merchant_dimension().active:
-		return
-	if kind == ENEMY_PYRO_PENGUIN and _has_enemy_type(ENEMY_PYRO_PENGUIN):
 		return
 	if kind == ENEMY_CURATER and _enemy_type_count(ENEMY_CURATER) >= _curater_limit():
 		return
@@ -16915,16 +17064,31 @@ func _stalker_profile() -> Dictionary:
 	}
 
 
+## Espreitador camuflado: nao recebe dano (disparo, habilidade, area ou DoT)
+## e a mira automatica o ignora ate ele se revelar.
+func _stalker_camouflaged(enemy: Dictionary) -> bool:
+	return bool(enemy.get("invisible", false)) and String(enemy.get("type", "")) == ENEMY_STALKER
+
+
 func _update_stalker(enemy: Dictionary, delta: float) -> void :
 	var t_pos = _get_enemy_target_pos(enemy)
 	var dist = enemy["pos"].distance_to(t_pos)
 	var profile = _stalker_profile()
-	if dist > 300.0:
+	# Camuflagem: longe do alvo ele some (imune a dano e fora da mira). Ao se
+	# revelar, so volta a camuflar depois de STALKER_CAMO_COOLDOWN segundos.
+	var was_camouflaged: bool = bool(enemy.get("invisible", false))
+	var camo_ready: bool = time_alive >= float(enemy.get("camo_ready_at", 0.0))
+	if dist > STALKER_CAMO_REVEAL_DISTANCE and (was_camouflaged or camo_ready):
 		enemy["invisible"] = true
-		enemy["alpha"] = (0.32 + (sin(time_alive * 6.0 + float(enemy["phase"])) + 1.0) * 0.2) * STALKER_OPACITY_MULT
+		enemy["untargetable"] = true
+		enemy["alpha"] = (STALKER_CAMO_ALPHA_MIN + (sin(time_alive * 6.0 + float(enemy["phase"])) + 1.0) * 0.5 * STALKER_CAMO_ALPHA_PULSE) * STALKER_OPACITY_MULT
 		enemy["speed"] = enemy_speed_base * float(profile["furtivo"])
 	else:
+		if was_camouflaged:
+			enemy["camo_ready_at"] = time_alive + STALKER_CAMO_COOLDOWN
+			_spawn_radial_particles(enemy["pos"], Color(0.65, 0.95, 1.0), 6)
 		enemy["invisible"] = false
+		enemy["untargetable"] = false
 		enemy["alpha"] = STALKER_OPACITY_MULT
 		if not bool(enemy.get("sprint_active", false)) and time_alive - float(enemy.get("sprint_timer", 0.0)) > float(profile["cooldown"]):
 			enemy["sprint_active"] = true
@@ -17001,9 +17165,9 @@ func _update_projector(enemy: Dictionary, delta: float) -> void :
 	enemy["shoot_cd"] = float(enemy.get("shoot_cd", 1.0)) - delta
 	if float(enemy["shoot_cd"]) > 0.0:
 		return
-	enemy["shoot_cd"] = 2.5
+	enemy["shoot_cd"] = PROJECTOR_SHOOT_INTERVAL
 	var dir = (t_pos - enemy["pos"]).normalized()
-	enemy_bullets.append({"pos": enemy["pos"], "dir": dir, "life": 3.2, "damage": (player_hp_max * 0.05) + enemy_far_damage, "phase": 0.0})
+	enemy_bullets.append({"pos": enemy["pos"], "dir": dir, "life": PROJECTOR_BULLET_LIFE, "speed_mult": PROJECTOR_BULLET_SPEED_MULT, "damage": (player_hp_max * 0.05) + enemy_far_damage, "phase": 0.0})
 
 
 func _update_atirador(enemy: Dictionary, delta: float) -> void :
@@ -17830,7 +17994,7 @@ func _update_bullets(delta: float) -> void :
 
 		for enemy_index in enemy_manager.nearby_entity_indices(Vector2(bullet["pos"]), 64.0):
 			var enemy: Dictionary = enemy_manager.spatial_entities[enemy_index]
-			if float(enemy.get("hp", 0.0)) <= 0.0:
+			if float(enemy.get("hp", 0.0)) <= 0.0 or _stalker_camouflaged(enemy):
 				continue
 			if not RangedAttackRange.can_hit_position(bullet, Vector2(enemy["pos"])):
 				continue
@@ -18229,6 +18393,8 @@ func _element_from_source(source: String) -> String:
 
 
 func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: = true, apply_aura_multiplier: = true, attack_origin: = Vector2.ZERO, source_category: = "", source_peer_id: int = 0, source_manifestation: String = "", critical_hit: bool = false, damage_text_label: String = "") -> bool:
+	if _stalker_camouflaged(enemy):
+		return false
 	if RTLaceranteExecutionController.blocks_damage(enemy, source):
 		return false
 	if current_phase == 3 and enemy.has("phase3_ritual_role"):
@@ -19074,6 +19240,7 @@ func _kill_enemy(enemy: Dictionary) -> void :
 	if baile_controller.owns_kind(String(enemy.get("type", ""))):
 		baile_controller.on_enemy_defeated(enemy)
 	enemies.erase(enemy)
+	_merchant_npc().missions.on_enemy_killed(enemy, kill_pos)
 	_tutorial_enemy_was_killed(enemy)
 	_apply_shared_kill_progress(enemies_killed + 1)
 	_player_run_level_controller().grant_confirmed_enemy(enemy)
@@ -19130,6 +19297,7 @@ func _kill_enemy(enemy: Dictionary) -> void :
 		if clean_kill and rng.randf() < LARAPIO_CARD_RARE_CHANCE:
 			rare_slots += 1
 		_spawn_random_card_drops(kill_pos, drop_count, rare_slots)
+		_spawn_supreme_cinzas_drop(kill_pos)
 		_schedule_next_larapio_spawn()
 		_add_text("%d CARTAS" % drop_count, kill_pos + Vector2(0, -132), Color(1.0, 0.86, 0.24), 1.25, 22)
 		if clean_kill:
@@ -22803,9 +22971,11 @@ func _move_umbra(delta: float) -> void :
 			if fase_str == "caminhando":
 				boss5_target = experimental_phase_controller.boss_encounter_center()
 				var to_target: Vector2 = boss5_target - boss_pos
-				var max_spd: float = 240.0
+				var max_spd: float = BOSS5_OVERLOAD_LASER_DASH_SPEED
 				var desired_vel: Vector2 = to_target.normalized() * max_spd if to_target.length() > 8.0 else Vector2.ZERO
-				boss5_velocity = boss5_velocity.lerp(desired_vel, clampf(delta * 8.0, 0.0, 1.0))
+				boss5_velocity = boss5_velocity.lerp(desired_vel, clampf(delta * 14.0, 0.0, 1.0))
+				if to_target.length() > 8.0 and rng.randf() < delta * 20.0:
+					_spawn_radial_particles(boss_pos, Color(1.0, 0.3, 0.12), 3)
 				boss_pos = (boss_pos + boss5_velocity * delta).clamp(Vector2(80, 80), WORLD_SIZE - Vector2(80, 80))
 				return
 			else:
@@ -28072,6 +28242,13 @@ func _boss_tide_line(attack: Dictionary) -> float:
 func _boss_call_can_start(show_message: = true) -> bool:
 	if not boss_ready or boss_active or boss_dead or boss_call_timer >= 0.0:
 		return false
+	# Na oficina do Mercador (ou atravessando a fenda) a horda da fase esta
+	# guardada fora de `enemies`: chamar o boss ali limpava a lista vazia e a
+	# horda voltava inteira na saida, no meio da luta.
+	if _merchant_dimension().active or _rift_transition().busy():
+		if show_message:
+			_add_text("SAIA DA OFICINA PARA CHAMAR O BOSS", player_pos + Vector2(0, -110), Color(1.0, 0.72, 0.2), 1.2, 20)
+		return false
 	if not experimental_phase_controller.boss_call_allowed():
 		if show_message:
 			_add_text("ENCONTRE O ALTAR DE INVOCACAO", player_pos + Vector2(0, -110), Color(0.34, 0.94, 1.0), 1.2, 20)
@@ -28386,6 +28563,9 @@ func _accept_boss_mp_request() -> void :
 func _update_shop(delta: float) -> void :
 	# Escolher carta tambem gasta o tempo da fenda: sao 20 s por carta.
 	if _merchant_dimension().active:
+		# Na oficina o mundo continua rodando com a loja aberta: a aura (ex.:
+		# Racional parada pontuando e a Dilatacao segurando o relogio) tambem.
+		_update_aura(delta)
 		_merchant_dimension().update(delta)
 		if mode != "shop":
 			# O colapso fechou a loja no meio do quadro.
@@ -28642,6 +28822,8 @@ func _shop_unlocked_slot_indices() -> Array:
 func _shop_card_eligible_for_roll(card: Dictionary, excluded_ids: Dictionary) -> bool:
 	if card.is_empty() or _card_at_max(card) or not _card_unlocked(card):
 		return false
+	if SHOP_EXCLUDED_CARD_IDS.has(_card_id(card)):
+		return false
 	return not excluded_ids.has(_card_id(card))
 
 
@@ -28873,13 +29055,15 @@ func _roll_shop_cards_v2(generation_type: = "open") -> Array:
 	return picks
 
 
-func _refill_shop_slot_after_purchase(index: int) -> void :
+func _refill_shop_slot_after_purchase(index: int, extra_excluded_ids: Array = []) -> void :
 	if not SHOP_FAIRNESS_V2:
 		shop_cards = _roll_shop_cards_legacy()
 		return
 	_ensure_shop_slot_intents()
 	shop_generation_index += 1
 	var excluded_ids: = _shop_locked_card_ids(index)
+	for extra_id in extra_excluded_ids:
+		excluded_ids[String(extra_id)] = true
 	for i in range(shop_cards.size()):
 		if i == index:
 			continue
@@ -30495,6 +30679,9 @@ func _burn_shop_card(index: int) -> bool:
 	shop_controller.begin("burn", shop_cards, index)
 	shop_locked_slots.erase(_shop_locked_key(index))
 	shop_cards[index] = _make_burned_shop_slot(card)
+	# A vaga queimada nao fica vazia: nasce outra carta aleatoria no lugar
+	# (nunca a propria carta queimada). A animacao usa a carta anterior.
+	_refill_shop_slot_after_purchase(index, [card_id])
 	shop_selected = clamp(index, 0, max(0, shop_cards.size() - 1))
 	shop_select_pulse_index = shop_selected
 	shop_select_pulse_timer = 0.28
@@ -32444,7 +32631,7 @@ func _card_lore(card_name: String) -> String:
 		"Devorador de Destinos": return "O destino mais pesado vira ancora. Quando ele cai, os futuros proximos se partem e Geovana veste os restos."
 		"Escolha Adiada": return "Uma decisao recusada hoje fica presa ao mesmo preco ate Geovana aceitar pagar ou soltar a linha."
 		"Trégua Regenerativa": return "Quando a linha para de ferir, o corpo lembra o caminho de volta."
-		"Cinzas da Escolha": return "Uma carta sacrificada nao desaparece; ela volta chamuscada, mais forte uma unica vez, ate que Geovana aceite comprar o que restou dela."
+		"Cinzas da Escolha": return "Brasa que so anomalias carregadas de energia conseguem gerar: nenhuma loja vende. Uma carta sacrificada nao desaparece; outra nasce no lugar, e a queimada volta chamuscada, mais forte uma unica vez, ate que Geovana aceite comprar o que restou dela."
 		"Reserva de Pulso": return "A cura que sobraria fica guardada como uma batida extra para o pior instante."
 		"Casulo Reativo": return "Depois de muitos impactos, a defesa fecha por instinto e ensina a rajada a esperar."
 		"Passagem Intangível": return "O salto nao termina no destino; por um instante, Geovana ainda nao voltou totalmente ao mundo."
@@ -37658,8 +37845,12 @@ func _draw_corner_limbo(camera: Vector2, viewport: Vector2) -> void:
 
 
 func _clamp_player_world(pos: Vector2) -> Vector2:
+	var clamped: Vector2 = pos.clamp(PLAYER_WORLD_MARGIN, WORLD_SIZE - PLAYER_WORLD_MARGIN)
+	# Oficina do Mercador: moveis solidos, miudezas chutaveis e o proprio Mercador.
+	if merchant_dimension != null and merchant_dimension.active and merchant_dimension.physics.is_ready():
+		return merchant_dimension.physics.push_player(clamped, player_pos).clamp(PLAYER_WORLD_MARGIN, WORLD_SIZE - PLAYER_WORLD_MARGIN)
 	# Objetos solidos pintados no chao (cacto, pedra, cerca): empurra e desliza pela borda.
-	return RTMapPropColliders.push_player(self, pos.clamp(PLAYER_WORLD_MARGIN, WORLD_SIZE - PLAYER_WORLD_MARGIN))
+	return RTMapPropColliders.push_player(self, clamped)
 
 
 func _distance_to_rect(point: Vector2, rect: Rect2) -> float:
@@ -39023,27 +39214,26 @@ func _handle_key(event: InputEventKey) -> void :
 				_go_to_menu()
 		elif event.keycode == KEY_RIGHT or event.keycode == KEY_D:
 			if manifest_select_stage == MANIFEST_STAGE_AURA:
-				_set_selected_aura(selected_aura + 1, true)
-				aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
+				_step_manifest_build_selection(true, 1)
 				if mode == "manifest_mp":
 					_sync_manifest_mp_selection()
 				return
-			_set_selected_manifestation(selected_manifestation + 1, true)
-			manifest_scroll_pos = float(_manifest_selection_slot_for_index(selected_manifestation, false))
+			_step_manifest_build_selection(false, 1)
 			if mode == "manifest_mp":
 				_sync_manifest_mp_selection()
 		elif event.keycode == KEY_LEFT or event.keycode == KEY_A:
 			if manifest_select_stage == MANIFEST_STAGE_AURA:
-				_set_selected_aura(selected_aura - 1, true)
-				aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
+				_step_manifest_build_selection(true, -1)
 				if mode == "manifest_mp":
 					_sync_manifest_mp_selection()
 				return
-			_set_selected_manifestation(selected_manifestation - 1, true)
-			manifest_scroll_pos = float(_manifest_selection_slot_for_index(selected_manifestation, false))
+			_step_manifest_build_selection(false, -1)
 			if mode == "manifest_mp":
 				_sync_manifest_mp_selection()
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
+			if not _resolve_build_random_pick(manifest_select_stage == MANIFEST_STAGE_AURA):
+				_play_sfx("ui_error")
+				return
 			if manifest_select_stage == MANIFEST_STAGE_AURA:
 				if not _spectrum_unlocked(selected_aura):
 					_play_sfx("ui_error")
@@ -39099,6 +39289,8 @@ func _handle_key(event: InputEventKey) -> void :
 			_open_deck("shop")
 		elif event.keycode == KEY_B:
 			_burn_shop_card(shop_selected)
+		elif event.keycode == KEY_R:
+			_reserve_shop_card(shop_selected)
 		elif event.keycode == KEY_ESCAPE:
 			if _shop_can_exit():
 				_request_shop_exit_or_finish()
@@ -39432,20 +39624,19 @@ func _handle_character_selection_key(event: InputEventKey) -> bool:
 		return true
 	if mode in ["mutation_select", "mutation_select_mp"]:
 		if event.keycode in [KEY_LEFT, KEY_A, KEY_UP, KEY_W]:
-			selected_mutation = posmod(selected_mutation - 1, HENRY_MUTATIONS.size())
-			manifest_scroll_pos = float(selected_mutation)
+			_step_henry_build_selection(false, -1)
 			_play_sfx("ui_manifest_switch", 0.01, 0.24, 0.92)
 			_vibrate(22, 0.12)
 			if mode.ends_with("_mp"):
 				_sync_manifest_mp_selection()
 		elif event.keycode in [KEY_RIGHT, KEY_D, KEY_DOWN, KEY_S]:
-			selected_mutation = posmod(selected_mutation + 1, HENRY_MUTATIONS.size())
-			manifest_scroll_pos = float(selected_mutation)
+			_step_henry_build_selection(false, 1)
 			_play_sfx("ui_manifest_switch", 0.01, 0.24, 1.06)
 			_vibrate(22, 0.12)
 			if mode.ends_with("_mp"):
 				_sync_manifest_mp_selection()
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
+			_resolve_build_random_pick(false)
 			mode = "effect_select_mp" if mode.ends_with("_mp") else "effect_select"
 			if mode.ends_with("_mp"):
 				manifest_select_stage = MANIFEST_STAGE_AURA
@@ -39459,15 +39650,13 @@ func _handle_character_selection_key(event: InputEventKey) -> bool:
 		return true
 	if mode in ["effect_select", "effect_select_mp"]:
 		if event.keycode in [KEY_LEFT, KEY_A, KEY_UP, KEY_W] and not (mode.ends_with("_mp") and mp_local_ready):
-			selected_effect = posmod(selected_effect - 1, HENRY_EFFECTS.size())
-			aura_scroll_pos = float(selected_effect)
+			_step_henry_build_selection(true, -1)
 			_play_sfx("ui_manifest_switch", 0.01, 0.24, 0.92)
 			_vibrate(22, 0.12)
 			if mode.ends_with("_mp"):
 				_sync_manifest_mp_selection()
 		elif event.keycode in [KEY_RIGHT, KEY_D, KEY_DOWN, KEY_S] and not (mode.ends_with("_mp") and mp_local_ready):
-			selected_effect = posmod(selected_effect + 1, HENRY_EFFECTS.size())
-			aura_scroll_pos = float(selected_effect)
+			_step_henry_build_selection(true, 1)
 			_play_sfx("ui_manifest_switch", 0.01, 0.24, 1.06)
 			_vibrate(22, 0.12)
 			if mode.ends_with("_mp"):
@@ -39476,12 +39665,14 @@ func _handle_character_selection_key(event: InputEventKey) -> bool:
 			if mode.ends_with("_mp"):
 				_toggle_henry_multiplayer_ready()
 			else:
+				_resolve_build_random_pick(true)
 				_start_game()
 		elif event.keycode == KEY_ESCAPE:
 			if mode.ends_with("_mp") and mp_local_ready:
 				_cancel_manifest_mp_ready()
 			else:
 				mode = "mutation_select_mp" if mode.ends_with("_mp") else "mutation_select"
+				_restore_henry_random_mutation_focus()
 				if mode.ends_with("_mp"):
 					manifest_select_stage = MANIFEST_STAGE_MANIFESTATION
 					manifest_scroll_pos = float(selected_mutation)
@@ -39510,6 +39701,13 @@ func _handle_character_selection_touch(pos: Vector2) -> bool:
 			_request_manifest_mp_start()
 			return true
 		var henry_choices: Array = HENRY_MUTATIONS if mode.begins_with("mutation_select") else HENRY_EFFECTS
+		if _build_random_slot_enabled() and buttons.get("henry_choice_%d" % BUILD_RANDOM_INDEX, Rect2()).has_point(pos):
+			var random_view: String = _build_random_view(mode.begins_with("effect_select"))
+			if not _build_random_focused(random_view):
+				_set_build_random_focus(random_view, true)
+				_play_sfx("ui_manifest_switch", 0.01, 0.24, 1.12)
+				_vibrate(24, 0.13)
+			return true
 		if not (mode == "effect_select_mp" and mp_local_ready):
 			for i in range(henry_choices.size()):
 				if not buttons.get("henry_choice_%d" % i, Rect2()).has_point(pos):
@@ -39517,9 +39715,11 @@ func _handle_character_selection_touch(pos: Vector2) -> bool:
 				if mode.begins_with("mutation_select"):
 					selected_mutation = i
 					manifest_scroll_pos = float(selected_mutation)
+					_set_build_random_focus("mutation", false)
 				else:
 					selected_effect = i
 					aura_scroll_pos = float(selected_effect)
+					_set_build_random_focus("effect", false)
 				_play_sfx("ui_manifest_switch", 0.01, 0.24, 1.02)
 				_vibrate(24, 0.13)
 				if mode.ends_with("_mp"):
@@ -39531,6 +39731,7 @@ func _handle_character_selection_touch(pos: Vector2) -> bool:
 					_cancel_manifest_mp_ready()
 				else:
 					mode = "mutation_select_mp" if mode.ends_with("_mp") else "mutation_select"
+					_restore_henry_random_mutation_focus()
 					if mode.ends_with("_mp"):
 						manifest_select_stage = MANIFEST_STAGE_MANIFESTATION
 						manifest_scroll_pos = float(selected_mutation)
@@ -39541,6 +39742,7 @@ func _handle_character_selection_touch(pos: Vector2) -> bool:
 				_open_character_select(character_select_destination)
 		elif buttons.get("henry_continue", Rect2()).has_point(pos):
 			if mode.begins_with("mutation_select"):
+				_resolve_build_random_pick(false)
 				mode = "effect_select_mp" if mode.ends_with("_mp") else "effect_select"
 				if mode.ends_with("_mp"):
 					manifest_select_stage = MANIFEST_STAGE_AURA
@@ -39549,6 +39751,7 @@ func _handle_character_selection_touch(pos: Vector2) -> bool:
 			elif mode.ends_with("_mp"):
 				_toggle_henry_multiplayer_ready()
 			else:
+				_resolve_build_random_pick(true)
 				_start_game()
 		return true
 	return false
@@ -39570,6 +39773,10 @@ func _toggle_henry_multiplayer_ready() -> void:
 
 
 func _reset_manifest_selection_stage() -> void :
+	# Voltou do espectro: a manifestacao sorteada continua oculta no slot aleatorio.
+	if bool(build_random_hidden.get("manifest", false)):
+		_set_build_random_focus("manifest", true)
+	_clear_build_random("aura")
 	manifest_select_stage = MANIFEST_STAGE_MANIFESTATION
 	manifest_transition_elapsed = 0.0
 	manifest_transition_seed = 0
@@ -39611,11 +39818,11 @@ func _start_spectrum_reveal() -> void :
 
 
 func _wrap_manifest_scroll(value: float) -> float:
-	return fposmod(value, float(maxi(1, _manifest_selection_visible_indices(false).size())))
+	return fposmod(value, float(maxi(1, _manifest_selection_slot_count(false))))
 
 
 func _nearest_manifest_index(value: float) -> int:
-	var count: int = _manifest_selection_visible_indices(false).size()
+	var count: int = _manifest_selection_slot_count(false)
 	if count <= 0:
 		return 0
 	var idx = int(round(_wrap_manifest_scroll(value))) % count
@@ -39626,6 +39833,14 @@ func _set_selected_manifestation(index: int, vibrate: = true) -> void :
 	var count = MANIFESTATIONS.size()
 	if count <= 0:
 		return
+	if index == BUILD_RANDOM_INDEX:
+		if _build_random_slot_enabled() and not _build_random_focused("manifest"):
+			_set_build_random_focus("manifest", true)
+			if vibrate:
+				_vibrate(36, 0.18)
+				_play_sfx("ui_manifest_switch", 0.015, 0.48, 1.12)
+		return
+	_set_build_random_focus("manifest", false)
 	var next_index = posmod(index, count)
 	var guard: = 0
 	while (not _manifest_selection_index_visible(next_index, false) or _manifest_choice_taken(next_index, false)) and guard < count:
@@ -39833,11 +40048,11 @@ func _handle_pause_mp_overlay_press(pos: Vector2, viewport: Vector2 = Vector2.ZE
 
 
 func _wrap_aura_scroll(value: float) -> float:
-	return fposmod(value, float(maxi(1, _manifest_selection_visible_indices(true).size())))
+	return fposmod(value, float(maxi(1, _manifest_selection_slot_count(true))))
 
 
 func _nearest_aura_index(value: float) -> int:
-	var count: int = _manifest_selection_visible_indices(true).size()
+	var count: int = _manifest_selection_slot_count(true)
 	if count <= 0:
 		return 0
 	var idx = int(round(_wrap_aura_scroll(value))) % count
@@ -39857,6 +40072,14 @@ func _set_selected_aura(index: int, vibrate: = true) -> void :
 	var count = AURAS.size()
 	if count <= 0:
 		return
+	if index == BUILD_RANDOM_INDEX:
+		if _build_random_slot_enabled() and not _build_random_focused("aura"):
+			_set_build_random_focus("aura", true)
+			if vibrate:
+				_vibrate(36, 0.2)
+				_play_sfx("ui_spectrum_switch", 0.018, 0.5, 1.12)
+		return
+	_set_build_random_focus("aura", false)
 	var next_index = posmod(index, count)
 	var direction: = 1 if index >= selected_aura else -1
 	var guard: = 0
@@ -40239,15 +40462,19 @@ func _handle_manifest_touch(pos: Vector2, viewport: Vector2) -> void :
 			if not String(key).begins_with("build_pick_") or not Rect2(buttons[key]).has_point(pos):
 				continue
 			var picked: int = int(String(key).substr(11))
-			if aura_pick and picked != selected_aura:
+			if aura_pick and (picked != selected_aura or _build_random_focused("aura")):
 				_set_selected_aura(picked, true)
 				aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
 				return
-			if not aura_pick and picked != selected_manifestation:
+			if not aura_pick and (picked != selected_manifestation or _build_random_focused("manifest")):
 				_set_selected_manifestation(picked, true)
 				manifest_scroll_pos = float(_manifest_selection_slot_for_index(selected_manifestation, false))
 				return
 	if buttons.has("manifest_start") and buttons["manifest_start"].has_point(pos):
+		if not _resolve_build_random_pick(manifest_select_stage == MANIFEST_STAGE_AURA):
+			_play_sfx("ui_error")
+			_vibrate(30, 0.16)
+			return
 		if manifest_select_stage == MANIFEST_STAGE_AURA:
 			if not _spectrum_unlocked(selected_aura):
 				_play_sfx("ui_error")

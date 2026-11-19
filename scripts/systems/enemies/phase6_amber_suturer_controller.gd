@@ -1072,6 +1072,7 @@ func _drop_defeat_rewards(pos: Vector2) -> void:
 			"suturer_encounter_id": String(game.amber_suturer_state.get("encounter_id", "")),
 		})
 	game._spawn_random_card_drops(pos, REWARD_CARD_COUNT, 0)
+	game._spawn_supreme_cinzas_drop(pos)
 	game._add_text("%d CARTAS + ROUBADAS DEVOLVIDAS" % REWARD_CARD_COUNT, pos + Vector2(-150.0, -144.0), Color(1.0, 0.86, 0.32), 1.65, 20)
 	game.amber_suturer_state["stolen_cards"] = []
 

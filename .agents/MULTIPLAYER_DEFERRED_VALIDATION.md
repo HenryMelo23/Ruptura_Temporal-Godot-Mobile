@@ -1150,3 +1150,21 @@ Dever multiplayer:
 - Evidência solo/contratual: `tests/dimension_rupture_smoke.gd`, `tests/dimension_rupture_contract_smoke.gd` (host e réplicas duo/trio num só processo, sem rede) e `tests/dimension_rupture_visual_smoke.gd`. Não é prova multiplayer.
 - Devido (transporte real): host+1 cliente; host+2 clientes; reconnect durante `unstable` (relógio não reinicia, sem recompensa repetida); reconnect durante `emergency` (mesmo `dst`); um peer dentro e outro fora do portal (todos acompanham a transição do grupo); peer derrubado durante a emergência (é carregado, não bloqueia, piso de 50% de vida não o revive); pacote duplicado e atraso artificial (sem 2º token, Impulso, cura ou transição); host encerrando a dimensão no último segundo (corrida entre consenso de travessia e ejeção); duas travessias rápidas seguidas (Impulso II e token consumido uma vez pelo grupo); ejeção completa sem dividir o grupo (sala P2P e sala dedicada).
 - Risco conhecido: snapshot atrasado de uma run anterior chegando depois do primeiro snapshot da run nova seria aceito (o `run_id` difere); depende da ordenação do pacote de mundo. Em sala dedicada, o caminho da ejeção pelo snapshot depende do envio de pacotes de mundo enquanto o host está em `phase_transition`.
+
+## 2026-11-18 — Lote: escolha aleatória, loja, Cinzas, Mercador, Espreitador, UMBRA (só solo validado)
+
+- **Escolha aleatória no carrossel** (`_build_random_slot_enabled`, `BUILD_RANDOM_INDEX`): só nas telas solo (`manifest`, `mutation_select`, `effect_select`). `manifest_mp`, `mutation_select_mp` e `effect_select_mp` continuam sem o slot e com o giro antigo; o botão ALEATÓRIO antigo do rodapé segue valendo só nesses modos.
+- **Cinzas da Escolha** (`_spawn_supreme_cinzas_drop`): só a autoridade gera, uma por peer (`_reward_peer_ids`), pelo mesmo `arauto_card_drops` dos outros prêmios; marcada `no_rupture_token`. Fontes: Larápio, Sineiro, Suturador, Arauto/Aguilhão. Cinzas e Moeda Estável saíram de `_shop_card_eligible_for_roll` e `_card_available_for_reward` (loja e sorteios de prêmio de todos os peers).
+- **Vaga queimada reabastecida**: loja é local de cada jogador; nenhum pacote novo.
+- **Mercador**: fenda estável e encomendas valem por run (`RTMerchantNpc.begin_run` em `_start_game`; estado em `merchant_dimension_state.npc_run`). Encomendas só existem no balcão narrativo (solo). Física da oficina (`RTMerchantWorkshopPhysics`) é local e cosmética (+ colisão do jogador local); não vai para a rede.
+- **Espreitador camuflado**: `_damage_enemy` recusa dano e a mira automática ignora enquanto `invisible` (já replicado no pacote de inimigos). Recarga `camo_ready_at` só na autoridade.
+- **Racional na oficina**: `_update_shop` passa a rodar `_update_aura` quando a oficina está ativa; o relógio da fenda usa `AuraSystem.world_multiplier` de cada cliente (relógio já era local por cliente, com o maior orçamento da sala).
+- **UMBRA**: arrancada ao centro e giro do laser na autoridade (o hazard já é replicado); desenho do feixe usa o tamanho do mapa local.
+- Evidência solo: `tests/gameplay_batch_nov18_smoke.gd`, `tests/gameplay_batch_nov18_capture.gd` (capturas em `.codex/nov18/`), `tests/boss_farm_balance_smoke.gd`, `tests/umbra_intro_smoke.gd`, `tests/support_cards_smoke.gd`.
+
+Dever multiplayer:
+1. Host e cliente derrotam um Larápio/Arauto: cada um vê e pega só a própria Cinzas; nenhuma Cinzas/Moeda aparece em loja nem em drop de prêmio.
+2. Cliente acerta um Espreitador camuflado com disparo e habilidade: nenhum dano chega ao host; o alvo automático do cliente não o escolhe até revelar.
+3. Cliente Racional dentro da oficina com a loja aberta: Dilatação segura o relógio local sem dessincronizar a saída coletiva.
+4. Laser da UMBRA no cliente: arrancada e giro idênticos ao host, feixe atravessando o mapa inteiro.
+5. Sala com `manifest_mp`/`mutation_select_mp`: confirmar que o carrossel não mostra o slot ALEATÓRIA nem quebra o giro.

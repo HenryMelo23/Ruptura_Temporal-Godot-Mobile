@@ -625,6 +625,8 @@ func handle_gamepad_ui_action(action: String) -> void:
 		elif action in ["attack", "dash"]: core._buy_selected_card()
 		elif action == "skill": core._reroll_shop()
 		elif action == "secondary": core._open_deck("shop")
+		elif action == "lacerante_empower": core._burn_shop_card(core.shop_selected)
+		elif action == "boss": core._reserve_shop_card(core.shop_selected)
 		return
 	if action in ["pause", "secondary"]: simulate_key_press(KEY_ESCAPE)
 	elif action in ["attack", "dash", "skill"]: simulate_key_press(KEY_ENTER)

@@ -3,6 +3,8 @@ extends Node
 
 const PHASE_DENSITY_CARRY_RATIO := 0.70
 const SPATIAL_CELL_SIZE := 128.0
+## Fatia dos especiais ritmados da fase 2 que vira Pinguim Incendiario quando o Kamikaze tambem esta disponivel.
+const PHASE2_PYRO_PACED_SHARE := 0.5
 const MAX_ENTITY_PHYSICAL_RADIUS := 36.0
 const PASSIVE_TIMER_KEYS: Array[StringName] = [
 	&"ferrolho_root",
@@ -411,9 +413,12 @@ func paced_special_type() -> String:
 	var elapsed: float = game._phase_elapsed_time()
 	match phase:
 		2:
-			if elapsed >= special_kind_unlock_time(phase, game.ENEMY_PYRO_PENGUIN) and game._enemy_type_count(game.ENEMY_PYRO_PENGUIN) < game.PHASE2_PYRO_LIMIT:
+			# Pinguim Incendiario sem teto por tipo: so o limite total da fase o contem.
+			var pyro_ready: bool = elapsed >= special_kind_unlock_time(phase, game.ENEMY_PYRO_PENGUIN)
+			var kamikaze_ready: bool = elapsed >= special_kind_unlock_time(phase, game.ENEMY_KAMIKAZE) and game._enemy_type_count(game.ENEMY_KAMIKAZE) < game.PHASE2_KAMIKAZE_LIMIT
+			if pyro_ready and (not kamikaze_ready or game.rng.randf() < PHASE2_PYRO_PACED_SHARE):
 				return game.ENEMY_PYRO_PENGUIN
-			if elapsed >= special_kind_unlock_time(phase, game.ENEMY_KAMIKAZE) and game._enemy_type_count(game.ENEMY_KAMIKAZE) < game.PHASE2_KAMIKAZE_LIMIT:
+			if kamikaze_ready:
 				return game.ENEMY_KAMIKAZE
 		3:
 			var candidates: Array[String] = []

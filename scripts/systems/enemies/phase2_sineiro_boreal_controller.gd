@@ -712,6 +712,7 @@ func on_enemy_defeated(enemy: Dictionary) -> void:
 	_set_state(enemy, STATE_DYING, 1.05)
 	var pos := Vector2(enemy.get("pos", game.player_pos))
 	game._spawn_random_card_drops(pos, REWARD_CARD_COUNT, 0)
+	game._spawn_supreme_cinzas_drop(pos)
 	var points := maxi(1, int(round(float(game.card_cost) * REWARD_POINT_RATIO)))
 	game._apply_score_delta(points, true, reward_id + ":points")
 	game._add_text("%d CARTA POR JOGADOR" % REWARD_CARD_COUNT, pos + Vector2(-108.0, -130.0), Color(0.72, 0.94, 1.0), 1.8, 20)
