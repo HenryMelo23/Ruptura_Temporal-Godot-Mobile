@@ -280,7 +280,6 @@ func handle_touch_press(index: int, pos: Vector2, viewport: Vector2) -> void:
 	if core.buttons["dash"].has_point(pos):
 		claim_action_touch(index); core.dash_touch_index = index; core.teleport_dragging = true; core.teleport_drag_origin = pos; core.teleport_drag_screen = pos; return
 	if core.buttons["pause"].has_point(pos): core._start_pause_countdown(); return
-	if core.buttons["boss"].has_point(pos): core._start_boss_call(); return
 	if not try_start_move_touch(index, pos, viewport):
 		core.dance_wheel_touch_index = index; core.dance_wheel_start_pos = pos; core.dance_wheel_hold_timer = 0.0; core.dance_wheel_active = false
 

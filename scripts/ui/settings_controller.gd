@@ -63,7 +63,7 @@ static func _handle_gameplay_settings_touch(game: Node, pos: Vector2, viewport: 
 		elif game.cheat_edit != null:
 			game.cheat_edit.grab_focus()
 		return
-	if game.settings_buttons["analog"].has_point(pos):
+	if game.settings_buttons.has("analog") and game.settings_buttons["analog"].has_point(pos):
 		game._close_gameplay_cheat_popup()
 		game.analog_fixed = not game.analog_fixed
 		game._save_config()
@@ -111,15 +111,10 @@ static func _handle_gameplay_settings_touch(game: Node, pos: Vector2, viewport: 
 		elif game._interface_text_plus_rect(interface_panel).has_point(pos):
 			game.interface_text_scale = min(1.6, snapped(game.interface_text_scale + 0.1, 0.1))
 			game._save_config()
-	elif game.settings_buttons["geovana_bark"].has_point(pos):
+	elif game.settings_buttons["color_vision"].has_point(pos):
 		game._close_gameplay_cheat_popup()
-		var bark_panel: Rect2 = game.settings_buttons["geovana_bark"]
-		if game._interface_text_minus_rect(bark_panel).has_point(pos):
-			game.geovana_bark_scale = max(0.5, snapped(game.geovana_bark_scale - 0.1, 0.1))
-			game._save_config()
-		elif game._interface_text_plus_rect(bark_panel).has_point(pos):
-			game.geovana_bark_scale = min(1.5, snapped(game.geovana_bark_scale + 0.1, 0.1))
-			game._save_config()
+		game.ColorVisionFilterScript.cycle(game)
+		game._save_config()
 	elif game.settings_buttons["fps"].has_point(pos):
 		game._close_gameplay_cheat_popup()
 		game.show_fps_counter = not game.show_fps_counter
@@ -129,7 +124,7 @@ static func _handle_gameplay_settings_touch(game: Node, pos: Vector2, viewport: 
 		game._set_run_tutorial_enabled(not game.run_tutorial_enabled)
 	elif game.settings_buttons["gameplay_cheat"].has_point(pos):
 		game._open_gameplay_cheat_popup()
-	elif game.settings_buttons["haptics"].has_point(pos):
+	elif game.settings_buttons.has("haptics") and game.settings_buttons["haptics"].has_point(pos):
 		game._close_gameplay_cheat_popup()
 		game.haptics_enabled = not game.haptics_enabled
 		if game.haptics_enabled:
@@ -304,6 +299,7 @@ static func _settings_gameplay_key(game: Node, event: InputEventKey) -> void :
 			"desktop_teleport": game._cycle_desktop_teleport_mode()
 			"desktop_attack_aim": game._cycle_desktop_attack_aim_mode()
 			"desktop_hud_scale": game._cycle_desktop_hud_scale()
+			"color_vision": game.ColorVisionFilterScript.cycle(game)
 			"fps": game.show_fps_counter = not game.show_fps_counter
 			"tutorial": game._set_run_tutorial_enabled(not game.run_tutorial_enabled, false)
 			"haptics": game.haptics_enabled = not game.haptics_enabled
@@ -318,7 +314,7 @@ static func _settings_gameplay_key(game: Node, event: InputEventKey) -> void :
 			"target_priority": game._cycle_target_priority(-1)
 			"damage_text": game._adjust_damage_text_scale(-1)
 			"interface_text": game.interface_text_scale = max(0.5, game.interface_text_scale - 0.25)
-			"geovana_bark": game.geovana_bark_scale = max(0.5, snapped(game.geovana_bark_scale - 0.1, 0.1))
+			"color_vision": game.ColorVisionFilterScript.cycle(game, -1)
 			"desktop_aim": game._cycle_desktop_aim_mode(-1)
 			"desktop_teleport": game._cycle_desktop_teleport_mode(-1)
 			"desktop_attack_aim": game._cycle_desktop_attack_aim_mode(-1)
@@ -332,7 +328,7 @@ static func _settings_gameplay_key(game: Node, event: InputEventKey) -> void :
 			"target_priority": game._cycle_target_priority(1)
 			"damage_text": game._adjust_damage_text_scale(1)
 			"interface_text": game.interface_text_scale = min(2.0, game.interface_text_scale + 0.25)
-			"geovana_bark": game.geovana_bark_scale = min(1.5, snapped(game.geovana_bark_scale + 0.1, 0.1))
+			"color_vision": game.ColorVisionFilterScript.cycle(game, 1)
 			"desktop_aim": game._cycle_desktop_aim_mode(1)
 			"desktop_teleport": game._cycle_desktop_teleport_mode(1)
 			"desktop_attack_aim": game._cycle_desktop_attack_aim_mode(1)

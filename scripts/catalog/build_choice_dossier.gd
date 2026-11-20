@@ -21,7 +21,7 @@ static func manifestation(key: String) -> Dictionary:
 					{"label": "PASSIVA", "title": "Estática", "text": "Acertar o mesmo alvo alternando fontes (ATK, Q, E, TP) soma cargas. Na terceira cai um raio de 340% do dano (10% de crítico) que respinga 50% em 140 px."},
 					{"label": "Q · 10 s", "title": "Onda Cinética", "text": "Onda na mira que para no primeiro inimigo e eletrifica a corrente em até 250 px por 5 s: 10% da vida máx. + 30% do dano por segundo, dividido entre os alvos, e atordoa 0,5 s. Chefes levam 500% do dano. Empurra a Geovana para trás."},
 					{"label": "E · 10 s", "title": "Anel de Tesla", "text": "Anel de 156 px que dá choque a cada 0,4 s (0,5% da vida máx. + 50% do dano, crescendo com o tempo) e atordoa 0,2 s. Fica ligado até apertar E de novo; após 15 s drena sua vida (1% da vida atual/s, dobrando a cada 4 s)."},
-					{"label": "TP · 4 s", "title": "Descarga", "text": "Vira eletricidade por 3 s no caminho, invulnerável: quem for atravessado leva 0,5% da vida máx. a cada 0,3 s."},
+					{"label": "TP · 4 s", "title": "Descarga", "text": "Vira eletricidade por 3 s no caminho: quem for atravessado leva 0,5% da vida máx. e um choque que o prende por um instante a cada 0,3 s."},
 				],
 				"note": "",
 			}

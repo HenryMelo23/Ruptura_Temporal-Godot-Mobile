@@ -23,6 +23,9 @@ const SAVE_PATH := "user://merchant_npc.cfg"
 ## Capsulas da Barganha salvas (sobreviventes ao fim do evento) para estabilizar
 ## a fenda. Antes eram 5 pecas largadas por inimigos extraordinarios.
 const CAPSULES_REQUIRED := 10
+## A partir desta partida (contando as novas, nao as retomadas) o Bussola
+## pula a explicacao de como estabilizar a fenda: so lembra no balao.
+const SKIP_MISSION_TALK_FROM_RUN := 5
 
 var core: Node = null
 var persist := true
@@ -30,6 +33,8 @@ var persist := true
 var seen: Dictionary = {}
 var capsules_saved := 0
 var mission_offered := false
+## Partidas novas ja iniciadas (persistente; retomar partida nao conta).
+var runs_started := 0
 var mission_done := false
 var visits := 0
 var anim_time := 0.0
@@ -53,7 +58,9 @@ func configure(runtime_core: Node) -> void:
 
 ## Nova run: a fenda volta a ser instavel e a missao das capsulas recomeca.
 ## O que ele ja contou (historia, visitas) continua lembrado.
-func begin_run() -> void:
+func begin_run(new_run: bool = true) -> void:
+	if new_run:
+		runs_started += 1
 	capsules_saved = 0
 	mission_offered = false
 	mission_done = false
@@ -83,6 +90,7 @@ func load_run_state(data: Dictionary) -> void:
 func forget_story() -> void:
 	seen.clear()
 	visits = 0
+	runs_started = 0
 	capsules_saved = 0
 	mission_offered = false
 	mission_done = false
@@ -184,6 +192,10 @@ func greet(dimension) -> void:
 	if not mission_offered and visits >= 2:
 		mission_offered = true
 		_save()
+		if runs_started >= SKIP_MISSION_TALK_FROM_RUN:
+			# Veterana: ela ja sabe a historia das capsulas; so o lembrete.
+			say("Cápsulas de novo, querida: %d inteiras e a porta fica no prumo." % CAPSULES_REQUIRED, 4.2)
+			return
 		dialogue.start([
 			{"who": "mercador", "text": "Escuta aqui. Eu andei pensando, e pensar me dá fome, então vai ser rápido."},
 			{"who": "mercador", "text": "Quando a geringonça travou, ela não travou limpa. De vez em quando ela cospe uma cápsula de carga na SUA linha do tempo. Aquelas douradas que caem do céu, sabe?"},
@@ -242,7 +254,9 @@ func _menu_line(text: String, mood: String = "animado") -> Dictionary:
 	if mission_done:
 		choices.append({"label": "ENTREGAR ENCOMENDA" if missions.ready_to_turn_in() else "ENCOMENDAS", "id": CHOICE_MISSION})
 	choices.append({"label": "NADA AGORA", "id": CHOICE_LEAVE})
-	return {"who": "mercador", "text": text, "mood": mood, "choices": choices}
+	# "rift_clock": so o menu de compra gasta o tempo da fenda; perguntas e
+	# historia pausam o relogio.
+	return {"who": "mercador", "text": text, "mood": mood, "choices": choices, "rift_clock": true}
 
 
 func _on_menu_choice(id: String) -> void:
@@ -539,6 +553,7 @@ func _load() -> void:
 		return
 	# Capsulas e fenda estavel valem so para a run (begin_run/run_state).
 	visits = int(cfg.get_value("mission", "visits", 0))
+	runs_started = int(cfg.get_value("mission", "runs", 0))
 	for key in Array(cfg.get_value("story", "seen", [])):
 		if String(key) != "mission_done":
 			seen[String(key)] = true
@@ -549,5 +564,6 @@ func _save() -> void:
 		return
 	var cfg := ConfigFile.new()
 	cfg.set_value("mission", "visits", visits)
+	cfg.set_value("mission", "runs", runs_started)
 	cfg.set_value("story", "seen", seen.keys())
 	cfg.save(SAVE_PATH)

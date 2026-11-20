@@ -53,6 +53,11 @@ func clear() -> void:
 	choice_rects.clear()
 
 
+## A fala atual deixa o relogio da fenda do Mercador correr (menu de compra).
+func spends_rift_time() -> bool:
+	return busy() and bool(current.get("rift_clock", false))
+
+
 func choices() -> Array:
 	return Array(current.get("choices", []))
 

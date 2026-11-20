@@ -280,8 +280,10 @@ func boss_call_allowed() -> bool:
 	return not uses_definitive_world() or core.experimental_boss_altar_authorized or processing_remote_call
 
 
+## Botao de chamar boss removido do HUD (toque e desktop): o boss e chamado
+## pelo altar (ou pela tecla de atalho).
 func should_show_boss_button() -> bool:
-	return not uses_definitive_world()
+	return false
 
 
 func can_persist_run() -> bool:

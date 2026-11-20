@@ -573,6 +573,8 @@ static func _draw_keyboard_settings(game: Node2D, viewport: Vector2) -> void :
 	for i in range(actions.size()):
 		var action = actions[i]
 		var value = "PRESSIONE TECLA/MOUSE..." if game.keyboard_mapping_action == action else game._format_key_binding_name(game.keyboard_bindings.get(action, game.INPUT_BIND_NONE))
+		if action == "attack" and game.keyboard_mapping_action != action and game._desktop_attack_uses_cursor():
+			value = game.KeyboardBindingDefaultsScript.cursor_label(value)
 		game._draw_gameplay_preference(game.settings_buttons[action], game._keyboard_action_title(action), game._keyboard_action_subtitle(action), value, game._keyboard_action_color(action), game.settings_selected == i)
 	game._draw_settings_card(game.settings_buttons["reset"], "RESTAURAR PADRAO", "restaurar os atalhos originais", Color(0.58, 0.82, 1.0), game.settings_selected == actions.size())
 	game._draw_settings_card(game.settings_buttons["back"], "VOLTAR", "retornar", Color(1.0, 0.26, 0.36), game.settings_selected == actions.size() + 1)
@@ -582,7 +584,8 @@ static func _draw_gameplay_settings(game: Node2D, viewport: Vector2) -> void :
 	game._draw_settings_shell(viewport, "Jogabilidade", "Ajuste os comandos, a mira e a leitura do combate.")
 	game.settings_buttons = game._gameplay_preferences_rects(viewport)
 	var analog_accent = Color(0.0, 1.0, 0.82) if game.analog_fixed else Color(1.0, 0.74, 0.22)
-	game._draw_gameplay_preference(game.settings_buttons["analog"], "ANALOGICO", "Origem do controle de movimento.", "FIXO" if game.analog_fixed else "DINAMICO", analog_accent, game.settings_selected == game._gameplay_preference_index("analog"))
+	if game.settings_buttons.has("analog"):
+		game._draw_gameplay_preference(game.settings_buttons["analog"], "ANALOGICO", "Origem do controle de movimento.", "FIXO" if game.analog_fixed else "DINAMICO", analog_accent, game.settings_selected == game._gameplay_preference_index("analog"))
 	game._draw_gameplay_preference(game.settings_buttons["target_priority"], "PRIORIDADE DO DISPARO", "Define o alvo escolhido pela mira automatica.", game._target_priority_label(), Color(1.0, 0.48, 0.74), game.settings_selected == game._gameplay_preference_index("target_priority"))
 	if game._uses_desktop_ui() and game.settings_buttons.has("desktop_aim"):
 		game._draw_gameplay_preference(game.settings_buttons["desktop_aim"], "MIRA DAS HABILIDADES", "Como Q/E usam o cursor no desktop.", game._desktop_aim_mode_label(), Color(0.42, 0.92, 1.0), game.settings_selected == game._gameplay_preference_index("desktop_aim"))
@@ -604,10 +607,8 @@ static func _draw_gameplay_settings(game: Node2D, viewport: Vector2) -> void :
 	game._draw_gameplay_preference(interface_panel, "TEXTOS DA INTERFACE", "Escala de textos da loja e manifestações.", "%d%%" % int(round(game.interface_text_scale * 100.0)), Color(0.62, 0.88, 1.0), game.settings_selected == game._gameplay_preference_index("interface_text"))
 	game._draw_small_rect_button(game._interface_text_minus_rect(interface_panel), "-", Color(0.04, 0.1, 0.16), Color(0.62, 0.88, 1.0))
 	game._draw_small_rect_button(game._interface_text_plus_rect(interface_panel), "+", Color(0.04, 0.1, 0.16), Color(0.62, 0.88, 1.0))
-	var bark_panel = game.settings_buttons["geovana_bark"]
-	game._draw_gameplay_preference(bark_panel, "BALÕES DE FALA", "Tamanho dos balões de fala durante a partida.", "%d%%" % int(round(game.geovana_bark_scale * 100.0)), Color(1.0, 0.82, 0.42), game.settings_selected == game._gameplay_preference_index("geovana_bark"))
-	game._draw_small_rect_button(game._interface_text_minus_rect(bark_panel), "-", Color(0.16, 0.11, 0.04), Color(1.0, 0.82, 0.42))
-	game._draw_small_rect_button(game._interface_text_plus_rect(bark_panel), "+", Color(0.16, 0.11, 0.04), Color(1.0, 0.82, 0.42))
+	var color_on: bool = game.ColorVisionFilterScript.shader_mode(game.color_vision_mode) > 0
+	game._draw_gameplay_preference(game.settings_buttons["color_vision"], "MODO DE COR", "Filtro para daltonismo ou alto contraste.", game.ColorVisionFilterScript.label(game.color_vision_mode), Color(1.0, 0.82, 0.42) if color_on else Color(0.48, 0.52, 0.58), game.settings_selected == game._gameplay_preference_index("color_vision"))
 	var fps_accent = Color(0.0, 1.0, 0.82) if game.show_fps_counter else Color(0.48, 0.52, 0.58)
 	game._draw_gameplay_preference(game.settings_buttons["fps"], "CONTADOR DE FPS", "Mostra desempenho no canto da tela.", "ON" if game.show_fps_counter else "OFF", fps_accent, game.settings_selected == game._gameplay_preference_index("fps"))
 	game._draw_toggle_switch(game._shop_mode_toggle_rect(game.settings_buttons["fps"]), game.show_fps_counter, fps_accent)
@@ -620,8 +621,9 @@ static func _draw_gameplay_settings(game: Node2D, viewport: Vector2) -> void :
 		cheat_value = "DIGITANDO..."
 	game._draw_gameplay_preference(game.settings_buttons["gameplay_cheat"], "CHEAT SECRETO", "Campo reservado para códigos de QA e dev.", cheat_value, cheat_accent, game.settings_selected == game._gameplay_preference_index("gameplay_cheat"))
 	var haptics_accent = Color(0.0, 1.0, 0.82) if game.haptics_enabled else Color(0.48, 0.52, 0.58)
-	game._draw_gameplay_preference(game.settings_buttons["haptics"], "VIBRACAO", "Feedback tatil dos impactos e habilidades.", "ON" if game.haptics_enabled else "OFF", haptics_accent, game.settings_selected == game._gameplay_preference_index("haptics"))
-	game._draw_toggle_switch(game._shop_mode_toggle_rect(game.settings_buttons["haptics"]), game.haptics_enabled, haptics_accent)
+	if game.settings_buttons.has("haptics"):
+		game._draw_gameplay_preference(game.settings_buttons["haptics"], "VIBRACAO", "Feedback tatil dos impactos e habilidades.", "ON" if game.haptics_enabled else "OFF", haptics_accent, game.settings_selected == game._gameplay_preference_index("haptics"))
+		game._draw_toggle_switch(game._shop_mode_toggle_rect(game.settings_buttons["haptics"]), game.haptics_enabled, haptics_accent)
 	if game.ui_platform_override_unlocked and game.settings_buttons.has("ui_platform_profile"):
 		game._draw_gameplay_preference(game.settings_buttons["ui_platform_profile"], "PERFIL DE INTERFACE", "Auto detecta %s; cheat libera Android/Desktop." % game._runtime_platform_name(), game._ui_platform_profile_label(), Color(1.0, 0.78, 0.22), game.settings_selected == game._gameplay_preference_index("ui_platform_profile"))
 	if game.QA_STREAMING_FEATURE_ENABLED and game.qa_streaming_unlocked and game.settings_buttons.has("qa_stream_quality"):

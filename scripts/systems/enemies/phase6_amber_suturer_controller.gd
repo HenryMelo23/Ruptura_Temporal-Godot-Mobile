@@ -40,7 +40,6 @@ const HOOK_SPEED_MULT := 2.58
 const HOOK_DAMAGE_MAX_HP_RATIO := 0.067
 const HOOK_DAMAGE_FAR_SCALE := 0.62
 const MAX_STOLEN_CARDS := 2
-const REWARD_CARD_COUNT := 1
 const REWARD_BASE_POINTS := 420
 const HISTORY_SAMPLE_INTERVAL := 0.12
 const HISTORY_WINDOW := 2.8
@@ -1071,9 +1070,10 @@ func _drop_defeat_rewards(pos: Vector2) -> void:
 			"suturer_returned": true,
 			"suturer_encounter_id": String(game.amber_suturer_state.get("encounter_id", "")),
 		})
-	game._spawn_random_card_drops(pos, REWARD_CARD_COUNT, 0)
-	game._spawn_supreme_cinzas_drop(pos)
-	game._add_text("%d CARTAS + ROUBADAS DEVOLVIDAS" % REWARD_CARD_COUNT, pos + Vector2(-150.0, -144.0), Color(1.0, 0.86, 0.32), 1.65, 20)
+	# Inimigo Supremo: so pontos (as roubadas voltam porque sao do jogador).
+	RTSupremeEnemyRewards.grant(game, "suturador", pos, "%s:supreme_points" % String(game.amber_suturer_state.get("encounter_id", "")))
+	if not stolen_cards.is_empty():
+		game._add_text("CARTAS ROUBADAS DEVOLVIDAS", pos + Vector2(-150.0, -144.0), Color(1.0, 0.86, 0.32), 1.65, 20)
 	game.amber_suturer_state["stolen_cards"] = []
 
 

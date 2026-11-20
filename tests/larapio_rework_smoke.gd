@@ -89,7 +89,7 @@ func _run() -> void:
 	_check(desperate_interval < game.LARAPIO_AGGRESSIVE_THROW_INTERVAL and desperate_interval >= game.LARAPIO_DESPERATE_MIN_THROW_INTERVAL, "desperate attack-speed increase left its intended range")
 	lar["stolen"] = 1
 	_check(not game._larapio_desperate(lar), "Larápio carrying loot incorrectly entered the no-loss pressure state")
-	_check(game._larapio_card_drop_count(false) == 2 and game._larapio_card_drop_count(true) == 3, "Larápio card reward was not reduced to 2/3")
+	_check(RTSupremeEnemyRewards.points_for("larapio_clean", 100) > RTSupremeEnemyRewards.points_for("larapio", 100), "Larápio clean kill should pay more points")
 	lar["stolen"] = 0
 	lar["hp"] = lar["max_hp"]
 	lar["larapio_escape_timer"] = 0.0

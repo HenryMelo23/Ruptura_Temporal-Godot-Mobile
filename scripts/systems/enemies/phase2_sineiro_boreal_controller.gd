@@ -66,8 +66,6 @@ const CALL_FAR_TIME := 1.0
 const CALL_COOLDOWN := 12.0
 const CALL_ARRIVE_DISTANCE := 230.0
 const SHARD_SPREADS := [-0.36, -0.18, 0.0, 0.18, 0.36]
-const REWARD_CARD_COUNT := 1
-const REWARD_POINT_RATIO := 0.75
 
 const PARTY_HP_MULTIPLIERS := {
 	1: 1.0,
@@ -711,12 +709,8 @@ func on_enemy_defeated(enemy: Dictionary) -> void:
 	game.sineiro_boreal_state["active"] = false
 	_set_state(enemy, STATE_DYING, 1.05)
 	var pos := Vector2(enemy.get("pos", game.player_pos))
-	game._spawn_random_card_drops(pos, REWARD_CARD_COUNT, 0)
-	game._spawn_supreme_cinzas_drop(pos)
-	var points := maxi(1, int(round(float(game.card_cost) * REWARD_POINT_RATIO)))
-	game._apply_score_delta(points, true, reward_id + ":points")
-	game._add_text("%d CARTA POR JOGADOR" % REWARD_CARD_COUNT, pos + Vector2(-108.0, -130.0), Color(0.72, 0.94, 1.0), 1.8, 20)
-	game._add_text("+%s PONTOS" % game._format_points(points), pos + Vector2(-62.0, -98.0), Color(1.0, 0.84, 0.28), 1.5, 19)
+	# Inimigo Supremo: so pontos (sem carta/Cinzas), ver RTSupremeEnemyRewards.
+	RTSupremeEnemyRewards.grant(game, "sineiro", pos, reward_id + ":points")
 	game._play_sfx("Descongelando.mp3", 0.03, 0.82, 0.72)
 	_emit_visual_event("death", {"event_id": reward_id, "pos": pos})
 	_clear_hostile_state()

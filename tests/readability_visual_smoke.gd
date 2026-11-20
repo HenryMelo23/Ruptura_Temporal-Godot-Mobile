@@ -21,8 +21,9 @@ func _run() -> void:
 	assert(is_equal_approx(game.interface_text_scale, 1.25))
 	assert(game._readable_text_size(12) == 15)
 	assert(game._gameplay_preferences_rects(Vector2(1280, 720)).has("interface_text"))
-	assert(is_equal_approx(game.geovana_bark_scale, 0.5))
-	assert(game._gameplay_preferences_rects(Vector2(1280, 720)).has("geovana_bark"))
+	# Baloes de fala sairam (2026-11-19); a vaga virou MODO DE COR.
+	assert(not game._gameplay_preferences_rects(Vector2(1280, 720)).has("geovana_bark"))
+	assert(game._gameplay_preferences_rects(Vector2(1280, 720)).has("color_vision"))
 	game.interface_text_scale = 1.6
 
 	game.mode = "settings_gameplay"

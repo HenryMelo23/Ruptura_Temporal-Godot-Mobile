@@ -1168,3 +1168,34 @@ Dever multiplayer:
 3. Cliente Racional dentro da oficina com a loja aberta: Dilatação segura o relógio local sem dessincronizar a saída coletiva.
 4. Laser da UMBRA no cliente: arrancada e giro idênticos ao host, feixe atravessando o mapa inteiro.
 5. Sala com `manifest_mp`/`mutation_select_mp`: confirmar que o carrossel não mostra o slot ALEATÓRIA nem quebra o giro.
+
+## 2026-11-19 — Lote: Lagartona e fenda, atalhos, modo de cor, Espreitador, teleporte, Curater, Rebobinador (só solo validado)
+
+- **Lagartona do Paredão** (`scripts/systems/phase10/baile_lagartona.gd`): Trenzinho 720 px/s e 420 px além do alvo. Com a Fenda do Mercador aberta (`opening`/`open`, sem mergulho), ela deixa de atacar, anda até a fenda a 1,6x e, se a cabeça encostar (`ENTER_RADIUS + SEGMENT_RADIUS`), chama `collapse(false)`: fenda fecha sem fragmento e volta pela cadência normal (`RETRY_AFTER_COLLAPSE`). Tudo dentro de `update_enemy` (autoridade); a fenda colapsada já viaja no snapshot `shop_rift`. Textos "FAREJOU/ENGOLIU A FENDA" são `_add_text` locais do host.
+- **Espreitador**: `stalker_close_mult` calculado na autoridade e aplicado em `_move_enemy`; réplicas só recebem posição.
+- **Rebobinador**: armadura leve (15%) em `_damage_enemy` depois do ramo de pedido do cliente (só a autoridade aplica); +35% de movimento em `_move_enemy` pela flag `reconstituted_once` (autoridade).
+- **Curater**: velocidade de spawn 0,675x (antes 0,45x), autoridade.
+- **Teleporte**: `_player_invulnerable` local; Lacerante sem alvo atravessado não fica imune e a Descarga da Elétrica deixou de dar imunidade.
+- **Atalhos/M1 no cursor, padrão da primeira instalação, modo de cor**: só cliente local, sem rede.
+- Evidência solo: `tests/gameplay_batch_nov19_smoke.gd`.
+
+Dever multiplayer:
+1. Fase 10 com host+cliente: Lagartona viva e fenda aberta — ambos veem ela ir até a fenda e a fenda fechar; nenhum peer entra numa fenda já engolida; ninguém ganha fragmento.
+2. Cliente acerta reconstituído do Rebobinador: o dano que chega ao host sai 15% menor uma única vez (sem dupla redução no cliente).
+3. Cliente Lacerante (sem alvo) ou Elétrica teleporta perto de inimigos do host: o dano de contato chega normalmente.
+4. Espreitador/Curater/reconstituído no cliente: movimento interpolado sem trancos com as velocidades novas.
+
+## 2026-11-19 — Rede do Petro (fusão de DNA dos chefes) e Inimigos Supremos só com pontos (só solo validado)
+
+- **DNA**: `RTBossDnaController.on_boss_defeated` roda onde `_damage_boss` mata o chefe (autoridade). Clientes ainda NÃO recebem DNA por rede: falta replicar a morte do chefe para o banco de cada peer (um DNA por jogador vivo).
+- **Habilidades**: efeitos no mundo (dano, lentidão, congelamento, puxão, onda, zona, órbita, rewind dos inimigos) só rodam se `_is_world_authority()`; efeitos pessoais (cura, escudo, guarda, invulnerabilidade, rewind da própria posição/vida) rodam no dono. Habilidades de cliente hoje só aplicam a parte pessoal; falta pedido ao host (RPC) para a parte de mundo.
+- **Máquina/tela**: em sala multiplayer não há fala; encostar abre a tela direto (`dna_fusion` pausa só o mundo local). Falta validar a saída coletiva da oficina com alguém na tela de fusão.
+- **Supremos**: `RTSupremeEnemyRewards.grant` usa `_apply_score_delta(..., broadcast=true)` na autoridade; Cinzas agora cai do chefe por `_spawn_supreme_cinzas_drop` (já por peer).
+- Evidência solo: `tests/boss_dna_fusion_smoke.gd`, capturas `tests/boss_dna_capture.gd`.
+
+Dever multiplayer:
+1. Host+cliente matam o chefe 1: cada um recebe 1 DNA (hoje só o host) e uma Cinzas.
+2. Cliente com Maré Cósmica: todos os inimigos do host desaceleram 15 s.
+3. Cliente com Distorção do Relógio leva golpe letal: não morre, volta 10 s localmente, inimigos do host não teleportam de forma inconsistente.
+4. Cliente na tela de fusão enquanto o host toca a saída da oficina: a saída espera ou fecha a tela sem perder a fusão paga.
+5. Arauto/Sineiro/Suturador/Larápio mortos por cliente: pontos creditados uma vez para a sala.

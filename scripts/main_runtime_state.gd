@@ -73,6 +73,8 @@ const RoguelikePointCardControllerScript = preload("res://scripts/systems/cards/
 const CardPowerFeedbackControllerScript = preload("res://scripts/systems/cards/card_power_feedback_controller.gd")
 const PointBoostPickupControllerScript = preload("res://scripts/systems/progression/point_boost_pickup_controller.gd")
 const MerchantRiftControllerScript = preload("res://scripts/systems/shop/merchant_rift_controller.gd")
+const ColorVisionFilterScript = preload("res://scripts/presentation/color_vision_filter.gd")
+const KeyboardBindingDefaultsScript = preload("res://scripts/systems/player/keyboard_binding_defaults.gd")
 const RuntimeEventDirectorScript = preload("res://scripts/systems/events/runtime_event_director.gd")
 const Phase3RitualPulseControllerScript = preload("res://scripts/systems/events/phase3_ritual_pulse_controller.gd")
 const Phase4InstabilityPulseControllerScript = preload("res://scripts/systems/events/phase4_instability_pulse_controller.gd")
@@ -576,7 +578,6 @@ const ARAUTO_GAZE_HIT_RADIUS: = 42.0
 const ARAUTO_SPEED: = 87.0
 const ARAUTO_DISTANCE_MIN: = 230.0
 const ARAUTO_DISTANCE_MAX: = 390.0
-const ARAUTO_CARD_REWARD_COUNT: = 4
 const AGUILHAO_SIZE: = Vector2(154, 96)
 const AGUILHAO_NODE_COUNT: = 2
 const AGUILHAO_NODE_DAMAGE_REDUCTION: = 0.2
@@ -809,6 +810,9 @@ const TP_ELECTRIC_DURATION: = 3.0
 const TP_ELECTRIC_DASH_COOLDOWN: = 4.0
 const TP_ELECTRIC_TICK: = 0.3
 const TP_ELECTRIC_MAX_HP_RATE: = 0.005
+## Choquinho da corrente: cada tique (0,3 s) prende o inimigo por 0,12 s.
+## So inimigos comuns/especiais; chefe e Arauto nao sao atordoados.
+const TP_ELECTRIC_STUN: float = 0.12
 const SECONDARY_PRISMATICA_DURATION: = 10.0
 const SECONDARY_PRISMATICA_BEAM_RANGE: = 350.0
 const SECONDARY_PRISMATICA_BEAM_WIDTH: = 24.0
@@ -1007,7 +1011,6 @@ const MERCENARY_CONTRACT_BASE_POINTS: = 35
 const MERCENARY_CONTRACT_POINTS_PER_COPY: = 50
 const MERCENARY_BONUS_CAP: = 750
 const LARAPIO_BASE_POINTS: = 240
-const ARAUTO_POINT_REWARD_CARD_COST_RATIO: = 1.0
 const BOSS_ATTACK_BASE_COOLDOWN: = 3.8
 const BOSS1_STAGE_APPROACH_SPEED: = 260.0
 const BOSS2_ENTRY_TIME: = 2.5
@@ -1134,9 +1137,6 @@ const LARAPIO_MONEY_LAUGH_INTERVAL: = 5.0
 const LARAPIO_COOLDOWN_STEP_TIME: = 180.0
 const LARAPIO_COOLDOWN_STEP_BONUS: = 18.0
 const LARAPIO_COOLDOWN_MAX_BONUS: = 150.0
-const LARAPIO_CARD_DROP_BASE: = 2
-const LARAPIO_CARD_DROP_CLEAN: = 3
-const LARAPIO_CARD_RARE_CHANCE: = 0.3
 const VORAZ_BITE_RADIUS: = 100.0
 const VORAZ_BOSS_BITE_RADIUS: = 152.0
 const VORAZ_BITE_INTERVAL: = 0.95
@@ -1153,7 +1153,12 @@ const ENEMY_CRYSTAL: = "cristalizador"
 const STALKER_OPACITY_MULT: = 0.75
 ## Camuflagem do Espreitador: distancia em que se revela, recarga apos se
 ## revelar e transparencia (antes 0.32..0.72 de alfa base; agora mais sumido).
-const STALKER_CAMO_REVEAL_DISTANCE: float = 300.0
+## Antes 300 px: agora so se revela bem mais perto.
+const STALKER_CAMO_REVEAL_DISTANCE: float = 200.0
+## Aproximacao: quanto mais perto do alvo, mais rapido (1.0x a partir desta
+## distancia ate STALKER_CLOSE_SPEED_MULT colado no jogador).
+const STALKER_PROXIMITY_RAMP_DISTANCE: float = 520.0
+const STALKER_CLOSE_SPEED_MULT: float = 1.6
 const STALKER_CAMO_COOLDOWN: float = 5.0
 const STALKER_CAMO_ALPHA_MIN: float = 0.14
 const STALKER_CAMO_ALPHA_PULSE: float = 0.22
@@ -1657,6 +1662,9 @@ const COUT_AS_RECONSTITUTE_HP_RATIO: = 0.25
 const COUT_AS_RECONSTITUTE_SPEED_MULT: = 1.9
 const COUT_AS_RECONSTITUTE_TIME: = 1.5
 const COUT_AS_RECONSTITUTE_IMMUNITY_TIME: = 1.0
+## Quem volta pelo Rebobinador: +35% de velocidade de movimento e armadura leve.
+const COUT_AS_RECONSTITUTE_EXTRA_SPEED: float = 1.35
+const COUT_AS_RECONSTITUTE_ARMOR: float = 0.15
 const COUT_AS_RAPID_INTERVAL: = 0.46
 const COUT_AS_STACK_TIME: = 2.4
 const COUT_AS_MAX_STACKS: = 5
@@ -1779,7 +1787,7 @@ const CARDS: = [
 	{"name": "Mercenaria", "nick": "Contrato de Guerra", "desc": "Cada abate paga +2 pontos por copia desde o primeiro. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.", "icon": "Deck/carta_mercenaria1.png", "frame_2": "Deck/carta_mercenaria2.png", "color": Color(1.0, 0.62, 0.16)},
 	{"id": "devorador_destinos", "name": "Devorador de Destinos", "nick": "Devorador de Destinos", "desc": "Marca o inimigo mais poderoso. Sua queda devora destinos ao redor, amedronta sobreviventes e protege Geovana.", "icon": "Deck/carta-Devorador_de_Destinos1.png", "frame_2": "Deck/carta-Devorador_de_Destinos2.png", "color": Color(0.92, 0.1, 0.72)},
 	{"id": "tregua_regenerativa", "name": "Trégua Regenerativa", "nick": "Paz Tecidual", "rarity": CARD_RARITY_RARE, "desc": "Sem receber dano, regenera vida passivamente.", "icon": "Deck/carta-Tr_guaRegenerativa1.png", "frame_2": "Deck/carta-Tr_guaRegenerativa2.png", "color": Color(0.38, 1.0, 0.72)},
-	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "rarity": CARD_RARITY_UNCOMMON, "desc": "Item raro de energia: nao aparece na loja. So anomalias com muita energia (inimigos supremos: Larapio, Sineiro, Suturador, Arauto, Aguilhao) a geram, e ela sempre cai quando uma delas e derrotada. Queima uma carta comum da loja e outra carta aleatoria nasce no lugar. Quando a queimada voltar, vem chamuscada fortalecendo os atributos proprios dela de forma acumulavel; o bonus se consolida ao compra-la.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)},
+	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "rarity": CARD_RARITY_UNCOMMON, "desc": "Item raro de energia: nao aparece na loja. So anomalias com muita energia a geram: todo chefe derrotado deixa uma para cada jogador. Queima uma carta comum da loja e outra carta aleatoria nasce no lugar. Quando a queimada voltar, vem chamuscada fortalecendo os atributos proprios dela de forma acumulavel; o bonus se consolida ao compra-la.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)},
 	{"id": "reserva_pulso", "name": "Reserva de Pulso", "nick": "Cura Guardada", "desc": "Guarda cura excedente e a libera em situacao critica.", "icon": "Deck/carta-ReservadePulso1.png", "frame_2": "Deck/carta-ReservadePulso2.png", "color": Color(0.44, 0.92, 1.0)},
 	{"id": "casulo_reativo", "name": "Casulo Reativo", "nick": "Defesa de Rajada", "desc": "Ao sofrer rajada de dano, forma um casulo protetor.", "icon": "Deck/carta-CasuloReativo1.png", "frame_2": "Deck/carta-CasuloReativo2.png", "color": Color(0.54, 1.0, 0.86)},
 	{"id": "passagem_intangivel", "name": "Passagem Intangível", "nick": "Fase Fantasma", "desc": "Apos o teleporte, atravesse inimigos sem sofrer contato.", "icon": "Deck/carta-PassagemIntang_vel1.png", "frame_2": "Deck/carta-PassagemIntang_vel2.png", "color": Color(0.72, 0.9, 1.0)},
@@ -1889,8 +1897,9 @@ const CARD_TREGUA_ID: = "tregua_regenerativa"
 const CARD_CINZAS_ID: = "cinzas_escolha"
 const CARD_MOEDA_ESTAVEL_ID: = "moeda_estavel"
 ## Cartas que nunca saem da loja nem de sorteios de recompensa: Cinzas so cai
-## de inimigos supremos; Moeda Estavel so vem das missoes do Mercador.
-const SHOP_EXCLUDED_CARD_IDS: Array[String] = [CARD_CINZAS_ID, CARD_MOEDA_ESTAVEL_ID]
+## de chefes; Moeda Estavel so vem das missoes do Mercador; Petro virou a Rede
+## de DNA da maquina do Mercador (o companheiro legado so roda em saves antigos).
+const SHOP_EXCLUDED_CARD_IDS: Array[String] = [CARD_CINZAS_ID, CARD_MOEDA_ESTAVEL_ID, "Petro"]
 const CARD_ESCOLHA_ADIADA_ID: = "escolha_adiada"
 const RETIRED_CARD_IDS: Array[String] = [CARD_ESCOLHA_ADIADA_ID, "leitura_instante", "margem_segura", "solo_consolidado"]
 const CARD_RESERVA_ID: = "reserva_pulso"
@@ -3305,6 +3314,8 @@ var dimension_route_last_phase: int = 0
 var run_extracted: bool = false
 var interface_text_scale: float = 1.25
 var geovana_bark_scale: float = 0.5
+## Modo de cor para daltonismo (RTColorVisionFilter.MODES).
+var color_vision_mode: String = ColorVisionFilterScript.MODE_OFF
 var analog_fixed: bool = true
 var shop_auto_enabled: bool = true
 var shop_auto_interval: float = 180.0
@@ -3329,18 +3340,7 @@ var gamepad_mapping_action: String = ""
 const BUILD_RANDOM_INDEX: int = -7
 var build_random_focus: Dictionary = {}
 var build_random_hidden: Dictionary = {}
-var keyboard_bindings: Dictionary = {
-	"attack": INPUT_BIND_MOUSE_PREFIX + str(MOUSE_BUTTON_LEFT),
-	"skill": INPUT_BIND_MOUSE_PREFIX + str(MOUSE_BUTTON_RIGHT),
-	"secondary": INPUT_BIND_KEY_PREFIX + str(KEY_Q),
-	"dash": INPUT_BIND_KEY_PREFIX + str(KEY_SHIFT),
-	"lacerante_empower": INPUT_BIND_KEY_PREFIX + str(KEY_R),
-	"dance": INPUT_BIND_KEY_PREFIX + str(KEY_O),
-	"interact": INPUT_BIND_KEY_PREFIX + str(KEY_E),
-	"pause": INPUT_BIND_KEY_PREFIX + str(KEY_ESCAPE),
-	"shop": INPUT_BIND_KEY_PREFIX + str(KEY_P),
-	"boss": INPUT_BIND_KEY_PREFIX + str(KEY_B)
-}
+var keyboard_bindings: Dictionary = KeyboardBindingDefaultsScript.defaults()
 var keyboard_mapping_action: String = ""
 var desktop_action_gate_msec: Dictionary = {}
 var menu_analog_cooldown: float = 0.0

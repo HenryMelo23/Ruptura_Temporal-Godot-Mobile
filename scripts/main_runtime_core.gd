@@ -541,6 +541,11 @@ func _sanitize_desktop_teleport_mode(value: String) -> String:
 	return DESKTOP_TELEPORT_CURSOR
 
 
+## Disparo no cursor: o clique esquerdo tambem e "attack" (alem da tecla salva).
+func _desktop_attack_uses_cursor() -> bool:
+	return _sanitize_desktop_attack_aim_mode(desktop_attack_aim_mode) == DESKTOP_ATTACK_AIM_CURSOR
+
+
 func _sanitize_desktop_attack_aim_mode(value: String) -> String:
 	return DESKTOP_ATTACK_AIM_CURSOR if value.strip_edges().to_lower() == DESKTOP_ATTACK_AIM_CURSOR else DESKTOP_ATTACK_AIM_AUTO
 
@@ -1977,7 +1982,7 @@ func _card_unlocked(card: Dictionary) -> bool:
 func _card_available_for_reward(card: Dictionary, include_rare: = true, require_drop_texture: = false) -> bool:
 	if card.is_empty() or _card_at_max(card) or not _card_unlocked(card):
 		return false
-	# Fontes exclusivas: Cinzas (inimigos supremos) e Moeda Estavel (Mercador).
+	# Fontes exclusivas: Cinzas (chefes), Moeda Estavel (Mercador); Petro virou a Rede de DNA.
 	if SHOP_EXCLUDED_CARD_IDS.has(_card_id(card)):
 		return false
 	# The Drop journey has no shop, so its dedicated pool may award legendary
@@ -5330,6 +5335,7 @@ func _online_menu_available() -> bool:
 
 func _load_config() -> void :
 	save_controller._load_config()
+	ColorVisionFilterScript.apply(self)
 
 
 func _save_config() -> void :
@@ -5462,7 +5468,7 @@ func _keyboard_action_title(action: String) -> String:
 
 func _keyboard_action_subtitle(action: String) -> String:
 	match action:
-		"attack": return "Ataca com teclado ou mouse; clique esquerdo continua como padrao"
+		"attack": return "Ataque basico; no disparo no cursor o clique esquerdo tambem ataca"
 		"skill": return "Mira no cursor quando a skill usa area"
 		"secondary": return "Ultimate no cursor; pode usar teclado ou mouse"
 		"dash": return "Teleporte para o cursor apenas no botao vinculado"
@@ -5490,6 +5496,7 @@ func _load_keyboard_bindings(coords: PackedStringArray) -> void :
 			keyboard_bindings[action] = INPUT_BIND_NONE
 		else:
 			keyboard_bindings[action] = _normalize_input_binding(keyboard_bindings[action])
+	keyboard_bindings = KeyboardBindingDefaultsScript.migrate_legacy(keyboard_bindings)
 
 
 func _serialize_keyboard_bindings() -> String:
@@ -5569,6 +5576,8 @@ func _compact_key_binding_name(action: String) -> String:
 
 
 func _event_matches_keyboard_action(event: InputEvent, action: String) -> bool:
+	if action == "attack" and _desktop_attack_uses_cursor() and KeyboardBindingDefaultsScript.cursor_attack_event(event):
+		return true
 	var expected: = _normalize_input_binding(keyboard_bindings.get(action, INPUT_BIND_NONE))
 	if expected == INPUT_BIND_NONE:
 		return false
@@ -5589,6 +5598,8 @@ func _is_escape_or_pause_key(event: InputEvent) -> bool:
 
 
 func _is_keyboard_binding_pressed(action: String) -> bool:
+	if action == "attack" and _desktop_attack_uses_cursor() and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		return true
 	var bind_str: = String(keyboard_bindings.get(action, INPUT_BIND_NONE))
 	if bind_str.begins_with(INPUT_BIND_KEY_PREFIX):
 		var key_code: = int(bind_str.trim_prefix(INPUT_BIND_KEY_PREFIX))
@@ -7249,7 +7260,8 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	var perf_start_ms: = Time.get_ticks_msec()
 	_clear_build_random()
 	# Fenda estabilizada e encomendas do Bussola valem so para a run.
-	_merchant_npc().begin_run()
+	_merchant_npc().begin_run(clear_interrupted_save)
+	_merchant_dimension().dna.reset_run()
 	_ensure_runtime_controllers_bound()
 	player_shove.reset()
 	fossil_pustule_tether.reset()
@@ -10190,6 +10202,7 @@ func _update_game(delta: float) -> void :
 	_update_manifest_evolution_effects(delta)
 	RTFrameProfiler.mark("u_timers_cards_tp")
 	_update_aura(delta)
+	_merchant_dimension().dna.update(delta)
 	RTFrameProfiler.mark("u_aura")
 	_update_boss2_environment(delta)
 	_update_phase2_fire_walls(delta)
@@ -11169,6 +11182,10 @@ func _apolo_phase5_laser_danger_at(pos: Vector2, hazard: Dictionary, forecast: f
 
 func _read_move() -> Vector2:
 	_ensure_runtime_controllers_bound()
+	# Conversa RPG aberta: teclas/analogico de movimento nao dao direcao
+	# (nem anda, nem vira o sprite, nem anima passo).
+	if dialogue_controller != null and dialogue_controller.busy():
+		return Vector2.ZERO
 	return player_control_controller.read_move()
 
 
@@ -12207,7 +12224,9 @@ func _boss_trapped_by_gravitante() -> bool:
 func _player_invulnerable() -> bool:
 	if rift_transition != null and rift_transition.invulnerable():
 		return true
-	var tp_invulnerable: = tp_effects.any( func(effect): return String(effect.get("kind", "")) in ["lacerante", "eletrica"] and float(effect.get("life", 0.0)) > 0.0)
+	# Teleporte nao da imunidade: so a execucao da Lacerante protege enquanto
+	# corta alvos atravessados (a Descarga da Eletrica deixou de proteger).
+	var tp_invulnerable: = tp_effects.any( func(effect): return float(effect.get("life", 0.0)) > 0.0 and String(effect.get("kind", "")) == "lacerante" and not (effect.get("targets", []) as Array).is_empty())
 	return run_retry_invulnerability_timer > 0.0 or trembo_invulnerability > 0.0 or mandamento_invulnerability > 0.0 or henry_incendiary_ability_controller.is_spin_invulnerable() or henry_colossus_ability_controller.is_leap_invulnerable() or _boss3_miasma_qte_active() or not _active_lacerante_secondary().is_empty() or not _active_prismatica_secondary().is_empty() or tp_invulnerable or lacerante_execution.is_protected()
 
 
@@ -13146,6 +13165,8 @@ func _update_tp_electric(effect: Dictionary, delta: float) -> void :
 	for enemy in enemies:
 		if _distance_to_segment(Vector2(enemy["pos"]), a, b) <= _enemy_radius(enemy) + 28.0:
 			_damage_enemy(enemy, float(enemy.get("max_hp", 1.0)) * TP_ELECTRIC_MAX_HP_RATE, "eletrica", true, true, a, "teleport")
+			if _is_world_authority():
+				enemy["stun"] = maxf(float(enemy.get("stun", 0.0)), TP_ELECTRIC_STUN)
 	if boss_active and boss_hp > 0.0 and _distance_to_segment(boss_pos, a, b) <= 82.0:
 		_damage_boss(boss_hp_max * TP_ELECTRIC_MAX_HP_RATE, "eletrica", true, true, "teleport", a)
 	if _arauto_active() and _distance_to_segment(Vector2(arauto["pos"]), a, b) <= 72.0:
@@ -14511,17 +14532,12 @@ func _finish_arauto() -> void :
 	var pos: = Vector2(arauto.get("pos", player_pos))
 	var was_aguilhao: = _arauto_is_aguilhao()
 	_player_run_level_controller().grant_confirmed_miniboss()
-	var point_reward := maxi(1, int(round(float(card_cost) * ARAUTO_POINT_REWARD_CARD_COST_RATIO)))
-	_apply_score_delta(point_reward, true, _next_score_event_id())
+	RTSupremeEnemyRewards.grant(self, "aguilhao" if was_aguilhao else "arauto", pos, _next_score_event_id())
 	for enemy in enemies.duplicate():
 		if bool(enemy.get("eco_vinculado", false)) or bool(enemy.get("aguilhao_nodule", false)) or bool(enemy.get("aguilhao_spawned", false)):
 			_spawn_enemy_desfragmentation(Vector2(enemy.get("pos", pos)), _enemy_shard_color(enemy), 12)
 			enemies.erase(enemy)
-	_spawn_arauto_card_rewards(pos)
-	_spawn_supreme_cinzas_drop(pos)
 	_add_text("AGUILHAO DESFEITO" if was_aguilhao else "ARAUTO DESFEITO", pos + Vector2(-138 if was_aguilhao else -118, -108), Color(0.72, 1.0, 0.38) if was_aguilhao else Color(0.82, 0.94, 1.0), 2.1, 30)
-	_add_text("+%s PONTOS" % _format_points(point_reward), pos + Vector2(-82, -174), Color(1.0, 0.84, 0.28), 2.1, 22)
-	_add_text("+4 CARTAS NO MAPA", pos + Vector2(-116, -146), Color(1.0, 0.86, 0.24), 2.1, 22)
 	_spawn_radial_particles(pos, Color(0.58, 1.0, 0.2) if was_aguilhao else Color(0.72, 0.64, 1.0), 60)
 	shockwaves.append({"pos": pos, "radius": 22.0, "max": 520.0, "life": 0.85, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(0.54, 1.0, 0.18) if was_aguilhao else Color(0.72, 0.64, 1.0)})
 	arauto.clear()
@@ -14579,21 +14595,6 @@ func _spawn_arauto_evolution_fragment(pos: Vector2, source: String = "") -> void
 	_add_text("FRAGMENTO DE EVOLUCAO", pos + Vector2(-120, -182), _manifestation_color(), 2.1, 22)
 
 
-func _spawn_arauto_card_rewards(pos: Vector2) -> void :
-	for peer_id in _reward_peer_ids():
-		var pool: Array = _available_card_drop_pool()
-		for i in range(ARAUTO_CARD_REWARD_COUNT):
-			if pool.is_empty():
-				pool = _available_card_drop_pool()
-				if pool.is_empty():
-					return
-			var index: = rng.randi_range(0, pool.size() - 1)
-			var card: Dictionary = pool[index]
-			pool.remove_at(index)
-			var angle: = TAU * float(i) / float(ARAUTO_CARD_REWARD_COUNT) + rng.randf_range(-0.24, 0.24)
-			_append_owned_card_drop(card, pos, angle, peer_id, 18.0, 42.0, 76.0, 80.0, 132.0)
-
-
 func _spawn_random_card_drops(pos: Vector2, count: int, rare_slots: int) -> void :
 	for peer_id in _reward_peer_ids():
 		var peer_rare_slots: = rare_slots
@@ -14616,9 +14617,9 @@ func _spawn_random_card_drops(pos: Vector2, count: int, rare_slots: int) -> void
 			_append_owned_card_drop(card, pos, angle, peer_id, 20.0, 54.0, 92.0, 84.0, 146.0)
 
 
-## Inimigos supremos (Larapio, Sineiro, Suturador, Arauto/Aguilhao) sempre
-## deixam uma Cinzas da Escolha para cada jogador: so anomalias com muita
-## energia geram esse item.
+## Chefes derrotados (anomalias com muita energia) deixam uma Cinzas da
+## Escolha para cada jogador. Os Inimigos Supremos pagam so pontos desde a
+## Rede do Petro (RTSupremeEnemyRewards).
 func _spawn_supreme_cinzas_drop(pos: Vector2) -> void:
 	if _is_drop_game_mode() or not _is_world_authority():
 		return
@@ -14798,7 +14799,7 @@ func _spawn_enemy(kind: String, pos: Vector2) -> void :
 			points = 109
 		ENEMY_CURATER:
 			hp_mult = 2.4
-			speed *= 0.45
+			speed *= 0.675 # +50% (antes 0.45)
 			points = 135
 		ENEMY_LARAPIO:
 			hp_mult = LARAPIO_BASE_HP_MULT * (1.0 + _phase_elapsed_time() * LARAPIO_HP_TIME_SCALE + enemies_killed * LARAPIO_HP_KILL_SCALE)
@@ -16943,7 +16944,11 @@ func _move_enemy(enemy: Dictionary, delta: float, lacerante_secondary_override: 
 			dir = (dir * 0.55 + edge_push * push_weight + edge_push.orthogonal() * float(enemy.get("strafe", 1.0)) * 0.28).normalized()
 	elif enemy["type"] == ENEMY_CURATER and not is_disco:
 		dir = _curater_move_dir(enemy, target_pos, delta)
-	var speed_mult = 1.0
+	var speed_mult = float(enemy.get("stalker_close_mult", 1.0))
+	# So quem voltou de fato pelo Rebobinador; reconstituted_once tambem marca
+	# Suturador/Sineiro como "nao reconstituir" e nao pode dar o bonus.
+	if bool(enemy.get("rewinder_returned", false)):
+		speed_mult *= COUT_AS_RECONSTITUTE_EXTRA_SPEED
 	if float(enemy.get("parasite_slow_time", 0.0)) > 0.0:
 		speed_mult *= 0.8
 	if float(enemy.get("evolution_slow", 0.0)) > 0.0:
@@ -17078,6 +17083,7 @@ func _update_stalker(enemy: Dictionary, delta: float) -> void :
 	# revelar, so volta a camuflar depois de STALKER_CAMO_COOLDOWN segundos.
 	var was_camouflaged: bool = bool(enemy.get("invisible", false))
 	var camo_ready: bool = time_alive >= float(enemy.get("camo_ready_at", 0.0))
+	enemy["stalker_close_mult"] = lerpf(STALKER_CLOSE_SPEED_MULT, 1.0, clampf(dist / STALKER_PROXIMITY_RAMP_DISTANCE, 0.0, 1.0))
 	if dist > STALKER_CAMO_REVEAL_DISTANCE and (was_camouflaged or camo_ready):
 		enemy["invisible"] = true
 		enemy["untargetable"] = true
@@ -17531,10 +17537,6 @@ func _larapio_desperate(enemy: Dictionary) -> bool:
 	if int(enemy.get("stolen", 0)) > 0:
 		return false
 	return float(enemy.get("hp", 0.0)) <= float(enemy.get("max_hp", 1.0)) * LARAPIO_DESPERATE_HP_RATIO
-
-
-func _larapio_card_drop_count(clean_kill: bool) -> int:
-	return LARAPIO_CARD_DROP_CLEAN if clean_kill else LARAPIO_CARD_DROP_BASE
 
 
 func _update_larapio_laughs(enemy: Dictionary, delta: float, has_loot: bool) -> void :
@@ -18423,6 +18425,8 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 		if show_text and float(enemy.get("reconstitute_time", 0.0)) <= 0.0:
 			_add_text("IMUNE", Vector2(enemy.get("pos", player_pos)) + Vector2(0, -42), Color(1.0, 0.64, 0.18), 0.35, _damage_text_size(14))
 		return false
+	if bool(enemy.get("rewinder_returned", false)):
+		amount *= 1.0 - COUT_AS_RECONSTITUTE_ARMOR
 	if apply_aura_multiplier and not source.begins_with("aura_"):
 		amount *= AuraSystem.damage_multiplier(aura_state)
 	if _is_direct_player_damage_source(source, effective_source_category):
@@ -18623,6 +18627,21 @@ func _voraz_boss_feed_allowed(damage: float, source: String, source_category: = 
 	return category in ["basic_attack", "skill_q", "skill_e", "manifestation_secondary", "teleport"] or source_category == ""
 
 
+## Chefe ainda entrando em cena (fases 1-7 pelo boss_entry_timer; 8-10 pelo
+## modo "entry" do controller proprio).
+func _boss_in_entry_animation() -> bool:
+	if boss_entry_timer > 0.0:
+		return true
+	match int(current_phase):
+		RTSertaoController.PHASE:
+			return boss8_controller.mode == "entry"
+		RTCriptaController.PHASE:
+			return boss9_controller.mode == "entry"
+		RTBaileController.PHASE:
+			return boss10_controller.mode == "entry"
+	return false
+
+
 func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, release_boss_feed: = true, source_category: = "", attack_origin: = Vector2.ZERO, source_peer_id: int = 0, source_manifestation: String = "", critical_hit: bool = false, damage_text_label: String = "") -> void :
 	var boss5_siphon_absorbed_pending: float = 0.0
 	if _is_player_calcified():
@@ -18631,6 +18650,9 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 	if effective_source_category == "" and _damage_source_category(source) == "basic_attack":
 		effective_source_category = "manifestation_secondary"
 	if _boss_absorb_time_stop_active() and source != "parasite_feast":
+		return
+	# Animacao de entrada: nenhum chefe toma dano antes de poder revidar.
+	if _boss_in_entry_animation():
 		return
 	if is_multiplayer and not _is_world_authority():
 		amount = _outgoing_damage_amount(amount, source)
@@ -18871,6 +18893,8 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		if current_phase == 3 and _boss3_miasma_active():
 			_end_boss3_miasma(true)
 		_finish_boss_timer(current_phase)
+		_merchant_dimension().dna.on_boss_defeated(current_phase, boss_pos)
+		_spawn_supreme_cinzas_drop(boss_pos)
 		boss_dead = true
 		boss_active = false
 		_play_phase_music()
@@ -19162,6 +19186,7 @@ func _try_reconstitute_enemy(enemy: Dictionary) -> bool:
 	enemy["reconstitute_immunity"] = COUT_AS_RECONSTITUTE_TIME + COUT_AS_RECONSTITUTE_IMMUNITY_TIME
 	enemy["reconstituted_by"] = int(caster.get("uid", 0))
 	enemy["reconstituted_once"] = true
+	enemy["rewinder_returned"] = true
 	enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.22)
 	caster["reconstitute_pulse"] = 0.55
 	_add_text("RECONSTITUIDO", Vector2(enemy["pos"]) + Vector2(-68, -72), Color(1.0, 0.54, 0.12), 0.9, 17)
@@ -19247,6 +19272,7 @@ func _kill_enemy(enemy: Dictionary) -> void :
 	_maybe_grant_enemy_spectral_core(enemy, kill_pos)
 	_add_card_unlock_progress("enemy_kills", 1.0, int(enemy.get("killed_by_peer_id", _mp_unique_id())))
 	shop_rift_controller.on_enemy_killed(enemy)
+	_merchant_dimension().dna.on_enemy_killed()
 	henry_incendiary_ability_controller.on_enemy_killed(enemy)
 	var gain = _points_for_enemy(enemy)
 	if manifestation_key == "lacerante" and _is_uncommon_enemy(enemy):
@@ -19290,18 +19316,10 @@ func _kill_enemy(enemy: Dictionary) -> void :
 	if enemy["type"] == ENEMY_LARAPIO:
 		_play_sfx("Larapio-Dead.mp3", 0.025, 0.82, 1.0)
 		var clean_kill: = int(enemy.get("stolen", 0)) <= 0
-		var drop_count: = _larapio_card_drop_count(clean_kill)
-		var rare_slots: = 0
-		if rng.randf() < LARAPIO_CARD_RARE_CHANCE:
-			rare_slots += 1
-		if clean_kill and rng.randf() < LARAPIO_CARD_RARE_CHANCE:
-			rare_slots += 1
-		_spawn_random_card_drops(kill_pos, drop_count, rare_slots)
-		_spawn_supreme_cinzas_drop(kill_pos)
+		RTSupremeEnemyRewards.grant(self, "larapio_clean" if clean_kill else "larapio", kill_pos, _next_score_event_id())
 		_schedule_next_larapio_spawn()
-		_add_text("%d CARTAS" % drop_count, kill_pos + Vector2(0, -132), Color(1.0, 0.86, 0.24), 1.25, 22)
 		if clean_kill:
-			_add_text("SEM ROUBO: DROP MELHOR", kill_pos + Vector2(0, -164), Color(0.58, 1.0, 0.82), 1.25, 18)
+			_add_text("SEM ROUBO: MAIS PONTOS", kill_pos + Vector2(0, -164), Color(0.58, 1.0, 0.82), 1.25, 18)
 		_spawn_heal_orb(kill_pos, 0.08)
 		var returned = int(round(float(enemy.get("stolen", 0)) * (LARAPIO_LOOT_RETURN_RATIO + LARAPIO_LOOT_BONUS_RATIO)))
 		if returned > 0:
@@ -33419,6 +33437,8 @@ func _damage_player(amount: int, source: String, silent_hit_sfx: bool = false) -
 	if final > 0 and _recusa_blocks_damage():
 		return
 	final += _quantum_chips().on_player_hit(final)
+	final = _merchant_dimension().dna.on_player_hit(final)
+	if final <= 0: return
 	_track_player_damage(final, source)
 	run_last_damage_source = source
 	_add_card_unlock_progress("damage_taken_events", 1.0)
@@ -34086,6 +34106,9 @@ func _draw() -> void :
 		"corruptor_shop":
 			_draw_game(viewport)
 			_corruptor_shop().draw(self, viewport)
+		"dna_fusion":
+			_draw_game(viewport)
+			_merchant_dimension().fusion_screen.draw(self, viewport)
 		"story_comic":
 			RTStoryComicPresentation.draw(self, viewport)
 		"umbra_intro":
@@ -34134,7 +34157,7 @@ func _draw() -> void :
 func _should_show_os_mouse() -> bool:
 	if not _uses_desktop_ui():
 		return true
-	if mode in ["menu", "nick_setup", "progress_profile", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "multiplayer_menu", "online_create_room", "online_find_room", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "catalog", "character_select", "mutation_select", "effect_select", "mutation_select_mp", "effect_select_mp", "manifest", "manifest_mp", "manifest_evolution", "manifest_evolution_waiting", "run_choice", "corruptor_shop", "story_comic", "shop", "paused", "pause_deck", "edit_layout", "specter_upgrade", "death_slow", "retry_return", "game_over", "victory"]:
+	if mode in ["menu", "nick_setup", "progress_profile", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "multiplayer_menu", "online_create_room", "online_find_room", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "catalog", "character_select", "mutation_select", "effect_select", "mutation_select_mp", "effect_select_mp", "manifest", "manifest_mp", "manifest_evolution", "manifest_evolution_waiting", "run_choice", "corruptor_shop", "dna_fusion", "story_comic", "shop", "paused", "pause_deck", "edit_layout", "specter_upgrade", "death_slow", "retry_return", "game_over", "victory"]:
 		return true
 	if _shop_mp_request_visible() or _boss_mp_request_visible() or _phase_mp_request_visible() or _pause_mp_request_visible() or app_update_popup_visible:
 		return true
@@ -34481,18 +34504,9 @@ func _keyboard_settings_rects(viewport: Vector2) -> Dictionary:
 
 
 func _reset_keyboard_bindings() -> void :
-	keyboard_bindings = {
-		"attack": _mouse_input_binding(MOUSE_BUTTON_LEFT),
-		"skill": _mouse_input_binding(MOUSE_BUTTON_RIGHT),
-		"secondary": _key_input_binding(KEY_Q),
-		"dash": _key_input_binding(KEY_SHIFT),
-		"lacerante_empower": _key_input_binding(KEY_R),
-		"dance": _key_input_binding(KEY_O),
-		"interact": _key_input_binding(KEY_E),
-		"pause": _key_input_binding(KEY_ESCAPE),
-		"shop": _key_input_binding(KEY_P),
-		"boss": _key_input_binding(KEY_B)
-	}
+	keyboard_bindings = KeyboardBindingDefaultsScript.defaults()
+	if _desktop_attack_uses_cursor():
+		KeyboardBindingDefaultsScript.release_cursor_button(keyboard_bindings)
 	keyboard_mapping_action = ""
 
 func _draw_gameplay_settings(viewport: Vector2) -> void :
@@ -34766,12 +34780,16 @@ func _gameplay_preferences_rects(viewport: Vector2) -> Dictionary:
 
 
 func _gameplay_preference_keys() -> Array:
-	var keys: = ["analog", "target_priority", "damage_text", "interface_text", "geovana_bark", "fps", "tutorial", "gameplay_cheat", "haptics"]
+	# Analogico e vibracao so existem no toque; no desktop nao fazem nada.
+	var keys: Array = ["target_priority", "damage_text", "interface_text", "color_vision", "fps", "tutorial", "gameplay_cheat"]
 	if _uses_desktop_ui():
-		keys.insert(2, "desktop_aim")
-		keys.insert(3, "desktop_teleport")
-		keys.insert(4, "desktop_attack_aim")
-		keys.insert(5, "desktop_hud_scale")
+		keys.insert(1, "desktop_aim")
+		keys.insert(2, "desktop_teleport")
+		keys.insert(3, "desktop_attack_aim")
+		keys.insert(4, "desktop_hud_scale")
+	else:
+		keys.push_front("analog")
+		keys.append("haptics")
 	if ui_platform_override_unlocked:
 		keys.append("ui_platform_profile")
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked:
@@ -37989,6 +38007,8 @@ func _unhandled_input(event: InputEvent) -> void :
 		return
 	if mode == RTCorruptorShop.MODE and _corruptor_shop().handle_input(event, viewport):
 		return
+	if mode == RTBossDnaFusionScreen.MODE and _merchant_dimension().fusion_screen.handle_input(event):
+		return
 	if (mode == "manifest" or (mode == "lobby_online_host" and (RTQuantumChipUI.open or (event is InputEventKey and event.pressed and event.keycode == KEY_C)))) and _handle_quantum_chip_input(event):
 		return
 	_update_button_layout(viewport)
@@ -39310,9 +39330,6 @@ func _handle_press(pos: Vector2, viewport: Vector2) -> void :
 		return
 	if buttons["pause"].has_point(pos):
 		_start_pause_countdown()
-		return
-	if buttons["boss"].has_point(pos):
-		_start_boss_call()
 		return
 	_try_start_move_touch(-2, pos, viewport)
 
@@ -45620,6 +45637,8 @@ func _cycle_desktop_attack_aim_mode(direction: = 1) -> void :
 	if current < 0:
 		current = 0
 	desktop_attack_aim_mode = String(modes[(current + direction + modes.size()) % modes.size()])
+	if desktop_attack_aim_mode == DESKTOP_ATTACK_AIM_CURSOR:
+		KeyboardBindingDefaultsScript.release_cursor_button(keyboard_bindings)
 	# Sem mouse no ataque, o teleporte nao pode depender do cursor.
 	desktop_teleport_mode = _effective_desktop_teleport_mode()
 	_clear_desktop_aim_state()

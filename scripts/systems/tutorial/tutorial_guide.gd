@@ -177,10 +177,12 @@ func step_text(state: String) -> Dictionary:
 		core.TUTORIAL_STATE_SHOP:
 			return {"title": "FENDA DO MERCADOR", "body": "Uma Fenda do Mercador abriu no mapa. É a loja: lá você troca pontos por cartas que mudam a sua build. Siga a seta na borda da tela até a fenda; ela fecha depois de um tempo.", "hint": "Enquanto a loja está aberta, a partida fica pausada."}
 		core.TUTORIAL_STATE_BOSS_CALL:
-			var where: String = "Vá até o altar (siga a seta na borda da tela) para chamar o chefe." if core.experimental_phase_controller.uses_definitive_world() else "Use %s para chamar o chefe." % key("boss")
+			# Sem botao de boss no HUD: no toque so o altar chama o chefe.
+			var by_altar: bool = core.experimental_phase_controller.uses_definitive_world() or not (desktop() or core.is_gamepad_active)
+			var where: String = "Vá até o altar (siga a seta na borda da tela) para chamar o chefe." if by_altar else "Use %s para chamar o chefe." % key("boss")
 			return {"title": "CHAMAR O CHEFE", "body": "Você escolhe quando enfrentar o chefe. " + where + " Ficar mais tempo deixa Geovana mais forte, mas a dimensão também fica mais perigosa.", "hint": "Chamar é decisão sua."}
 		STATE_EXTRAORDINARY:
-			return {"title": "INIMIGO SUPREMO", "body": "Alguns inimigos são raros e bem mais fortes que a horda: têm mecânicas próprias, um nome sobre a cabeça e uma barra de vida. Derrotá-los rende recompensas maiores, sempre com uma Cinzas da Escolha; ignorá-los também é uma escolha.", "hint": "Fique atenta ao padrão de ataque antes de chegar perto."}
+			return {"title": "INIMIGO SUPREMO", "body": "Alguns inimigos são raros e bem mais fortes que a horda: têm mecânicas próprias, um nome sobre a cabeça e uma barra de vida. Derrotá-los rende muitos pontos (para cartas ou para fusões de DNA na oficina do Mercador); ignorá-los também é uma escolha.", "hint": "Fique atenta ao padrão de ataque antes de chegar perto."}
 	return Dictionary(core.TUTORIAL_STEP_TEXTS.get(state, {}))
 
 
@@ -355,7 +357,7 @@ func mission_text() -> Array:
 		"strong":
 			var left: int = maxi(0, int(ceil(strong_until - float(core.time_alive))))
 			return ["FIQUE MAIS FORTE", "Derrote inimigos e compre cartas (%d:%02d)" % [left / 60, left % 60]]
-	if core.experimental_phase_controller.uses_definitive_world():
+	if core.experimental_phase_controller.uses_definitive_world() or not (desktop() or core.is_gamepad_active):
 		return ["CHAME O CHEFE", "Vá até o altar (siga a seta na borda)"]
 	return ["CHAME O CHEFE", "Use %s quando estiver pronta" % key("boss")]
 

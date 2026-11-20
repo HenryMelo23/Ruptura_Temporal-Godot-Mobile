@@ -73,6 +73,7 @@ static func draw_world(game: Node2D, camera: Vector2) -> void:
 	_draw_floor(game, camera, t)
 	_draw_exit_portal(game, camera, t)
 	_draw_workshop(game, camera, t)
+	RTBossDnaPresentation.draw_machine_world(game, camera)
 	_draw_merchant(game, camera, t, dim)
 
 
@@ -436,9 +437,12 @@ static func draw_shop_projector(game: Node2D, center: Vector2, open: float, now:
 ## Cronometro da fenda e caixa de conversa, em espaco de tela.
 static func draw_overlay(game: Node2D, viewport: Vector2) -> void:
 	var dim: RTMerchantDimension = game._merchant_dimension()
+	if not dim.active:
+		RTBossDnaPresentation.draw_world_vfx(game, game._camera(viewport))
+		RTBossDnaPresentation.draw_hud(game, viewport)
 	# Durante a fala o relogio esta parado e a tela e dele: nada de barra. No
 	# menu do balcao (escolha de compra) o relogio corre, entao a barra aparece.
-	var talking: bool = game._dialogue().busy() and game._dialogue().choices().is_empty()
+	var talking: bool = game._dialogue().busy() and not game._dialogue().spends_rift_time()
 	if dim.active and not dim.stable() and not talking:
 		_draw_timer(game, viewport, dim)
 		if dim.counting_down():

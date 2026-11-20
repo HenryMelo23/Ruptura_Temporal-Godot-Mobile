@@ -22,9 +22,10 @@ const SEGMENTS := 6
 const SPACING := 58.0
 const SEGMENT_RADIUS := 34.0
 const WALK_SPEED := 95.0
-const TREM_SPEED := 520.0
+## Trenzinho (o "dash"): antes 520 px/s e 260 px alem do alvo.
+const TREM_SPEED := 720.0
 const TREM_MIN_DIST := 300.0
-const TREM_OVERSHOOT := 260.0
+const TREM_OVERSHOOT := 420.0
 const TREM_SWAY := 90.0
 const BODY_DAMAGE := 0.06
 const BODY_CD := 0.8
@@ -38,6 +39,10 @@ const CASULO_PCT := 0.35
 const CASULO_TIME := 3.0
 const CASULO_LOST_SEGMENTS := 2
 const FAST_FACTOR := 0.87
+## Fome de fenda: com a Fenda do Mercador aberta, ela larga o jogador e vai
+## engolir a fenda. Se a cabeca chegar, a fenda some sem fragmento.
+const RIFT_HUNT_SPEED_MULT := 1.6
+const RIFT_SWALLOW_RADIUS := RTMerchantRiftController.ENTER_RADIUS + SEGMENT_RADIUS
 
 ## O controller da fase e dono desta Lagartona; guardar ele forte fecharia um
 ## ciclo de RefCounted (baile -> lagartona -> baile) que vaza ao sair do jogo.
@@ -57,6 +62,7 @@ var vira_angle := 0.0
 var body_cd := 0.0
 var state := ""
 var seg_count := SEGMENTS
+var hunted_rift_id := -1
 
 
 func configure(p_baile: RTBaileController, p_core: Node) -> void:
@@ -68,6 +74,7 @@ func reset() -> void:
 	clear()
 	seg_count = SEGMENTS
 	state = ""
+	hunted_rift_id = -1
 
 
 func clear() -> void:
@@ -131,9 +138,15 @@ func update_enemy(enemy: Dictionary, delta: float) -> void:
 				_go(enemy, "walk")
 		"walk":
 			enemy["b10_anim"] = "idle"
-			baile.dance_step(enemy, dir, WALK_SPEED * (1.15 if bool(enemy.get("lg_fast", false)) else 1.0), delta, 0.1)
+			var rift_pos: Variant = _huntable_rift_pos(enemy)
+			if rift_pos is Vector2:
+				var to_rift: Vector2 = (Vector2(rift_pos) - Vector2(enemy["pos"])).normalized()
+				enemy["facing_dir"] = to_rift
+				baile.dance_step(enemy, to_rift, WALK_SPEED * RIFT_HUNT_SPEED_MULT, delta, 0.1)
+			else:
+				baile.dance_step(enemy, dir, WALK_SPEED * (1.15 if bool(enemy.get("lg_fast", false)) else 1.0), delta, 0.1)
 			enemy["lg_cd"] = float(enemy.get("lg_cd", 0.0)) - delta
-			if float(enemy["lg_cd"]) <= 0.0 and baile.beat.is_downbeat_event():
+			if float(enemy["lg_cd"]) <= 0.0 and baile.beat.is_downbeat_event() and not (rift_pos is Vector2):
 				_choose_attack(enemy, info)
 		"trem_warn":
 			enemy["b10_anim"] = "attack"
@@ -175,6 +188,7 @@ func update_enemy(enemy: Dictionary, delta: float) -> void:
 				enemy["lg_fast"] = true
 				core._add_text("SAIU DO CASULO · 150 BPM", Vector2(enemy["pos"]) + Vector2(0, -110), Color(0.6, 1.0, 0.4), 1.6, 22)
 				_end(enemy, 0.6)
+	_try_swallow_rift(enemy)
 	_record_trail(Vector2(enemy["pos"]))
 	_update_segments()
 	_update_body_contact(enemy)
@@ -194,6 +208,34 @@ func _choose_attack(enemy: Dictionary, info: Dictionary) -> void:
 		return
 	lit_seg = 0
 	_go(enemy, "grave")
+
+
+## Posicao da Fenda do Mercador que ela esta cacando (null sem fenda engolivel).
+func _huntable_rift_pos(enemy: Dictionary) -> Variant:
+	var rift: RTMerchantRiftController = core.shop_rift_controller as RTMerchantRiftController
+	if rift == null or not rift.active() or bool(core.shop_rift.get("diving", false)):
+		return null
+	if rift.state() not in [RTMerchantRiftController.STATE_OPENING, RTMerchantRiftController.STATE_OPEN]:
+		return null
+	var rift_id: int = int(core.shop_rift.get("id", 0))
+	if rift_id != hunted_rift_id:
+		hunted_rift_id = rift_id
+		core._add_text("A LAGARTONA FAREJOU A FENDA!", Vector2(enemy["pos"]) + Vector2(0, -120), Color(0.86, 0.6, 1.0), 1.6, 22)
+	return Vector2(core.shop_rift.get("pos", Vector2.ZERO))
+
+
+## A cabeca encostou na fenda (andando ou no Trenzinho): engole. A fenda fecha
+## sem fragmento e a proxima so volta pela cadencia normal (RETRY_AFTER_COLLAPSE).
+func _try_swallow_rift(enemy: Dictionary) -> void:
+	if state in ["entry", "casulo"]:
+		return
+	var rift_pos: Variant = _huntable_rift_pos(enemy)
+	if not (rift_pos is Vector2) or Vector2(enemy["pos"]).distance_to(Vector2(rift_pos)) > RIFT_SWALLOW_RADIUS:
+		return
+	(core.shop_rift_controller as RTMerchantRiftController).collapse(false)
+	core._add_text("A LAGARTONA ENGOLIU A FENDA!", Vector2(rift_pos) + Vector2(0, -110), Color(1.0, 0.42, 0.62), 1.8, 24)
+	core._trigger_screen_shake(10.0, 0.35)
+	core._vibrate(140, 0.5)
 
 
 func _end(enemy: Dictionary, cd: float) -> void:

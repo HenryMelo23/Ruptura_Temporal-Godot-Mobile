@@ -112,7 +112,17 @@ func _check_shop_hints_and_cinzas() -> void:
 	var cinzas: Dictionary = game._find_card_by_id(game.CARD_CINZAS_ID)
 	var moeda: Dictionary = game._find_card_by_id(game.CARD_MOEDA_ESTAVEL_ID)
 	game._apply_card(cinzas)
+	# Atalhos de teclado: fixa o desktop (o config do usuario pode estar em Android).
+	var saved_override = game.ui_platform_override
+	var saved_unlocked = game.ui_platform_override_unlocked
+	game.ui_platform_override_unlocked = true
+	game.ui_platform_override = "desktop"
+	var saved_gamepad = game.is_gamepad_active
+	game.is_gamepad_active = false
 	var hints: Array = game.shop_presentation.input_hints(game)
+	game.ui_platform_override = saved_override
+	game.ui_platform_override_unlocked = saved_unlocked
+	game.is_gamepad_active = saved_gamepad
 	var labels: Array = hints.map(func(h): return String(h[1]))
 	_check(labels.has("QUEIMAR") and labels.has("COMPRAR") and labels.has("TROCAR"), "atalhos da loja incompletos: %s" % str(labels))
 	_check(not game._shop_card_eligible_for_roll(cinzas, {}), "Cinzas ainda pode sair na loja")
@@ -122,8 +132,8 @@ func _check_shop_hints_and_cinzas() -> void:
 		for card in game._roll_shop_cards("reroll"):
 			var cid: String = game._card_id(card)
 			_check(cid != game.CARD_CINZAS_ID and cid != game.CARD_MOEDA_ESTAVEL_ID, "loja sorteou carta exclusiva %s" % cid)
-	_check(String(cinzas.get("desc", "")).contains("anomalias com muita energia"), "descricao da Cinzas nao explica a origem")
-	# Inimigo supremo sempre deixa uma Cinzas.
+	_check(String(cinzas.get("desc", "")).contains("anomalias com muita energia") and String(cinzas.get("desc", "")).contains("chefe"), "descricao da Cinzas nao explica a origem")
+	# Chefe (anomalia com muita energia) deixa uma Cinzas pelo mesmo helper.
 	game.arauto_card_drops.clear()
 	if game._card_drop_texture_registered(cinzas):
 		game._spawn_supreme_cinzas_drop(game.player_pos + Vector2(200, 0))
@@ -131,7 +141,7 @@ func _check_shop_hints_and_cinzas() -> void:
 		for drop in game.arauto_card_drops:
 			if game._card_id(Dictionary(drop.get("card", {}))) == game.CARD_CINZAS_ID:
 				found = true
-		_check(found, "inimigo supremo nao deixou Cinzas da Escolha")
+		_check(found, "helper de Cinzas dos chefes nao deixou Cinzas da Escolha")
 	else:
 		print("GAMEPLAY_BATCH_NOV18 nota: textura da Cinzas sem registro no headless; drop nao verificado")
 

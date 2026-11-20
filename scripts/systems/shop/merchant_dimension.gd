@@ -67,10 +67,17 @@ var mp_room_stable := false
 var mp_last_second_announced := -1
 ## Fisica local dos moveis soltos e do proprio Mercador.
 var physics := RTMerchantWorkshopPhysics.new()
+## Rede do Petro: DNA dos chefes, a maquina do canto e a tela de fusao.
+var dna := RTBossDnaController.new()
+var machine := RTBossDnaMachine.new()
+var fusion_screen := RTBossDnaFusionScreen.new()
 
 
 func configure(runtime_core: Node) -> void:
 	core = runtime_core
+	dna.configure(runtime_core)
+	machine.configure(runtime_core)
+	fusion_screen.configure(runtime_core)
 
 
 ## Sinal de "minha fenda esta estavel" dentro do pacote de orcamento.
@@ -185,7 +192,9 @@ func enter() -> bool:
 	physics.setup(RTMerchantDimensionPresentation.PROPS, [
 		["counter", RTMerchantDimensionPresentation.COUNTER_POS + Vector2(0.0, -24.0), 62.0],
 		["teleporter", TELEPORTER_POS + Vector2(0.0, 40.0), 72.0],
+		["dna_machine", RTBossDnaMachine.POS + Vector2(0.0, -20.0), RTBossDnaMachine.SOLID_RADIUS],
 	], WORLD_SIZE, MERCHANT_POS)
+	machine.on_dimension_entered()
 	active = true
 	entry_age = 0.0
 	# Multiplayer skips narrative: the first approach must open the counter
@@ -291,9 +300,9 @@ func update(delta: float) -> void:
 			leave(true)
 		return
 	# O cronometro corre com a fenda instavel, inclusive com a loja aberta:
-	# escolher carta tambem gasta o tempo dela. Conversa de historia pausa; o
-	# menu do balcao (comprar/perguntar) e decisao de compra e gasta tempo.
-	if not stable() and (not core._dialogue().busy() or not core._dialogue().choices().is_empty()):
+	# escolher carta tambem gasta o tempo dela. Conversa de historia e
+	# perguntas pausam; so o menu do balcao (fala com "rift_clock") gasta tempo.
+	if not stable() and (not core._dialogue().busy() or core._dialogue().spends_rift_time()):
 		# Dilatacao da Racional (e qualquer aura que desacelere o mundo)
 		# tambem segura o relogio da fenda.
 		timer += delta * AuraSystem.world_multiplier(core.aura_state)
@@ -312,6 +321,7 @@ func update(delta: float) -> void:
 			else:
 				leave(false)
 		return
+	machine.update(entry_age)
 	if core.mode != "game" or core._dialogue().busy():
 		return
 	var dist: float = core.player_pos.distance_to(MERCHANT_POS)
@@ -396,7 +406,7 @@ func _open_counter() -> void:
 
 
 func save_state() -> Dictionary:
-	return {"active": active, "timer": timer, "limit": limit, "confiscated": confiscated, "talked": talked_this_visit, "collapses": collapses, "rift_entries": core._rift_transition().entries if core != null else 0, "npc_run": core._merchant_npc().run_state() if core != null else {}}
+	return {"active": active, "timer": timer, "limit": limit, "confiscated": confiscated, "talked": talked_this_visit, "collapses": collapses, "rift_entries": core._rift_transition().entries if core != null else 0, "npc_run": core._merchant_npc().run_state() if core != null else {}, "dna": dna.save_state()}
 
 
 func load_state(data: Dictionary) -> void:
@@ -405,6 +415,7 @@ func load_state(data: Dictionary) -> void:
 	confiscated = int(data.get("confiscated", 0))
 	talked_this_visit = bool(data.get("talked", false))
 	collapses = int(data.get("collapses", 0))
+	dna.load_state(Dictionary(data.get("dna", {})))
 	if core != null:
 		core._rift_transition().load_state({"entries": int(data.get("rift_entries", 0))})
 		core._merchant_npc().load_run_state(Dictionary(data.get("npc_run", {})))
