@@ -2378,7 +2378,9 @@ const NET_ENEMY_TYPES: = [
 	"cagado_piao", "cagado_cangaceiro", "ovo_jabuti",
 	"aranha_lobo", "viuva_silencio", "aranha_alcapao", "aranha_saltadora",
 	"aranha_mimica", "noiva_de_seda", "filhote_aranha", "olho_vigia",
-	"aranha_boleadeira", "aranha_armadeira"
+	"aranha_boleadeira", "aranha_armadeira",
+	"borboleta_monarca", "borboleta_garrafeira", "borboleta_sombrinha",
+	"borboleta_paredinha", "borboleta_hype", "lagartona_paredao"
 ]
 const NET_BULLET_TYPES: = [
 	"", "atirador", "arauto_shot", "boss_pressure_bubble", "cout_attack_speed",

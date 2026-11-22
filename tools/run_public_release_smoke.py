@@ -88,9 +88,9 @@ if __name__ == "__main__":
     for scenario in ["ready", "spectator"]:
         run(args.manager, scenario, "multiplayer_lobby_integration_smoke", args.ping_budget)
     run(args.manager, "gameplay", "multiplayer_gameplay_authority_smoke", args.ping_budget)
-    for scenario in ["altar", "shop", "aftermath", "chips", "phase8", "phase9"]:
+    for scenario in ["altar", "shop", "aftermath", "chips", "phase8", "phase9", "phase10"]:
         run(args.manager, scenario, "multiplayer_world_interaction_smoke", args.ping_budget,
             result_prefix=f"world_interaction_{scenario}_")
     if not request(args.manager, "GET", "/health").get("ok"):
         raise SystemExit("Public relay unhealthy after tests")
-    print("PUBLIC_RELEASE_SMOKE_OK ready spectator gameplay altar shop_roundtrip aftermath chips phase8 phase9")
+    print("PUBLIC_RELEASE_SMOKE_OK ready spectator gameplay altar shop_roundtrip aftermath chips phase8 phase9 phase10")

@@ -70,6 +70,13 @@ func _run() -> void:
 	game._story().queue.clear()
 	game.mode = "game"
 	_check(game.current_phase == 10, "nao entrou na fase 10")
+	var boss_packet: PackedFloat32Array = game.RTNetContractScript.pack_boss(Vector2(640, 400), 800.0, false, true, 10, 1200.0, 2.0)
+	var boss_decoded: Dictionary = game.RTNetContractScript.unpack_boss_snapshot(boss_packet, Vector2.ZERO, 0.0, false, false, 1, 1.0, 0.0, false)
+	_check(int(boss_decoded.get("phase_index", 0)) == 10, "identidade da chefe foi truncada no pacote multiplayer")
+	for kind in RTBaileController.KINDS:
+		var enemy_packet: PackedFloat32Array = game.RTNetContractScript.pack_enemies([{"uid": 101, "type": kind, "pos": Vector2(700, 500), "hp": 20.0}], game.NET_ENEMY_TYPES, game.ENEMY_COMMON, game.NET_LEECH_STATES, game.SANGUESSUGA_STATE_DORMANT)
+		var enemies_decoded: Array = game.RTNetContractScript.unpack_enemy_snapshot(enemy_packet, {}, game.NET_ENEMY_TYPES, game.ENEMY_COMMON, game.NET_LEECH_STATES, game.ENEMY_CHRONAL_LEECH, Time.get_ticks_msec())
+		_check(enemies_decoded.size() == 1 and String(enemies_decoded[0].get("type", "")) == kind, "inimigo da fase 10 perdeu a identidade na rede: " + kind)
 	_check(flow.phase_region_name(10) == "BAILAO DA DONA BOLETA", "nome da regiao")
 	_check(game.experimental_phase_controller.map_key() == "map_phase_ex10", "mapa da fase 10")
 	_check(game._current_map_texture() != null, "textura do mapa")
@@ -237,6 +244,20 @@ func _run() -> void:
 		game.player_pos = home
 		game.player_hp = game.player_hp_max
 		lg_states[String(lag.get("b10_state", ""))] = true
+	# O passeio pode aproximar a Lagartona antes da batida de ataque; nesse caso
+	# force a distancia exigida e deixe o estado real executar o trenzinho.
+	if not lg_states.has("trem_warn"):
+		lag["pos"] = home + Vector2(650, 0)
+		lag["lg_cycle"] = 0
+		c.lagartona._go(lag, "walk")
+		c.lagartona._choose_attack(lag, c._info(lag))
+		for i in range(int(8.0 * 30.0)):
+			game.time_alive += 1.0 / 30.0
+			game._update_enemies(1.0 / 30.0)
+			c.update(1.0 / 30.0)
+			game.player_pos = home
+			game.player_hp = game.player_hp_max
+			lg_states[String(lag.get("b10_state", ""))] = true
 	for st in ["walk", "trem_warn", "trem", "ofegante", "vira", "tonta"]:
 		_check(lg_states.has(st), "lagartona nunca entrou em " + st + " " + str(lg_states.keys()))
 	_check(c.lagartona.segments.size() == RTBaileLagartona.SEGMENTS, "segmentos da lagartona")

@@ -2,13 +2,13 @@
   "version": "2.1.3",
   "version_code": 27300,
   "filename": "Ruptura_Temporal_2.1.3.x86_64",
-  "sha256": "12ac949b7dfe4585af863e73a27e48ddcf7288fcb8633581841916a59d776c93",
-  "size": 1024221320,
+  "sha256": "2cdb77ac8031e1c6cdcab271cf71784d9c35170494f5f3978d5ac7a3f54ac491",
+  "size": 1038094848,
   "notes": [
-    "Sertao e Cripta de Seda entram no ciclo e funcionam em equipe.",
-    "Escolhas pos-chefe e Chips Quanticos sao compartilhados pelo grupo.",
-    "Lobby, loja e combate receberam correcoes de estabilidade."
+    "Sertao, Cripta de Seda e Bailao da Dona Boleta entram no ciclo de farm.",
+    "Multiplayer sincroniza as fases 8 a 10, escolhas de manifestacao e loja em equipe.",
+    "Corrigidos o pacote de rede da fase 10 e o encerramento da Lagartona."
   ],
   "mandatory": true,
-  "published_at": "2026-11-18T15:53:53Z"
+  "published_at": "2026-11-22T18:10:08Z"
 }

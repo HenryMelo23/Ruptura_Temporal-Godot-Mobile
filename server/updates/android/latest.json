@@ -2,13 +2,13 @@
   "version": "2.1.3",
   "version_code": 27300,
   "filename": "ruptura_temporal_mobile_2.1.3.apk",
-  "sha256": "87097f0fa17dd5dbff6395358cc2a729c2518d4069f96352ee994ca1e1cc0d17",
-  "size": 970945609,
+  "sha256": "66f86851181acc85027dd9d1c10986e7de39c061c38e0fd619f1091809d47c24",
+  "size": 984796116,
   "notes": [
-    "Sertao e Cripta de Seda entram no ciclo e funcionam em equipe.",
-    "Escolhas pos-chefe e Chips Quanticos sao compartilhados pelo grupo.",
-    "Lobby, loja e combate receberam correcoes de estabilidade."
+    "Sertao, Cripta de Seda e Bailao da Dona Boleta entram no ciclo de farm.",
+    "Multiplayer sincroniza as fases 8 a 10, escolhas de manifestacao e loja em equipe.",
+    "Corrigidos o pacote de rede da fase 10 e o encerramento da Lagartona."
   ],
   "mandatory": true,
-  "published_at": "2026-11-18T15:53:53Z"
+  "published_at": "2026-11-22T18:10:08Z"
 }

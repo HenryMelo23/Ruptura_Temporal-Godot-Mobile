@@ -1150,3 +1150,44 @@ Dever multiplayer:
 - Evidência solo/contratual: `tests/dimension_rupture_smoke.gd`, `tests/dimension_rupture_contract_smoke.gd` (host e réplicas duo/trio num só processo, sem rede) e `tests/dimension_rupture_visual_smoke.gd`. Não é prova multiplayer.
 - Devido (transporte real): host+1 cliente; host+2 clientes; reconnect durante `unstable` (relógio não reinicia, sem recompensa repetida); reconnect durante `emergency` (mesmo `dst`); um peer dentro e outro fora do portal (todos acompanham a transição do grupo); peer derrubado durante a emergência (é carregado, não bloqueia, piso de 50% de vida não o revive); pacote duplicado e atraso artificial (sem 2º token, Impulso, cura ou transição); host encerrando a dimensão no último segundo (corrida entre consenso de travessia e ejeção); duas travessias rápidas seguidas (Impulso II e token consumido uma vez pelo grupo); ejeção completa sem dividir o grupo (sala P2P e sala dedicada).
 - Risco conhecido: snapshot atrasado de uma run anterior chegando depois do primeiro snapshot da run nova seria aceito (o `run_id` difere); depende da ordenação do pacote de mundo. Em sala dedicada, o caminho da ejeção pelo snapshot depende do envio de pacotes de mundo enquanto o host está em `phase_transition`.
+
+## 2026-11-22 — Fechamento público da 2.1.3
+
+- Fonte e sala dedicada sincronizadas a partir da árvore 2.1.3; backup anterior em
+  `/opt/ruptura/backups/pre-release-2.1.4-20261122.tar`. Import headless e boot
+  no Godot 4.7 da VPS passaram sem erro de parse. O standby antigo foi reciclado
+  pelo manager somente com `rooms=0`, sem reiniciar `ruptura-relay`.
+- Correção de contrato: `MAX_PHASE_INDEX=10` e seis tipos de inimigo da fase 10
+  acrescentados ao fim de `NET_ENEMY_TYPES`, sem deslocar índices antigos.
+  O teste de round-trip de fase/identidade e `phase10_baile_smoke` passaram três
+  vezes; a referência de volta da Lagartona ao controller é fraca, eliminando
+  o ciclo de recursos ao sair.
+- Seis testes de fases 8/9/rota passaram com `rc=0`, `_OK` e sem erros fora da
+  exceção de segurança offline; os dois testes aleatórios da fase 9 rodaram
+  três vezes. A reconciliação local de três processos passou em 16 cenários,
+  incluindo seleção, reviver/derrota, loja, pós-boss, chips e fases 8–10.
+- Salas públicas com host e cliente passaram em `ready`, `spectator`,
+  `gameplay`, `altar`, `shop`, `aftermath`, `chips`, `phase8`, `phase9` e
+  `phase10`. Logs locais em `/tmp/ruptura-213-public-release.log`,
+  `/tmp/ruptura-213-public-chips-retry.log` e
+  `/tmp/ruptura-213-public-phase8910.log`. O primeiro teste público de chips
+  terminou em `game_over` porque o fixture avançava `time_alive` para 1000 s;
+  o fixture passou a usar 26 s e proteção temporária contra inimigos ambientes.
+  A repetição completou coleta, resgate, entrada e saída da loja nos dois peers.
+- Soak público de 60 s: `PUBLIC_TUNNEL_SOAK_OK`, zero desconexões durante a
+  partida, 370 snapshots de mundo aplicados no cliente. Ping P95: host 202 ms,
+  cliente 347 ms; intervalo P95 entre snapshots 217 ms, máximo 2133 ms.
+  Relatório em `.agent_logs/release_2_1_3_public_soak/report.json`.
+  `/health` voltou a `rooms=0`, `standby=1` depois dos testes.
+- No stdout da sala não houve `unknown method`, `invalid packet` nem erro de
+  script nas partidas aprovadas. Houve duas mensagens ENet `Unable to send
+  packet on channel 0, max channels: 0` quando os dois clientes dos cenários
+  `ready`/`spectator` encerraram quase juntos; a sala encerrou normalmente.
+- **Cobertura ainda devida:** os sete combates específicos da Cripta/Sertão
+  descritos acima não foram todos jogados visualmente em duo; `phase9` provou
+  snapshot, Eco, laço/escape e ruptura de fio, mas não toda a IA da Viúva,
+  Noiva e Matriarca. `phase8` provou identidade e snapshot, não o ricochete do
+  Pião em combate. `phase10` provou inimigo, BPM 150 e estado do boss na rede,
+  não a Roda, Teor, holofote, anel e colisão do palco em combate cooperativo.
+  O soak headless não substitui uma run longa com dois dispositivos nem prova
+  Windows executado ou Android físico.
