@@ -360,6 +360,7 @@ static func _draw_balloon(game: Node, intro: RTUmbraIntro, _camera: Vector2, vie
 	var style: Dictionary = SPEAKER_STYLE.get(who, {"name": who.to_upper(), "accent": Color(0.85, 0.70, 0.34), "side": "left"})
 	var spec := {
 		"text": intro.balloon_visible_text(),
+		"full_text": full_text,
 		"done": done and not bool(intro.balloon.get("auto", false)),
 		"name": String(style["name"]),
 		"accent": style["accent"],

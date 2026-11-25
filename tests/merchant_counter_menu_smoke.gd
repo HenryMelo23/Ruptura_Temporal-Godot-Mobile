@@ -7,14 +7,18 @@ extends SceneTree
 
 const OUT := "res://.agent_logs/merchant_menu/"
 const R := preload("res://scripts/systems/phase/dimension_rupture_controller.gd")
+const UserFileGuard = preload("res://tests/support/user_file_guard.gd")
 
 var game: Node
 var failures: Array[String] = []
 var capture := false
+var guards: Array = []
 
 
 func _initialize() -> void:
 	capture = "capture" in OS.get_cmdline_user_args()
+	for path in ["user://hud_config.save", "user://interrupted_run.save", "user://merchant_npc.cfg", "user://story_progress.cfg"]:
+		guards.append(UserFileGuard.new(path))
 	root.size = Vector2i(1280, 720)
 	game = load("res://scenes/Main.tscn").instantiate()
 	game.orientation_poll_timer = 9999.0
@@ -111,10 +115,11 @@ func _run() -> void:
 	_check(talk.choice_labels() == ["COMPRAR", "PERGUNTAR", "NADA AGORA"], "opções do menu: %s" % str(talk.choice_labels()))
 	_check(game.mode != "shop", "loja abriu antes da escolha")
 	_check(not talk.advance_input(), "toque fora do botão pulou a escolha")
-	# O menu de compra gasta o tempo da fenda (a loja também gasta).
+	# Nenhuma conversa com o Mercador gasta o tempo da fenda, nem o menu
+	# (só a loja aberta e andar pela oficina gastam).
 	var before: float = dim.timer
 	_tick(0.5)
-	_check(dim.timer > before, "o menu do balcão congelou o tempo da fenda")
+	_check(is_equal_approx(dim.timer, before), "o menu do balcão gastou o tempo da fenda")
 	await _shot("01_menu")
 	await _shot("01_menu", Vector2i(1600, 720))
 
@@ -183,6 +188,8 @@ func _run() -> void:
 	game._cleanup_runtime_resources()
 	root.remove_child(game)
 	game.free()
+	for guard in guards:
+		guard.restore()
 	if failures.is_empty():
 		print("MERCHANT_COUNTER_MENU_SMOKE_OK")
 		quit(0)

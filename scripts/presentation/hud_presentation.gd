@@ -154,6 +154,7 @@ static func _draw_hud(game: Node2D, viewport: Vector2) -> void :
 	var left_rect = Rect2(game._left_panel_pos(viewport), Vector2(left_w, left_h))
 	var left_alpha: float = _hud_rect_player_alpha(game, left_rect, viewport, 84.0)
 	game.hud_feedback.health_panel(game, left_rect, left_alpha)
+	RTPropheticRewindPresentation.draw_hud(game, left_rect)
 	var clock_rect: Rect2 = _clock_rect(game, viewport, true, left_rect.end.y)
 	game.hud_feedback.clock_panel(game, clock_rect, _hud_rect_player_alpha(game, clock_rect, viewport, 84.0), true)
 
@@ -627,6 +628,7 @@ static func _draw_desktop_hud(game: Node2D, viewport: Vector2) -> void:
 	var life_rect = Rect2(18.0, 16.0, 276.0, 76.0)
 	var life_alpha: float = _hud_rect_player_alpha(game, life_rect, viewport, 84.0)
 	game.hud_feedback.health_panel(game, life_rect, life_alpha)
+	RTPropheticRewindPresentation.draw_hud(game, life_rect)
 	var clock_rect: Rect2 = _clock_rect(game, viewport, false)
 	game.hud_feedback.clock_panel(game, clock_rect, _hud_rect_player_alpha(game, clock_rect, viewport, 84.0), false)
 	var right_rect = Rect2(viewport.x - 300.0, 16.0, 220.0, 76.0)

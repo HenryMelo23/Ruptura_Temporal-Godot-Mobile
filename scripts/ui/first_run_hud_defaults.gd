@@ -39,6 +39,7 @@ const PREFERENCES: Dictionary = {
 	"auto_target_priority": "nearest",
 	"haptics_enabled": true,
 	"interface_text_scale": 1.25,
+	"dialogue_text_scale": 1.0,
 	"damage_text_scale": 1.0,
 	"auto_attack_range_color_index": 2,
 	"auto_attack_range_opacity": 0.7,

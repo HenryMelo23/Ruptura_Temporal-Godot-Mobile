@@ -1199,3 +1199,20 @@ Dever multiplayer:
 3. Cliente com Distorção do Relógio leva golpe letal: não morre, volta 10 s localmente, inimigos do host não teleportam de forma inconsistente.
 4. Cliente na tela de fusão enquanto o host toca a saída da oficina: a saída espera ou fecha a tela sem perder a fusão paga.
 5. Arauto/Sineiro/Suturador/Larápio mortos por cliente: pontos creditados uma vez para a sala.
+
+## 2026-11-24 — Lote: oficina sala segura, Racional, conversa sem tempo, fonte, UMBRA manual, Corruptor só no Drop, Profecia (só solo validado)
+
+- **Oficina = sala segura** (`RTMerchantDimension.seals_phase_world`): com a oficina ativa a autoridade não atualiza horda, spawns, Arauto/Larápio, chefe, projéteis inimigos, hazards, clima, fragmento nem altar; `enforce_seal` limpa e conta qualquer inimigo/projétil que apareça; `_damage_player` não aplica dano. Réplicas recebem a horda vazia do host (todos entram juntos).
+- **Conversa com o Mercador**: o relógio local da fenda não corre em nenhuma fala (menu incluído); continua local por cliente com o maior orçamento da sala.
+- **Racional**: Análise parada soma 10x no placar interno (+7 visíveis) e congela quando o relógio da oficina está parado; pontos via `_apply_score_delta` (réplica pede à autoridade).
+- **Corruptor Mercantil**: só liga no modo Drop; `prepare_team_config` (host) filtra pelo modo; `on_run_started` também filtra no cliente.
+- **Profecia** (`RTPropheticRewind`): DESLIGADA em multiplayer (`available()` exige solo). Voltar o mundo de uma sala exige autoridade + snapshot replicado.
+- **Fonte das conversas / UMBRA manual**: só cliente local.
+- Evidência solo: `tests/gameplay_batch_nov24_smoke.gd` (fases 1-10 na oficina, Racional, relógio, fonte, chip, Profecia).
+
+Dever multiplayer:
+1. Host+cliente na oficina por 30 s em cada fase (1-10): nenhum inimigo/projétil aparece para nenhum dos dois; ao sair, a horda volta igual nos dois.
+2. Cliente conversando com o Mercador enquanto o host anda: relógios locais coerentes e saída coletiva intacta.
+3. Cliente Racional parado na oficina com a loja aberta: pontos creditados uma vez pela autoridade.
+4. Lobby em modo Loja com Corruptor marcado no host: ninguém recebe fichas "?"; em modo Drop todos recebem.
+5. Profecia em sala: decidir regra (só buff local sem rewind, ou rewind autoritativo da sala) antes de liberar.

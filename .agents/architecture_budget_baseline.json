@@ -17,19 +17,19 @@
   "files": {
     "scripts/aura_system.gd": {
       "classes": 1,
-      "code_loc": 1065,
+      "code_loc": 1073,
       "functions": 59,
       "largest_function": "update",
       "long_functions": 1,
-      "max_function_code_loc": 185,
-      "physical_loc": 1162,
+      "max_function_code_loc": 190,
+      "physical_loc": 1174,
       "signals": 0,
       "top_functions": {
         "_update_voracious": 44,
         "create": 113,
         "on_dash": 47,
         "on_player_hit": 75,
-        "update": 185
+        "update": 190
       }
     },
     "scripts/catalog/card_catalog_definitions.gd": {
@@ -68,29 +68,29 @@
     },
     "scripts/main_runtime_core.gd": {
       "classes": 0,
-      "code_loc": 39620,
+      "code_loc": 39647,
       "functions": 3325,
       "largest_function": "_start_game",
       "long_functions": 21,
-      "max_function_code_loc": 381,
-      "physical_loc": 46686,
+      "max_function_code_loc": 383,
+      "physical_loc": 46729,
       "signals": 0,
       "top_functions": {
-        "_damage_boss": 289,
+        "_damage_boss": 293,
         "_handle_key": 301,
         "_spawn_enemy": 362,
-        "_start_game": 381,
+        "_start_game": 383,
         "_update_boss_attacks": 325
       }
     },
     "scripts/main_runtime_state.gd": {
       "classes": 0,
-      "code_loc": 3794,
+      "code_loc": 3787,
       "functions": 1,
       "largest_function": "_safe_load",
       "long_functions": 0,
       "max_function_code_loc": 5,
-      "physical_loc": 3901,
+      "physical_loc": 3903,
       "signals": 0,
       "top_functions": {
         "_safe_load": 5
@@ -132,34 +132,34 @@
     },
     "scripts/presentation/combat_effects_presentation.gd": {
       "classes": 0,
-      "code_loc": 3066,
-      "functions": 98,
-      "largest_function": "_draw_game",
+      "code_loc": 3081,
+      "functions": 99,
+      "largest_function": "_draw_projectiles",
       "long_functions": 3,
-      "max_function_code_loc": 289,
-      "physical_loc": 3383,
+      "max_function_code_loc": 281,
+      "physical_loc": 3402,
       "signals": 0,
       "top_functions": {
         "_draw_canonical_network_ability": 87,
         "_draw_common_card_world": 233,
-        "_draw_game": 289,
+        "_draw_game": 277,
         "_draw_projectiles": 281,
         "_draw_rare_card_world": 102
       }
     },
     "scripts/presentation/dialogue_box_presentation.gd": {
       "classes": 1,
-      "code_loc": 107,
+      "code_loc": 112,
       "functions": 4,
       "largest_function": "draw_box",
       "long_functions": 0,
-      "max_function_code_loc": 49,
-      "physical_loc": 135,
+      "max_function_code_loc": 54,
+      "physical_loc": 140,
       "signals": 0,
       "top_functions": {
         "_draw_choices": 17,
         "_draw_region_fit": 10,
-        "draw_box": 49,
+        "draw_box": 54,
         "portrait": 18
       }
     },
@@ -182,29 +182,29 @@
     },
     "scripts/presentation/hud_presentation.gd": {
       "classes": 0,
-      "code_loc": 1086,
+      "code_loc": 1088,
       "functions": 31,
       "largest_function": "_draw_card_mechanic_huds",
       "long_functions": 2,
       "max_function_code_loc": 189,
-      "physical_loc": 1192,
+      "physical_loc": 1194,
       "signals": 0,
       "top_functions": {
         "_draw_card_mechanic_huds": 189,
         "_draw_desktop_combat_hud": 63,
         "_draw_edit_layout": 113,
-        "_draw_hud": 54,
+        "_draw_hud": 55,
         "_draw_touch_controls": 156
       }
     },
     "scripts/presentation/menus_presentation.gd": {
       "classes": 0,
-      "code_loc": 2977,
+      "code_loc": 2985,
       "functions": 110,
       "largest_function": "_draw_manifest_select",
       "long_functions": 2,
       "max_function_code_loc": 191,
-      "physical_loc": 3343,
+      "physical_loc": 3351,
       "signals": 0,
       "top_functions": {
         "_draw_app_update_popup": 73,
@@ -216,19 +216,19 @@
     },
     "scripts/presentation/merchant_dimension_presentation.gd": {
       "classes": 1,
-      "code_loc": 520,
+      "code_loc": 525,
       "functions": 29,
       "largest_function": "_draw_props",
       "long_functions": 0,
       "max_function_code_loc": 36,
-      "physical_loc": 670,
+      "physical_loc": 675,
       "signals": 0,
       "top_functions": {
+        "_draw_dialogue": 24,
         "_draw_floor": 28,
         "_draw_merchant": 27,
         "_draw_props": 36,
-        "_draw_workshop": 25,
-        "draw_mission_world": 24
+        "_draw_workshop": 25
       }
     },
     "scripts/presentation/phase6_amber_suturer_presentation.gd": {
@@ -403,12 +403,12 @@
     },
     "scripts/systems/enemies/phase2_sineiro_boreal_controller.gd": {
       "classes": 1,
-      "code_loc": 781,
+      "code_loc": 774,
       "functions": 42,
       "largest_function": "spawn_now",
       "long_functions": 0,
       "max_function_code_loc": 61,
-      "physical_loc": 888,
+      "physical_loc": 882,
       "signals": 0,
       "top_functions": {
         "_apply_visual_event": 45,
@@ -420,7 +420,7 @@
     },
     "scripts/systems/enemies/phase6_amber_suturer_controller.gd": {
       "classes": 1,
-      "code_loc": 1111,
+      "code_loc": 1110,
       "functions": 64,
       "largest_function": "spawn_now",
       "long_functions": 0,
@@ -653,17 +653,17 @@
     },
     "scripts/systems/player/player_control_controller.gd": {
       "classes": 1,
-      "code_loc": 531,
+      "code_loc": 530,
       "functions": 55,
       "largest_function": "handle_touch_release",
       "long_functions": 0,
       "max_function_code_loc": 36,
-      "physical_loc": 655,
+      "physical_loc": 654,
       "signals": 0,
       "top_functions": {
         "cancel_combat_aim_state": 28,
         "cancel_touch_index": 35,
-        "handle_touch_press": 29,
+        "handle_touch_press": 28,
         "handle_touch_release": 36,
         "read_move": 24
       }
@@ -687,18 +687,18 @@
     },
     "scripts/systems/save/runtime_save_controller.gd": {
       "classes": 0,
-      "code_loc": 869,
+      "code_loc": 875,
       "functions": 47,
       "largest_function": "_load_config",
       "long_functions": 1,
-      "max_function_code_loc": 124,
-      "physical_loc": 939,
+      "max_function_code_loc": 127,
+      "physical_loc": 946,
       "signals": 0,
       "top_functions": {
         "_load_card_unlocks": 37,
-        "_load_config": 124,
+        "_load_config": 127,
         "_post_resume_interrupted_run": 40,
-        "_save_config": 84,
+        "_save_config": 86,
         "_use_run_retry": 59
       }
     },
@@ -738,7 +738,7 @@
     },
     "scripts/systems/story/umbra_intro_controller.gd": {
       "classes": 1,
-      "code_loc": 621,
+      "code_loc": 619,
       "functions": 37,
       "largest_function": "_enter_beat",
       "long_functions": 0,
@@ -825,7 +825,7 @@
   "hotspot_code_loc": 500,
   "hotspot_functions": [
     {
-      "code_loc": 381,
+      "code_loc": 383,
       "file": "scripts/main_runtime_core.gd",
       "function": "_start_game"
     },
@@ -856,6 +856,11 @@
     },
     {
       "code_loc": 293,
+      "file": "scripts/main_runtime_core.gd",
+      "function": "_damage_boss"
+    },
+    {
+      "code_loc": 293,
       "file": "scripts/systems/online/runtime_boss_visual_sync_controller.gd",
       "function": "apply"
     },
@@ -865,22 +870,17 @@
       "function": "_draw_phase5_environment"
     },
     {
-      "code_loc": 289,
-      "file": "scripts/main_runtime_core.gd",
-      "function": "_damage_boss"
-    },
-    {
-      "code_loc": 289,
+      "code_loc": 281,
       "file": "scripts/presentation/combat_effects_presentation.gd",
-      "function": "_draw_game"
+      "function": "_draw_projectiles"
     }
   ],
   "long_function_code_loc": 120,
   "project_totals": {
-    "code_loc": 114680,
-    "functions": 7631,
+    "code_loc": 116700,
+    "functions": 7784,
     "long_functions": 45,
-    "physical_loc": 134787
+    "physical_loc": 137450
   },
   "ratchet_allowance": {
     "classes": 0,
@@ -892,9 +892,9 @@
     "signals": 0
   },
   "review": {
-    "date": "2026-11-19",
-    "head": "7baf1c2",
-    "reason": "P1.02: navega\u00e7\u00e3o por teclado das 7 telas de configura\u00e7\u00f5es extra\u00edda de _handle_key (core) para scripts/ui/settings_controller.gd (handle_key + 7 helpers por tela); probe de 1572 transi\u00e7\u00f5es id\u00eantico antes/depois; core -200 code_loc, _handle_key 501->301."
+    "date": "2026-11-24",
+    "head": "eb17470",
+    "reason": "Lote 2026-11-24: guarda unico da oficina do Mercador (local sealed em _update_game, ~+16 linhas de gates) e hooks finos da Profecia (var + blocks_world/update/intercept_hit/reset); logica em owners novos (RTPropheticRewind, RTDialogueTextScale, RTMerchantDimension.seals_phase_world). +9 do core ja vinham de lotes anteriores sobre 7baf1c2."
   },
   "schema": 2,
   "targets": [
@@ -923,10 +923,10 @@
   ],
   "totals": {
     "classes": 34,
-    "code_loc": 79653,
-    "functions": 5222,
+    "code_loc": 79711,
+    "functions": 5223,
     "long_functions": 44,
-    "physical_loc": 92316,
+    "physical_loc": 92412,
     "signals": 2
   }
 }

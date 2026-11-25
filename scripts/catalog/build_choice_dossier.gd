@@ -139,7 +139,7 @@ static func spectrum(name: String) -> Dictionary:
 				["GATILHO", "Presságio", "A cada 10 s, um inimigo é marcado por 6,4 s."],
 				["EFEITO", "Cumprir", "Acertar o marcado causa +26% de dano nesse golpe e sobe a sequência."],
 				["CUSTO", "Destino quebrado", "Se o tempo acabar, a sequência zera e o Teleporte fica 12% mais lento por 3,5 s."],
-			])
+			], "PROFECIA: um olho dourado abre e por %d s ela anda e ataca mais rápido. Atingida nesse tempo, o golpe não entra e o tempo volta: os inimigos repetem tudo. Recarga %d s (%d s sem golpe)." % [int(RTPropheticRewind.WINDOW), int(RTPropheticRewind.COOLDOWN_SPENT), int(RTPropheticRewind.COOLDOWN_UNSPENT)])
 		"Sanguinaria":
 			return _aura("Foco no mesmo alvo e caçadas com regra.", [
 				["GATILHO", "Feridas e Caçada", "3 acertos no mesmo alvo abrem uma Ferida por 8 s. Um inimigo é marcado para Caçada com uma regra de abate."],

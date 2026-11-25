@@ -254,9 +254,9 @@ func _menu_line(text: String, mood: String = "animado") -> Dictionary:
 	if mission_done:
 		choices.append({"label": "ENTREGAR ENCOMENDA" if missions.ready_to_turn_in() else "ENCOMENDAS", "id": CHOICE_MISSION})
 	choices.append({"label": "NADA AGORA", "id": CHOICE_LEAVE})
-	# "rift_clock": so o menu de compra gasta o tempo da fenda; perguntas e
-	# historia pausam o relogio.
-	return {"who": "mercador", "text": text, "mood": mood, "choices": choices, "rift_clock": true}
+	# Nenhuma conversa com o Mercador gasta o tempo da fenda (menu incluido):
+	# so a loja aberta e andar pela oficina gastam.
+	return {"who": "mercador", "text": text, "mood": mood, "choices": choices}
 
 
 func _on_menu_choice(id: String) -> void:

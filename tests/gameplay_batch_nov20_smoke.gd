@@ -150,12 +150,12 @@ func _check_question_menu_pauses_rift() -> void:
 	npc.open_menu(dim)
 	talk.revealed = 99999.0
 	talk.grace = 0.0
-	_check(talk.spends_rift_time(), "menu de compra deveria gastar o tempo da fenda")
+	# Lote 24/11: nenhuma conversa com o Mercador gasta tempo, nem o menu.
 	var t0: float = dim.timer
 	dim.update(0.5)
-	_check(dim.timer > t0, "menu de compra congelou a fenda")
+	_check(is_equal_approx(dim.timer, t0), "menu do balcao gastou o tempo da fenda")
 	talk.choose(1) # PERGUNTAR
-	_check(talk.busy() and not talk.spends_rift_time(), "lista de perguntas marcada como gasto de tempo")
+	_check(talk.busy(), "lista de perguntas nao abriu")
 	var t1: float = dim.timer
 	dim.update(1.0)
 	_check(is_equal_approx(dim.timer, t1), "PERGUNTAR gastou o tempo da fenda")

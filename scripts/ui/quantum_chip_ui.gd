@@ -56,8 +56,11 @@ static func draw(game: Node2D, viewport: Vector2) -> void:
 		var chip: Dictionary = list[i]
 		var id: String = String(chip["id"])
 		var rect := Rect2(grid.position + Vector2(float(i % cols) * (cw + gap), float(i / cols) * (ch + gap)), Vector2(cw, ch))
-		var on: bool = chips.is_selected(id)
+		var blocked: bool = not chips.allowed_in_current_mode(id)
+		var on: bool = chips.is_selected(id) and not blocked
 		var col: Color = chip.get("color", Color.WHITE)
+		if blocked:
+			col = col.lerp(Color(0.5, 0.52, 0.6), 0.6)
 		game.draw_rect(rect, Color(col.r, col.g, col.b, 0.16 if on else 0.05), true)
 		game.draw_rect(rect, Color(col.r, col.g, col.b, 0.95 if on else 0.4), false, 3.0 if on else 1.5)
 		var icon_size: float = minf(ch - 20.0, minf(cw * 0.3, 120.0))
@@ -68,7 +71,8 @@ static func draw(game: Node2D, viewport: Vector2) -> void:
 		game.draw_string(game.font, Vector2(tx, rect.position.y + 24), String(chip["name"]).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, tw, 15, col)
 		game._draw_wrapped("+ " + String(chip["buff"]), Rect2(Vector2(tx, rect.position.y + 32), Vector2(tw, ch * 0.42)), 12, Color(0.72, 1.0, 0.7))
 		game._draw_wrapped("- " + String(chip["debuff"]), Rect2(Vector2(tx, rect.position.y + 32 + ch * 0.42), Vector2(tw, ch * 0.45)), 12, Color(1.0, 0.62, 0.6))
-		game.draw_string(game.font, Vector2(rect.end.x - 64, rect.position.y + 22), "LIGADO" if on else "DESLIGADO", HORIZONTAL_ALIGNMENT_RIGHT, 56, 11, col if on else Color(0.6, 0.62, 0.7))
+		var status: String = "SO MODO DROP" if blocked else ("LIGADO" if on else "DESLIGADO")
+		game.draw_string(game.font, Vector2(rect.end.x - 104, rect.position.y + 22), status, HORIZONTAL_ALIGNMENT_RIGHT, 96, 11, col if on else Color(0.6, 0.62, 0.7))
 		game.buttons["qchip_" + id] = rect
 	var by: float = panel.end.y - 52.0
 	var clear_r := Rect2(Vector2(panel.position.x + 18, by), Vector2(170, 40))
@@ -116,6 +120,10 @@ static func handle_tap(game: Node2D, pos: Vector2) -> bool:
 	for entry in entries():
 		var key: String = "qchip_" + String(entry["id"])
 		if b.has(key) and Rect2(b[key]).has_point(pos):
+			if not chips.allowed_in_current_mode(String(entry["id"])):
+				# O cartao ja diz "SO MODO DROP"; o toque so responde com um som grave.
+				game._play_sfx("ui_manifest_switch", 0.01, 0.3, 0.7)
+				return true
 			chips.toggle(String(entry["id"]))
 			game._play_sfx("ui_manifest_switch", 0.01, 0.34, 1.1)
 			return true
@@ -132,7 +140,9 @@ static func handle_key(game: Node2D, keycode: int) -> bool:
 		return true
 	var list: Array = entries()
 	if keycode >= KEY_1 and keycode < KEY_1 + list.size():
-		game._quantum_chips().toggle(String(list[keycode - KEY_1]["id"]))
+		var id: String = String(list[keycode - KEY_1]["id"])
+		if game._quantum_chips().allowed_in_current_mode(id):
+			game._quantum_chips().toggle(id)
 	return true
 
 

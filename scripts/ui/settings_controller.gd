@@ -111,6 +111,14 @@ static func _handle_gameplay_settings_touch(game: Node, pos: Vector2, viewport: 
 		elif game._interface_text_plus_rect(interface_panel).has_point(pos):
 			game.interface_text_scale = min(1.6, snapped(game.interface_text_scale + 0.1, 0.1))
 			game._save_config()
+	elif game.settings_buttons.has("dialogue_text") and game.settings_buttons["dialogue_text"].has_point(pos):
+		game._close_gameplay_cheat_popup()
+		var dialogue_panel: Rect2 = game.settings_buttons["dialogue_text"]
+		if game._interface_text_minus_rect(dialogue_panel).has_point(pos):
+			RTDialogueTextScale.adjust(game, -1)
+		else:
+			RTDialogueTextScale.adjust(game, 1)
+		game._save_config()
 	elif game.settings_buttons["color_vision"].has_point(pos):
 		game._close_gameplay_cheat_popup()
 		game.ColorVisionFilterScript.cycle(game)
@@ -300,6 +308,7 @@ static func _settings_gameplay_key(game: Node, event: InputEventKey) -> void :
 			"desktop_attack_aim": game._cycle_desktop_attack_aim_mode()
 			"desktop_hud_scale": game._cycle_desktop_hud_scale()
 			"color_vision": game.ColorVisionFilterScript.cycle(game)
+			"dialogue_text": RTDialogueTextScale.adjust(game, 1, true)
 			"fps": game.show_fps_counter = not game.show_fps_counter
 			"tutorial": game._set_run_tutorial_enabled(not game.run_tutorial_enabled, false)
 			"haptics": game.haptics_enabled = not game.haptics_enabled
@@ -314,6 +323,7 @@ static func _settings_gameplay_key(game: Node, event: InputEventKey) -> void :
 			"target_priority": game._cycle_target_priority(-1)
 			"damage_text": game._adjust_damage_text_scale(-1)
 			"interface_text": game.interface_text_scale = max(0.5, game.interface_text_scale - 0.25)
+			"dialogue_text": RTDialogueTextScale.adjust(game, -1)
 			"color_vision": game.ColorVisionFilterScript.cycle(game, -1)
 			"desktop_aim": game._cycle_desktop_aim_mode(-1)
 			"desktop_teleport": game._cycle_desktop_teleport_mode(-1)
@@ -328,6 +338,7 @@ static func _settings_gameplay_key(game: Node, event: InputEventKey) -> void :
 			"target_priority": game._cycle_target_priority(1)
 			"damage_text": game._adjust_damage_text_scale(1)
 			"interface_text": game.interface_text_scale = min(2.0, game.interface_text_scale + 0.25)
+			"dialogue_text": RTDialogueTextScale.adjust(game, 1)
 			"color_vision": game.ColorVisionFilterScript.cycle(game, 1)
 			"desktop_aim": game._cycle_desktop_aim_mode(1)
 			"desktop_teleport": game._cycle_desktop_teleport_mode(1)

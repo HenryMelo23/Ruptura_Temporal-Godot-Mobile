@@ -440,9 +440,9 @@ static func draw_overlay(game: Node2D, viewport: Vector2) -> void:
 	if not dim.active:
 		RTBossDnaPresentation.draw_world_vfx(game, game._camera(viewport))
 		RTBossDnaPresentation.draw_hud(game, viewport)
-	# Durante a fala o relogio esta parado e a tela e dele: nada de barra. No
-	# menu do balcao (escolha de compra) o relogio corre, entao a barra aparece.
-	var talking: bool = game._dialogue().busy() and not game._dialogue().spends_rift_time()
+	# Durante qualquer fala (menu do balcao incluido) o relogio esta parado e a
+	# tela e dele: nada de barra.
+	var talking: bool = game._dialogue().busy()
 	if dim.active and not dim.stable() and not talking:
 		_draw_timer(game, viewport, dim)
 		if dim.counting_down():
@@ -642,6 +642,7 @@ static func _draw_dialogue(game: Node2D, viewport: Vector2) -> void:
 	var portrait: Texture2D = _portrait(game, talk, who)
 	var spec := {
 		"text": talk.visible_text(),
+		"full_text": String(talk.current.get("text", "")),
 		"done": talk.fully_revealed(),
 		"name": name_text,
 		"accent": BRASS,

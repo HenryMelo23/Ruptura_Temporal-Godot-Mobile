@@ -607,6 +607,12 @@ static func _draw_gameplay_settings(game: Node2D, viewport: Vector2) -> void :
 	game._draw_gameplay_preference(interface_panel, "TEXTOS DA INTERFACE", "Escala de textos da loja e manifestações.", "%d%%" % int(round(game.interface_text_scale * 100.0)), Color(0.62, 0.88, 1.0), game.settings_selected == game._gameplay_preference_index("interface_text"))
 	game._draw_small_rect_button(game._interface_text_minus_rect(interface_panel), "-", Color(0.04, 0.1, 0.16), Color(0.62, 0.88, 1.0))
 	game._draw_small_rect_button(game._interface_text_plus_rect(interface_panel), "+", Color(0.04, 0.1, 0.16), Color(0.62, 0.88, 1.0))
+	if game.settings_buttons.has("dialogue_text"):
+		var dialogue_panel: Rect2 = game.settings_buttons["dialogue_text"]
+		var dialogue_accent := Color(0.85, 0.70, 0.34)
+		game._draw_gameplay_preference(dialogue_panel, "TEXTO DAS CONVERSAS", "Tamanho das falas do Mercador e da UMBRA.", RTDialogueTextScale.label(game), dialogue_accent, game.settings_selected == game._gameplay_preference_index("dialogue_text"))
+		game._draw_small_rect_button(game._interface_text_minus_rect(dialogue_panel), "-", Color(0.14, 0.1, 0.04), dialogue_accent)
+		game._draw_small_rect_button(game._interface_text_plus_rect(dialogue_panel), "+", Color(0.14, 0.1, 0.04), dialogue_accent)
 	var color_on: bool = game.ColorVisionFilterScript.shader_mode(game.color_vision_mode) > 0
 	game._draw_gameplay_preference(game.settings_buttons["color_vision"], "MODO DE COR", "Filtro para daltonismo ou alto contraste.", game.ColorVisionFilterScript.label(game.color_vision_mode), Color(1.0, 0.82, 0.42) if color_on else Color(0.48, 0.52, 0.58), game.settings_selected == game._gameplay_preference_index("color_vision"))
 	var fps_accent = Color(0.0, 1.0, 0.82) if game.show_fps_counter else Color(0.48, 0.52, 0.58)

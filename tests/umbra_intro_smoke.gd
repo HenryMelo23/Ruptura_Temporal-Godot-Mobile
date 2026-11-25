@@ -7,6 +7,8 @@ var game: Node
 var failed := false
 var capture := false
 var shots: Dictionary = {}
+var guards: Array = []
+const UserFileGuard = preload("res://tests/support/user_file_guard.gd")
 
 
 func _check(ok: bool, msg: String) -> void:
@@ -17,6 +19,8 @@ func _check(ok: bool, msg: String) -> void:
 
 func _initialize() -> void:
 	capture = "capture" in OS.get_cmdline_user_args()
+	for path in ["user://hud_config.save", "user://story_progress.cfg", "user://interrupted_run.save"]:
+		guards.append(UserFileGuard.new(path))
 	game = load("res://scenes/Main.tscn").instantiate()
 	root.add_child(game)
 	call_deferred("_run")
@@ -62,6 +66,7 @@ func _run() -> void:
 	var qte_presses := 0
 	var guard := 0
 	var dt := 1.0 / 30.0
+	var waited_without_input := false
 	while intro.active and guard < 30 * 120:
 		guard += 1
 		if capture:
@@ -75,6 +80,15 @@ func _run() -> void:
 			if not balloons.has(key):
 				balloons.append(key)
 			if not capture and float(intro.balloon.get("hold", 0.0)) > 0.2:
+				if not waited_without_input and k == "say":
+					# Como no Mercador: sem toque a fala fica na tela para sempre.
+					waited_without_input = true
+					var beat_before: int = intro.beat
+					for _i in range(30 * 12):
+						intro.update(dt)
+					_check(intro.beat == beat_before and not bool(intro.balloon.get("done", false)), "fala da UMBRA avancou sozinha")
+				intro.advance_balloon()
+			elif capture and float(intro.balloon.get("hold", 0.0)) > 1.6:
 				intro.advance_balloon()
 		if intro.qte_waiting():
 			# Acerta os 3 primeiros e erra o ultimo.
@@ -106,6 +120,7 @@ func _run() -> void:
 	for k in ["pan", "portal", "geo_run", "geo_fall", "say", "boom", "chase", "charge", "blast", "erase", "absorb", "turn", "laugh", "summon", "qte", "aftermath", "title"]:
 		_check(seen.has(k), "etapa nunca rodou: " + k)
 	_check(balloons.size() >= 9, "faltaram baloes: %d" % balloons.size())
+	_check(waited_without_input, "a espera sem toque nao foi testada")
 	_check(qte_presses == RTUmbraIntro.QTE_COUNT, "qte deveria pedir 4 desvios, pediu %d" % qte_presses)
 	_check(intro.qte_dodges == 3 and intro.qte_hits == 1, "resultado do qte %d/%d" % [intro.qte_dodges, intro.qte_hits])
 	_check(int(game.player_hp) < hp_before and int(game.player_hp) >= 1, "o meteoro errado deveria machucar sem matar")
@@ -135,6 +150,8 @@ func _run() -> void:
 			reply_found = true
 	_check(reply_found, "resposta da run deveria ser a do rodizio")
 	intro.skip()
+	for file_guard in guards:
+		file_guard.restore()
 	if not failed:
 		print("UMBRA_INTRO_SMOKE_OK balloons=%d shots=%d" % [balloons.size(), shots.size()])
 	quit(1 if failed else 0)

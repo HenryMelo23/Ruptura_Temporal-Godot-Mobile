@@ -161,7 +161,9 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	RTDeathCamera.apply(game, viewport, camera)
 	RTRationalVfx.apply(game, viewport, camera)
 	Lightning.begin_frame(game, camera)
-	var map_texture = null if game._merchant_dimension().active else game._current_map_texture()
+	# Oficina do Mercador: nada do mundo da fase e desenhado no chao dela.
+	var phase_world: bool = not game._merchant_dimension().seals_phase_world()
+	var map_texture = null if not phase_world else game._current_map_texture()
 	if RTFrameProfiler.skipped("map"):
 		map_texture = null
 	if map_texture:
@@ -194,11 +196,11 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	game._draw_event_alert_world(camera, viewport)
 	# Dentro da oficina a fenda de origem ficaria desenhada por cima do chao,
 	# em coordenadas de um mundo que nao esta mais carregado.
-	if not game._merchant_dimension().active:
+	if phase_world:
 		MerchantRiftPresentation.draw_world(game, camera, viewport)
-	game._draw_boss6_necro_erosion(camera)
-	game._draw_phase5_transmute_particles(camera)
-	RTUmbraTransmuteVfx.draw_floor(game, camera)
+		game._draw_boss6_necro_erosion(camera)
+		game._draw_phase5_transmute_particles(camera)
+		RTUmbraTransmuteVfx.draw_floor(game, camera)
 	if game.vfx_director:
 		game.vfx_director.draw_floor_effects(game, camera)
 
@@ -241,7 +243,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 				game.draw_circle(p_pos, r, c)
 
 	RTFrameProfiler.mark("dm_floor_misc")
-	if game.boss1_rain_active and game.weather_kind == "rain":
+	if game.boss1_rain_active and game.weather_kind == "rain" and phase_world:
 		game._draw_rain_puddles(camera)
 	game.RangedAttackRange.draw_range_indicator(game, camera)
 	RTLaceranteExecutionVfx.draw_reach_indicator(game, camera)
@@ -272,35 +274,12 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 		game.vfx_director.draw_world_vfx(game, camera)
 	RTFrameProfiler.mark("dm_henry_net_director")
 	LaceranteVfx.draw_blood_spurts(game, camera)
-	game._draw_parasite_spit_zones(camera)
-	game._draw_phase6_pustule_pools(camera)
-	game._draw_phase7_ember_patches(camera)
-	# Na oficina do Mercador o mundo da fase nao esta carregado: nada do Sertao/Cripta.
-	if not game._merchant_dimension().active and game.current_phase == RTSertaoController.PHASE:
-		RTSertaoPresentation.draw_ground(game, camera)
-	if not game._merchant_dimension().active and game.current_phase == RTCriptaController.PHASE:
-		RTCriptaPresentation.draw_ground(game, camera)
-	if not game._merchant_dimension().active and game.current_phase == RTBaileController.PHASE:
-		RTBailePresentation.draw_ground(game, camera)
+	if phase_world:
+		_draw_phase_world_ground(game, camera)
 	else:
 		RTBaileCrowdPresentation.hide(game)
-	game._draw_boss7_flame_waves(camera)
-	game._draw_boss7_ultimate(camera)
-	game._draw_boss7_ground_indicators(camera)
-	game._draw_boss2_environment(camera)
-	game._draw_phase3_environment(camera)
-	game._draw_phase4_environment(camera)
-	game._draw_phase5_environment(camera)
-	if game.boss1_rain_active and game.current_phase == 2:
-		game._draw_weather_precipitation(camera)
 	RTFrameProfiler.mark("dm_env")
-	game._draw_boss_attacks(camera)
 	RTBossPactPresentation.draw_world(game, camera)
-	game._draw_boss6_miasma_ultimate(camera)
-	game._draw_boss3_faith_link(camera)
-	game._draw_boss1_rewind_world(camera)
-	game._draw_network_rewind_visuals(camera)
-	_draw_bargain_capsule(game, camera)
 	RTFrameProfiler.mark("dm_boss_attacks")
 	for orb in game.heal_orbs:
 		if not is_world_point_visible(Vector2(orb.get("pos", Vector2.ZERO)), camera, viewport):
@@ -323,21 +302,23 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 			game.draw_circle(orb_pos, 15, Color(0.25, 1.0, 0.42, 0.78))
 			game.draw_arc(orb_pos, 22, 0, TAU, 32, Color(0.65, 1.0, 0.75, 0.65), 2)
 	RTFrameProfiler.mark("dm_orbs")
-	game._draw_larapio_ultimate_portals(camera)
-	RTLarapioPresentation.draw_world(game, camera)
-	RTSuturerThreatPresentation.draw_world(game, camera)
-	game._draw_larapio_coin_drops(camera)
-	game._draw_arauto_card_drops(camera)
+	if phase_world:
+		game._draw_larapio_ultimate_portals(camera)
+		RTLarapioPresentation.draw_world(game, camera)
+		RTSuturerThreatPresentation.draw_world(game, camera)
+		game._draw_larapio_coin_drops(camera)
+		game._draw_arauto_card_drops(camera)
+		game._draw_arauto_evolution_fragment(camera)
 	RTMerchantDimensionPresentation.draw_mission_world(game, camera)
-	game._draw_arauto_evolution_fragment(camera)
 	game._draw_aura_world(camera)
 	game._draw_remote_aura_world(camera)
 	game._draw_devorador_world(camera)
 	game._draw_common_card_world(camera)
 	game._draw_rare_card_world(camera)
-	game._draw_arauto(camera)
-	RTArautoThreatPresentation.draw_world(game, camera)
-	game._draw_crepuscular_arauto_cracks(camera)
+	if phase_world:
+		game._draw_arauto(camera)
+		RTArautoThreatPresentation.draw_world(game, camera)
+		game._draw_crepuscular_arauto_cracks(camera)
 	RTGravitanteMassVfx.draw_ground(game, camera)
 	Gravity.orbitals(game, camera, true)
 	RTFrameProfiler.mark("d_map_floor_world")
@@ -349,12 +330,14 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	game._draw_projectiles(camera)
 	RTSuturerThreatPresentation.draw_over(game, camera)
 	RTFrameProfiler.mark("d_projectiles")
-	game._draw_boss3_miasma_clones(camera)
-	if game.current_phase != 6:
+	if phase_world:
+		game._draw_boss3_miasma_clones(camera)
+	if game.current_phase != 6 and phase_world:
 		game._draw_boss_world(camera)
 		game._draw_crepuscular_boss_cracks(camera)
-	RTUmbraTransmuteVfx.draw_front(game, camera)
-	if game.current_phase == 5:
+	if phase_world:
+		RTUmbraTransmuteVfx.draw_front(game, camera)
+	if game.current_phase == 5 and phase_world:
 		RTUmbraNecrosePresentation.draw_front(game, camera)
 	if game.mode == RTUmbraIntro.MODE:
 		RTUmbraIntroPresentation.draw_world(game, camera)
@@ -368,23 +351,25 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 		game._draw_parasite_marks(camera)
 		game._draw_parasite_foreground(camera)
 		RTParasiticaPresentation.draw_world(game, camera)
-	if not game.phase_fragment.is_empty():
+	if not game.phase_fragment.is_empty() and phase_world:
 		game._draw_phase_fragment(camera)
 	RTDimensionRupturePresentation.draw_world(game, camera)
 	game._draw_team_revival_world(camera)
 	if not game.online_local_spectator:
 		game._draw_companions(camera)
-		game._draw_boss6_fossil_echo(camera)
+		if phase_world:
+			game._draw_boss6_fossil_echo(camera)
 		if not RTDeathCamera.active(game) and not RTLaceranteExecutionVfx.hides_player(game) and not RTUmbraIntroPresentation.hides_player(game) and not RTCriptaPresentation.hides_player(game):
 			game._draw_player(camera)
 			RTParasiticaPresentation.draw_symbiote(game, camera)
 			_draw_frost_stacks(game, camera)
 	RTLaceranteExecutionVfx.draw_world(game, camera)
 	BossReward.draw(game, camera)
-	if game.current_phase == 6:
+	if game.current_phase == 6 and phase_world:
 		game._draw_boss_world(camera)
 		game._draw_crepuscular_boss_cracks(camera)
 	game._draw_phantom_player(camera)
+	RTPropheticRewindPresentation.draw_world(game, camera)
 	Devorador.draw_foreground(game, camera)
 	Gravity.orbitals(game, camera, false)
 	RTGravitanteMassVfx.draw_front(game, camera)
@@ -393,15 +378,16 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	if not RTFrameProfiler.skipped("effects"):
 		game._draw_effects(camera)
 	RTFrameProfiler.mark("d_effects")
-	if game.boss1_rain_active and game.current_phase != 2:
+	if game.boss1_rain_active and game.current_phase != 2 and phase_world:
 		game._draw_weather_precipitation(camera)
 	if game.boss1_rewind_sequence.is_empty() and (game.mode == "game" or game.mode == "shop_countdown" or game.mode == "boss_call" or game.mode == "pause_countdown"):
 		game._draw_ground_target_preview(viewport, camera)
-	if not game._boss3_miasma_qte_active():
+	if not game._boss3_miasma_qte_active() and phase_world:
 		game._draw_boss3_miasma_overlay(viewport, camera)
-	if game._is_umbra_miasma_active():
+	if game._is_umbra_miasma_active() and phase_world:
 		game._draw_umbra_miasma_overlay(viewport, camera)
-	game._draw_apolo_phase5_exhibition_world(camera)
+	if phase_world:
+		game._draw_apolo_phase5_exhibition_world(camera)
 	if not game._merchant_dimension().active and game.current_phase == RTSertaoController.PHASE:
 		RTSertaoPresentation.draw_screen(game, viewport, camera)
 	if not game._merchant_dimension().active and game.current_phase == RTCriptaController.PHASE:
@@ -411,9 +397,11 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	Lightning.end_frame(game)
 	HenryFire.draw_entrance(game, camera, viewport)
 	RTWorldLighting.draw_screen(game, viewport, game.PhaseMapPresentation.surface_for(game))
-	RTUmbraTransmuteVfx.draw_screen(game, viewport)
-	if game.current_phase == 5:
+	if phase_world:
+		RTUmbraTransmuteVfx.draw_screen(game, viewport)
+	if game.current_phase == 5 and phase_world:
 		RTUmbraNecrosePresentation.draw_screen(game, viewport)
+	RTPropheticRewindPresentation.draw_screen(game, viewport)
 	RTMerchantDimensionPresentation.draw_overlay(game, viewport)
 	if game.preview_capture_mode:
 		return
@@ -3381,3 +3369,34 @@ static func _draw_teleport_preview(game: Node2D, viewport: Vector2, camera: Vect
 		game.draw_arc(a, 18.0, - game.time_alive * 3.0, TAU - game.time_alive * 3.0, 36, Color(0.25, 0.95, 1.0, 0.44), 2.0)
 	game.draw_circle(b, 28, Color(0.05, 0.85, 1.0, 0.22))
 	game.draw_arc(b, 34, 0, TAU, 48, Color(0.8, 0.15, 1.0, 0.88), 4)
+
+
+## Chao do mundo da fase (hazards, ambientes, ataques de chefe, capsula). Fora
+## da oficina do Mercador apenas: la dentro o mundo da fase nao esta carregado.
+static func _draw_phase_world_ground(game: Node2D, camera: Vector2) -> void:
+	game._draw_parasite_spit_zones(camera)
+	game._draw_phase6_pustule_pools(camera)
+	game._draw_phase7_ember_patches(camera)
+	if game.current_phase == RTSertaoController.PHASE:
+		RTSertaoPresentation.draw_ground(game, camera)
+	if game.current_phase == RTCriptaController.PHASE:
+		RTCriptaPresentation.draw_ground(game, camera)
+	if game.current_phase == RTBaileController.PHASE:
+		RTBailePresentation.draw_ground(game, camera)
+	else:
+		RTBaileCrowdPresentation.hide(game)
+	game._draw_boss7_flame_waves(camera)
+	game._draw_boss7_ultimate(camera)
+	game._draw_boss7_ground_indicators(camera)
+	game._draw_boss2_environment(camera)
+	game._draw_phase3_environment(camera)
+	game._draw_phase4_environment(camera)
+	game._draw_phase5_environment(camera)
+	if game.boss1_rain_active and game.current_phase == 2:
+		game._draw_weather_precipitation(camera)
+	game._draw_boss_attacks(camera)
+	game._draw_boss6_miasma_ultimate(camera)
+	game._draw_boss3_faith_link(camera)
+	game._draw_boss1_rewind_world(camera)
+	game._draw_network_rewind_visuals(camera)
+	_draw_bargain_capsule(game, camera)

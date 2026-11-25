@@ -7262,6 +7262,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	# Fenda estabilizada e encomendas do Bussola valem so para a run.
 	_merchant_npc().begin_run(clear_interrupted_save)
 	_merchant_dimension().dna.reset_run()
+	prophetic_rewind.reset(self)
 	_ensure_runtime_controllers_bound()
 	player_shove.reset()
 	fossil_pustule_tether.reset()
@@ -10118,6 +10119,9 @@ func _update_game(delta: float) -> void :
 	if _boss3_miasma_qte_active():
 		_update_boss3_miasma_qte(delta)
 		return
+	# Profecia: na volta no tempo o mundo para (RTPropheticRewind).
+	if prophetic_rewind.blocks_world(delta):
+		return
 	_sync_touch_state()
 	if _spectator_controls_locked():
 		_clear_spectator_local_combat_state()
@@ -10128,7 +10132,10 @@ func _update_game(delta: float) -> void :
 	time_alive += delta
 	elapsed_unpaused += delta
 	_umbra_phase_observer().update(delta)
-	experimental_phase_controller.update(delta)
+	# Oficina do Mercador = sala segura: guarda unico (RTMerchantDimension).
+	var sealed: bool = _merchant_dimension().seals_phase_world()
+	if not sealed:
+		experimental_phase_controller.update(delta)
 	RTFrameProfiler.mark("u_prelude")
 	if mode != "game":
 		return
@@ -10138,7 +10145,7 @@ func _update_game(delta: float) -> void :
 	# Dentro da oficina do Mercador a fase inteira fica suspensa: evento,
 	# miniboss, artefato, capsula e pulso de terreno nasceriam com as
 	# coordenadas da fase num mundo que nao e mais o dela.
-	if not _merchant_dimension().active:
+	if not sealed:
 		runtime_event_director.update(delta, runtime_event_director.context_from_game(self), _is_world_authority())
 		point_boost_pickup_controller.update(delta, _is_world_authority())
 		_field_artifacts().update(delta)
@@ -10165,7 +10172,8 @@ func _update_game(delta: float) -> void :
 			boss10_controller.update_replica(delta)
 			boss10_controller.update_death(delta)
 	_story().update(delta)
-	_umbra_intro().tick_trigger(delta)
+	if not sealed:
+		_umbra_intro().tick_trigger(delta)
 	_run_choice().update(delta)
 	_boss_pacts().update(delta)
 	_parasitica().update(delta)
@@ -10204,10 +10212,11 @@ func _update_game(delta: float) -> void :
 	_update_aura(delta)
 	_merchant_dimension().dna.update(delta)
 	RTFrameProfiler.mark("u_aura")
-	_update_boss2_environment(delta)
-	_update_phase2_fire_walls(delta)
-	_update_phase7_ember_patches(delta)
-	_update_phase3_environment(delta)
+	if not sealed:
+		_update_boss2_environment(delta)
+		_update_phase2_fire_walls(delta)
+		_update_phase7_ember_patches(delta)
+		_update_phase3_environment(delta)
 	RTFrameProfiler.mark("u_environment")
 	if not boss_ready and time_alive >= BOSS_READY_TIME and not _tutorial_blocks_normal_spawn():
 		boss_ready = true
@@ -10242,8 +10251,9 @@ func _update_game(delta: float) -> void :
 	if pustule_slow_was_active and pustule_spit_slow_timer <= 0.0:
 		pustule_spit_slow_grace_timer = maxf(pustule_spit_slow_grace_timer, PUSTULE_SPIT_SLOW_GRACE)
 	pustule_spit_slow_grace_timer = maxf(0.0, pustule_spit_slow_grace_timer - delta)
-	_update_phase6_pustule_pheromones(delta)
-	_update_sanguessuga_parasite(delta)
+	if not sealed:
+		_update_phase6_pustule_pheromones(delta)
+		_update_sanguessuga_parasite(delta)
 	boss_tp_stun_timer = max(0.0, boss_tp_stun_timer - delta)
 	boss6_heal_cut_timer = max(0.0, boss6_heal_cut_timer - delta)
 	_update_frost(delta)
@@ -10251,7 +10261,8 @@ func _update_game(delta: float) -> void :
 	player_shove.update(self, delta)
 	if fossil_pustule_tether.core != self:
 		fossil_pustule_tether.configure(self)
-	fossil_pustule_tether.update(delta)
+	if not sealed:
+		fossil_pustule_tether.update(delta)
 	if not _local_player_movement_locked():
 		if player_stun_timer <= 0.0 and not player_locked:
 			_update_apolo_phase5_exhibition(delta)
@@ -10312,20 +10323,19 @@ func _update_game(delta: float) -> void :
 	if run_leader_notice_timer > 0.0:
 		run_leader_notice_timer = maxf(0.0, run_leader_notice_timer - delta)
 	# Entrando/saindo da fenda do Mercador a horda congela (ver RTMerchantRiftTransition).
-	if rift_transition == null or not rift_transition.freezes_enemies():
+	if not sealed and (rift_transition == null or not rift_transition.freezes_enemies()):
 		enemy_manager.update(delta)
 	RTFrameProfiler.mark("u_enemy_manager")
 	_update_event_alerts(delta)
 	_update_team_revival(delta)
-	if _is_world_authority():
+	if _is_world_authority() and not sealed:
 		_update_agglomeration(delta)
 		if not _tutorial_blocks_normal_spawn():
 			_try_spawn_larapio()
 			_try_spawn_arauto()
-
-	_update_phase_fragment(delta)
-
-	if _is_world_authority():
+	if not sealed:
+		_update_phase_fragment(delta)
+	if _is_world_authority() and not sealed:
 		_update_arauto(delta)
 	RTFrameProfiler.mark("u_alerts_revival")
 	_update_bullets(delta)
@@ -10333,23 +10343,25 @@ func _update_game(delta: float) -> void :
 	_update_eletrica_waves(delta)
 	_update_eletrica_chains(delta)
 	_update_remote_bullets(delta)
-	_update_parasite_spit_zones(delta)
 	_update_prisms(delta)
-	_update_phase6_pustule_pools(delta)
+	if not sealed:
+		_update_parasite_spit_zones(delta)
+		_update_phase6_pustule_pools(delta)
 	RTFrameProfiler.mark("u_skill_zones")
 	# Entrando/saindo da fenda do Mercador a horda congela no lugar: e isso que
 	# garante que os inimigos empurrados continuem onde ficaram na volta.
-	if rift_transition == null or not rift_transition.freezes_enemies():
+	if not sealed and (rift_transition == null or not rift_transition.freezes_enemies()):
 		_update_enemies(delta, true)
 		RTFrameProfiler.mark("u_enemies")
 		_apply_entity_separation(delta, true)
 	RTFrameProfiler.mark("u_separation")
-	_update_enemy_bullets(delta)
+	if not sealed:
+		_update_enemy_bullets(delta)
+		_update_phase4_environment(delta)
+		_update_larapio_coin_drops(delta)
+		_update_arauto_card_drops(delta)
+		_update_arauto_evolution_fragment(delta)
 	RTFrameProfiler.mark("u_enemy_bullets")
-	_update_phase4_environment(delta)
-	_update_larapio_coin_drops(delta)
-	_update_arauto_card_drops(delta)
-	_update_arauto_evolution_fragment(delta)
 	_update_orbitals(delta)
 	_gravitante().update(delta)
 	_lacerante_exec().update(delta)
@@ -10363,10 +10375,10 @@ func _update_game(delta: float) -> void :
 	RTFrameProfiler.mark("u_heal_orbs")
 	_update_effects(delta)
 	RTFrameProfiler.mark("u_effects")
-	if _is_world_authority() and boss_active:
+	if _is_world_authority() and boss_active and not sealed:
 		_update_boss(delta * AuraSystem.world_multiplier(aura_state))
 		_update_boss_poison(delta)
-	elif _is_world_replica() and current_phase == 2 and boss2_ultimate_wind_active > 0.0:
+	elif _is_world_replica() and current_phase == 2 and boss2_ultimate_wind_active > 0.0 and not sealed:
 		boss2_ultimate_wind_active = max(0.0, boss2_ultimate_wind_active - delta)
 		_apply_boss2_wind_force(delta)
 	# Resolve Pai-Rato presentation after authority/replica motion has advanced,
@@ -10378,11 +10390,14 @@ func _update_game(delta: float) -> void :
 	if not active_lacerante.is_empty():
 		player_pos = Vector2(active_lacerante.get("center", player_pos))
 	RTFrameProfiler.mark("u_boss")
-	_update_environment_weather(delta)
+	if not sealed:
+		_update_environment_weather(delta)
 	if player_hp <= 0:
 		_handle_player_down()
-	if mode == "game" and boss_active and current_phase == 1 and boss_entry_timer <= 0.0:
+	if mode == "game" and boss_active and current_phase == 1 and boss_entry_timer <= 0.0 and not sealed:
 		_record_boss1_rewind_history(delta)
+	prophetic_rewind.update(delta)
+	_merchant_dimension().enforce_seal()
 	RTFrameProfiler.mark("u_tail")
 
 func _update_aura(delta: float) -> void :
@@ -10407,6 +10422,7 @@ func _update_aura(delta: float) -> void :
 		"enemies": enemies,
 		"boss_active": boss_active and boss_hp > 0.0,
 		"boss_pos": boss_pos,
+		"rational_analysis_paused": _merchant_dimension().active and not _merchant_dimension().clock_running(),
 	}))
 
 
@@ -26363,6 +26379,10 @@ func _umbra_intro() -> RTUmbraIntro:
 	return umbra_intro_controller
 
 
+## Profecia do espectro Profetica (owner: RTPropheticRewind).
+var prophetic_rewind := RTPropheticRewind.new()
+
+
 func _merchant_dimension() -> RTMerchantDimension:
 	if merchant_dimension == null:
 		merchant_dimension = RTMerchantDimension.new()
@@ -33349,7 +33369,8 @@ func _warn_if_damage_visual_missing(source: String) -> void :
 
 
 func _damage_player(amount: int, source: String, silent_hit_sfx: bool = false) -> void :
-	if is_dead:
+	# Oficina do Mercador: sala segura, nenhum dano entra (ver seals_phase_world).
+	if is_dead or _merchant_dimension().seals_phase_world():
 		return
 	if not source.begins_with("pact_"):
 		amount = maxi(1, int(round(float(amount) * _boss_pacts().m("dmg_taken")))) if amount > 0 else amount
@@ -33373,6 +33394,8 @@ func _damage_player(amount: int, source: String, silent_hit_sfx: bool = false) -
 	if not boss_ultimate_damage and _passagem_blocks_contact_damage(source):
 		if rng.randf() < 0.25:
 			_spawn_radial_particles(player_pos, Color(0.72, 0.9, 1.0), 2)
+		return
+	if prophetic_rewind.intercept_hit(source):
 		return
 	if current_phase == 2:
 		if source == "boss2_flash_freeze":
@@ -34781,7 +34804,7 @@ func _gameplay_preferences_rects(viewport: Vector2) -> Dictionary:
 
 func _gameplay_preference_keys() -> Array:
 	# Analogico e vibracao so existem no toque; no desktop nao fazem nada.
-	var keys: Array = ["target_priority", "damage_text", "interface_text", "color_vision", "fps", "tutorial", "gameplay_cheat"]
+	var keys: Array = ["target_priority", "damage_text", "interface_text", "dialogue_text", "color_vision", "fps", "tutorial", "gameplay_cheat"]
 	if _uses_desktop_ui():
 		keys.insert(1, "desktop_aim")
 		keys.insert(2, "desktop_teleport")

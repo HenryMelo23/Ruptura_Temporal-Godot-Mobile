@@ -100,7 +100,11 @@ func _run() -> void:
 	_check(npc.seen.has("intro"), "a apresentacao nao foi marcada como vista")
 
 	# ----------------------------------------------- cronometro e expulsao
+	# Lote 24/11: o menu do balcao tambem pausa o relogio. Ela se afasta do
+	# balcao para a fenda voltar a correr (andar pela oficina gasta tempo).
+	game.player_pos = RTMerchantDimension.PLAYER_ENTRY
 	dim.update(1.0)
+	_check(not talk.busy(), "o menu do balcao abriu longe do balcao")
 	_check(dim.timer > 0.0, "o cronometro nao voltou a correr")
 	game._apply_score_delta(5000 - int(game.score), true, "teste_a")
 	var saved_score: int = int(game.score)

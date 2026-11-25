@@ -2020,7 +2020,7 @@ const AURAS: = [
 	{"key": "voraz", "name": "Voraz", "icon": "aurea_voraz.png", "desc": "Teleporte atraves de inimigos fracos para DEVORA-LOS. Quanto mais Fome, maior o limite de vida devoravel."},
 	{"key": "nula", "name": "Nula", "icon": "aurea_nula.png", "desc": "Ociosidade e abates carregam Vazio; o proximo tiro nulifica um alvo robusto."},
 	{"key": "abissal", "name": "Abissal", "icon": "aurea_abissal.png", "desc": "Cerco acumula Profundidade e invoca a Mare Negra, com o custo de pesar Geovana."},
-	{"key": "profetica", "name": "Profetica", "icon": "aurea_profetica.png", "desc": "De tempos em tempos ela VE O FUTURO: tiros e inimigos aparecem adiantados. Desviar de um tiro previsto guarda um critico."},
+	{"key": "profetica", "name": "Profetica", "icon": "aurea_profetica.png", "desc": "De tempos em tempos ela VE O FUTURO: tiros e inimigos aparecem adiantados. Desviar de um tiro previsto guarda um critico. PROFECIA: um olho dourado abre e por 10 s ela fica mais rapida; se for atingida, o tempo volta e ela refaz tudo."},
 	{"key": "sanguinaria", "name": "Sanguinaria", "icon": AURA_SANGUINARIA_ICON_PATH, "desc": "Dano repetido abre Feridas, alimenta Sede e prepara Carnificina Controlada."},
 	{"key": "crepuscular", "name": "Crepuscular", "icon": "res://assets/sprites/aurea-eclipsa.png", "desc": "Alterna entre Alvorada defensiva e Ocaso ofensivo. Domine a transicao para ativar Eclipse."},
 	{"key": "peregrino", "name": "Peregrino", "icon": "res://assets/sprites/aurea-peregrina.png", "desc": "Andar deixa um rastro que queima e atrasa inimigos. Feche um LACO com o rastro para explodir o Territorio e se curar."},
@@ -3313,6 +3313,8 @@ var dimension_route_completed_count: int = 0
 var dimension_route_last_phase: int = 0
 var run_extracted: bool = false
 var interface_text_scale: float = 1.25
+## Texto das conversas (caixa RPG do Mercador e da UMBRA): 100% a 200%.
+var dialogue_text_scale: float = 1.0
 var geovana_bark_scale: float = 0.5
 ## Modo de cor para daltonismo (RTColorVisionFilter.MODES).
 var color_vision_mode: String = ColorVisionFilterScript.MODE_OFF
