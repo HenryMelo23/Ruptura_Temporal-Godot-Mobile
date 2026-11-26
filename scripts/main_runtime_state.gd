@@ -69,6 +69,7 @@ const HenryIncendiaryAbilityControllerScript = preload("res://scripts/systems/ab
 const HenryBarometricAbilityControllerScript = preload("res://scripts/systems/abilities/henry_barometric_ability_controller.gd")
 const HenryColossusAbilityControllerScript = preload("res://scripts/systems/abilities/henry_colossus_ability_controller.gd")
 const ReactiveSurvivalCardControllerScript = preload("res://scripts/systems/cards/reactive_survival_card_controller.gd")
+const MomentumItemsControllerScript = preload("res://scripts/systems/cards/momentum_items_controller.gd")
 const RoguelikePointCardControllerScript = preload("res://scripts/systems/cards/roguelike_point_card_controller.gd")
 const CardPowerFeedbackControllerScript = preload("res://scripts/systems/cards/card_power_feedback_controller.gd")
 const PointBoostPickupControllerScript = preload("res://scripts/systems/progression/point_boost_pickup_controller.gd")
@@ -1826,6 +1827,10 @@ const CARDS: = [
 	{"id": "limiar_colapso", "name": "Limiar de Colapso", "nick": "Ruptura Vital", "desc": "Rompe inimigos ao cruzarem 70%, 40% e 15% de vida.", "icon": "Deck/carta-Limiar_de_Colapso1.png", "frame_2": "Deck/carta-Limiar_de_Colapso2.png", "color": Color(1.0, 0.42, 0.18)},
 	{"id": "desvio_probabilidade", "name": "Desvio de Probabilidade", "nick": "Quase Acerto", "desc": "Quase acertos hostis fortalecem o proximo golpe direto.", "icon": "Deck/carta-Desvio_de_Probabilidade1.png", "frame_2": "Deck/carta-Desvio_de_Probabilidade2.png", "color": Color(0.74, 0.48, 1.0)},
 	{"id": "ponto_cego", "name": "Ponto Cego", "nick": "Ataque pelas Costas", "desc": "Ataques por tras causam dano extra e desorientam.", "icon": "Deck/carta-Ponto_Cego1.png", "frame_2": "Deck/carta-Ponto_Cego2.png", "color": Color(1.0, 0.86, 0.34)},
+	{"id": "retorno_voluntario", "name": "Retorno Voluntário", "nick": "Uso Guardado", "desc": "+1 uso guardado da HAB1 por cópia, sem limite. A recarga da HAB1 não muda: os usos extras voltam um de cada vez, no tempo normal.", "icon": "Cartas_back.png", "color": Color(0.36, 0.78, 1.0)},
+	{"id": "estoque_ganancia", "name": "Estoque da Ganância", "nick": "Fome de Abate", "desc": "Cada abate dá +3,5% de dano (+1% por cópia), até 10 acúmulos (+5 por cópia), por 7 s. Causar dano renova o tempo.", "icon": "Cartas_back.png", "color": Color(1.0, 0.76, 0.2)},
+	{"id": "espectro_eletrico", "name": "Espectro Elétrico", "nick": "Faísca Errante", "desc": "Gera um orbe de energia perto de você a cada 10 s (-10% por cópia). Pegar o orbe dá +12% de velocidade, até 3 vezes (+3 por cópia), por 12 s.", "icon": "Cartas_back.png", "color": Color(0.45, 0.9, 1.0)},
+	{"id": "eco_ruina", "name": "Eco da Ruína", "nick": "Golpe Parcelado", "desc": "O próximo dano que você sofre cai 10% e chega em 3 golpes (+1 por cópia). Só o último golpe pode matar. Recarga de 15 s.", "icon": "Cartas_back.png", "color": Color(1.0, 0.4, 0.32)},
 	{"id": "mandamento_ruptura", "name": "Mandamento da Ruptura", "nick": "Terceira Lei", "desc": "A cada 3 habilidades, a terceira rompe seus limites.", "icon": "Deck/carta-Mandamento_da_Ruptura1.png", "frame_2": "Deck/carta-Mandamento_da_Ruptura2.png", "color": Color(0.94, 0.7, 1.0)},
 	{"id": "carta_zero", "name": "Carta Zero", "nick": "Origem Numerica", "desc": "Amplifica todos os efeitos numericos dos itens comuns.", "icon": "Deck/carta-Zero1.png", "frame_2": "Deck/carta-Zero2.png", "color": Color(0.9, 0.96, 1.0)},
 	{"id": "necrocronismo", "name": "Necrocronismo", "nick": "Aliados Espectrais", "desc": "A cada tantas mortes, um inimigo volta no tempo como Eco aliado: da investidas que atravessam e deixam lentos os inimigos, e implode no fim.", "icon": "Deck/carta-Necrocronismo1.png", "frame_2": "Deck/carta-Necrocronismo2.png", "color": Color(0.46, 1.0, 0.94)},
@@ -2880,6 +2885,7 @@ var henry_incendiary_ability_controller: RefCounted = HenryIncendiaryAbilityCont
 var henry_barometric_ability_controller: RefCounted = HenryBarometricAbilityControllerScript.new()
 var henry_colossus_ability_controller: RefCounted = HenryColossusAbilityControllerScript.new()
 var reactive_survival_card_controller: RefCounted = ReactiveSurvivalCardControllerScript.new()
+var momentum_items_controller: RefCounted = MomentumItemsControllerScript.new()
 var roguelike_point_card_controller: RefCounted = RoguelikePointCardControllerScript.new()
 var card_power_feedback_controller: RefCounted = CardPowerFeedbackControllerScript.new()
 var point_boost_pickup_controller: RefCounted = PointBoostPickupControllerScript.new()

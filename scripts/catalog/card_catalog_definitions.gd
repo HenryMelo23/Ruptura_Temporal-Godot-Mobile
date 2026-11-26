@@ -589,6 +589,10 @@ const CARD_DEFINITIONS: Dictionary = {
 		"stat_label": "escudo hemofago raro",
 		"float_text": "CINZAS: EGIDE",
 	},
+	"retorno_voluntario": {"id": "retorno_voluntario", "name": "Retorno Voluntário", "category": CATEGORY_COOLDOWN, "can_burn": true, "policy": "numeric_attribute", "eligible_attributes": ["power"], "burn_factor": 0.50, "stat_label": "usos guardados da HAB1", "float_text": "CINZAS: RETORNO"},
+	"estoque_ganancia": {"id": "estoque_ganancia", "name": "Estoque da Ganância", "category": CATEGORY_DAMAGE, "can_burn": true, "policy": "numeric_attribute", "eligible_attributes": ["power"], "burn_factor": 0.50, "stat_label": "dano por abate", "float_text": "CINZAS: GANÂNCIA"},
+	"espectro_eletrico": {"id": "espectro_eletrico", "name": "Espectro Elétrico", "category": CATEGORY_SPEED, "can_burn": true, "policy": "numeric_attribute", "eligible_attributes": ["power"], "burn_factor": 0.50, "stat_label": "velocidade dos orbes", "float_text": "CINZAS: ESPECTRO"},
+	"eco_ruina": {"id": "eco_ruina", "name": "Eco da Ruína", "category": CATEGORY_DEFENSE, "can_burn": true, "policy": "numeric_attribute", "eligible_attributes": ["power"], "burn_factor": 0.50, "stat_label": "golpes do eco", "float_text": "CINZAS: ECO"},
 	"fratura_cronal": {
 		"id": "fratura_cronal",
 		"name": "Fratura Cronal",

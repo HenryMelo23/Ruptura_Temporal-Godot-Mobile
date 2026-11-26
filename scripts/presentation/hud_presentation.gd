@@ -669,7 +669,7 @@ static func _draw_desktop_combat_hud(game: Node2D, viewport: Vector2) -> void :
 	var tp_visual_active = game.tp_cooldown_pending and not game.tp_effects.is_empty()
 	var dash_label = "SALTO" if henry_colossus and game.henry_colossus_ability_controller.giant_active else ("ATIVO" if tp_visual_active else "TP")
 
-	var q_charges = 0
+	var q_charges = game.momentum_items_controller.hab1_charges
 
 	var tp_charges = 0
 	if game.manifestation_key == "lacerante":

@@ -1257,3 +1257,13 @@ Dever multiplayer:
   não a Roda, Teor, holofote, anel e colisão do palco em combate cooperativo.
   O soak headless não substitui uma run longa com dois dispositivos nem prova
   Windows executado ou Android físico.
+
+## 2026-11-26 — Itens comuns novos: Retorno Voluntário, Estoque da Ganância, Espectro Elétrico, Eco da Ruína (só solo validado)
+
+Owner: `scripts/systems/cards/momentum_items_controller.gd` (estado local do jogador).
+
+**Pendente em sala real:**
+- **Retorno Voluntário:** os usos guardados da HAB1 são locais. Conferir se o host aceita a HAB1 lançada com a recarga ainda correndo, ou se a autoridade da habilidade a rejeita.
+- **Estoque da Ganância:** só conta abate com `killed_by_peer_id` igual ao jogador local. O bônus entra em `_apply_limiar_ruina_damage`, que não recebe o peer. Conferir se o dano de outro jogador, aplicado no host, não usa os acúmulos do host.
+- **Espectro Elétrico:** os orbes não são replicados. Cada cliente vê e pega só os seus.
+- **Eco da Ruína:** os golpes parcelados mexem direto em `player_hp`, como a Margem de Erro. Conferir a reconciliação de vida no cliente e a morte no último golpe.

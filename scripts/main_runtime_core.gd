@@ -52,6 +52,8 @@ func _ensure_runtime_controllers_bound() -> void:
 		henry_colossus_ability_controller.configure(self)
 	if reactive_survival_card_controller.core != self:
 		reactive_survival_card_controller.configure(self)
+	if momentum_items_controller.core != self:
+		momentum_items_controller.configure(self)
 	if roguelike_point_card_controller.core != self:
 		roguelike_point_card_controller.configure(self)
 	if card_power_feedback_controller.core != self:
@@ -7136,6 +7138,7 @@ func _reset_card_counts() -> void :
 func _reset_card_proc_state() -> void :
 	shop_controller.reset()
 	reactive_survival_card_controller.reset()
+	momentum_items_controller.reset()
 	card_power_feedback_controller.reset()
 	fratura_cronal_cooldown = 0.0
 	fratura_cronal_armed = false
@@ -11827,26 +11830,31 @@ func _use_skill(target_world = null) -> void :
 		return
 	if active_character_key == CHARACTER_HENRY:
 		var henry_cooldown := _skill_cooldown()
+		var henry_stored := false
 		if time_alive - last_skill_time < henry_cooldown:
-			var henry_remaining: float = henry_cooldown - (time_alive - last_skill_time)
-			_add_text("%.1fs" % henry_remaining, player_pos + Vector2(0, -86), Color(1.0, 0.72, 0.28), 0.45, 18)
-			return
+			henry_stored = momentum_items_controller.use_stored_hab1()
+			if not henry_stored:
+				_add_text("%.1fs" % (henry_cooldown - (time_alive - last_skill_time)), player_pos + Vector2(0, -86), Color(1.0, 0.72, 0.28), 0.45, 18)
+				return
 		var henry_skill_started := false
 		match mutation_key:
 			"barometrico": henry_skill_started = henry_barometric_ability_controller.begin_skill(target_world)
 			"colosso": henry_skill_started = henry_colossus_ability_controller.begin_skill(target_world)
 			_: henry_skill_started = henry_incendiary_ability_controller.begin_skill(target_world)
+		if henry_stored and not henry_skill_started:
+			momentum_items_controller.hab1_charges += 1
 		if henry_skill_started:
-			last_skill_time = time_alive
+			if not henry_stored:
+				last_skill_time = time_alive
 			_register_manual_skill_use("skill_q", henry_cooldown)
 			_tutorial_note_action("skill")
 		return
 	var cooldown = _skill_cooldown()
-	if time_alive - last_skill_time < cooldown:
-		var remaining = cooldown - (time_alive - last_skill_time)
-		_add_text("%.1fs" % remaining, player_pos + Vector2(0, -86), Color(0.72, 0.92, 1.0), 0.45, 18)
+	if time_alive - last_skill_time >= cooldown:
+		last_skill_time = time_alive
+	elif not momentum_items_controller.use_stored_hab1():
+		_add_text("%.1fs" % (cooldown - (time_alive - last_skill_time)), player_pos + Vector2(0, -86), Color(0.72, 0.92, 1.0), 0.45, 18)
 		return
-	last_skill_time = time_alive
 	var skill_power: float = _register_manual_skill_use("skill_q", cooldown)
 	var visual_origin: Vector2 = player_pos
 	var visual_target: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos + _ability_aim_direction() * 220.0
@@ -12988,6 +12996,7 @@ func _update_advanced_manifestation_state(delta: float) -> void :
 	henry_barometric_ability_controller.update(delta)
 	henry_colossus_ability_controller.update(delta)
 	reactive_survival_card_controller.update(delta)
+	momentum_items_controller.update(delta)
 
 
 func _trigger_screen_shake(strength: float, duration: float) -> void:
@@ -19289,6 +19298,7 @@ func _kill_enemy(enemy: Dictionary) -> void :
 	_add_card_unlock_progress("enemy_kills", 1.0, int(enemy.get("killed_by_peer_id", _mp_unique_id())))
 	shop_rift_controller.on_enemy_killed(enemy)
 	_merchant_dimension().dna.on_enemy_killed()
+	momentum_items_controller.on_enemy_killed(enemy)
 	henry_incendiary_ability_controller.on_enemy_killed(enemy)
 	var gain = _points_for_enemy(enemy)
 	if manifestation_key == "lacerante" and _is_uncommon_enemy(enemy):
@@ -29573,6 +29583,8 @@ func _is_carta_zero_scalable(card_id: String, stat_id: = "") -> bool:
 			return stat_id in ["points_on_damage"]
 		"fratura_cronal":
 			return stat_id in ["damage_bonus"]
+		"estoque_ganancia", "espectro_eletrico", "eco_ruina":
+			return stat_id == "power"
 		"pulso_desestabilizador":
 			return stat_id in ["damage", "radius"]
 		"pressao_cerco":
@@ -29816,6 +29828,7 @@ func _limiar_ruina_applies(hp_before: float, max_hp: float, source: String, sour
 
 
 func _apply_limiar_ruina_damage(amount: float, hp_before: float, max_hp: float, source: String, source_category: String, pos: Vector2) -> float:
+	amount = momentum_items_controller.apply_outgoing(amount, source)
 	if not _limiar_ruina_applies(hp_before, max_hp, source, source_category):
 		return amount
 	var bonus: = _limiar_ruina_bonus()
@@ -30153,7 +30166,7 @@ func _new_common_speed_multiplier() -> float:
 		mult += _folego_max_speed_bonus() * clampf(folego_charge, 0.0, 1.0)
 	if ressonancia_speed_timer > 0.0:
 		mult += ressonancia_speed_bonus
-	return mult
+	return mult + momentum_items_controller.movement_speed_bonus()
 
 
 func _interrupt_folego() -> void :
@@ -33461,6 +33474,7 @@ func _damage_player(amount: int, source: String, silent_hit_sfx: bool = false) -
 		return
 	final += _quantum_chips().on_player_hit(final)
 	final = _merchant_dimension().dna.on_player_hit(final)
+	final = momentum_items_controller.on_player_hit(final)
 	if final <= 0: return
 	_track_player_damage(final, source)
 	run_last_damage_source = source

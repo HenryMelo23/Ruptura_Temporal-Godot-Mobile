@@ -488,6 +488,14 @@ func card_stat_chips(card_name: String) -> Array:
 			return ["-4% COMUM"]
 		"Solo Consolidado":
 			return ["-8% ZONA"]
+		"Retorno Voluntário":
+			return ["+1 USO HAB1"]
+		"Estoque da Ganância":
+			return ["+3.5% DANO/ABATE", "ATÉ 10"]
+		"Espectro Elétrico":
+			return ["ORBE 10s", "+12% VEL"]
+		"Eco da Ruína":
+			return ["-10% DANO", "3 GOLPES"]
 		"Fratura Cronal":
 			return ["7s ARMAR", "+4/12% FRAG"]
 		"Pulso Desestabilizador":
