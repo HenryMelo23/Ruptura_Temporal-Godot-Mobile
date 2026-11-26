@@ -60,6 +60,8 @@ static func _draw_item_caption(view, g, card: Dictionary, caption: Rect2, accent
 	var chips: Array = view.card_stat_chips(String(card.get("name", ""))).slice(0, 2)
 	var chips_h: float = 24.0 if not chips.is_empty() else 0.0
 	var object_name: String = ItemShowcase.item_name(card)
+	if ItemShowcase.normalize(object_name) == ItemShowcase.normalize(CardCatalogDefinitions.display_name(card)):
+		object_name = ""
 	if object_name != "" and room >= 18.0 + chips_h:
 		view.text(g, object_name, Rect2(caption.position.x + 6, y, caption.size.x - 12, 16), 12, Color(MUTED, 0.95), true)
 		y += 20.0

@@ -8,7 +8,7 @@ extends SceneTree
 const ItemShowcase := preload("res://scripts/presentation/item_showcase.gd")
 const DT := 1.0 / 60.0
 ## Itens novos que ainda esperam o sprite do Codex (tirar daqui quando chegar).
-const PENDING_ART := ["Retorno Voluntário", "Estoque da Ganância", "Espectro Elétrico", "Eco da Ruína", "Fé Emaculada", "Tornozeleira de Chumbo", "Disparo Vital", "Último Impulso", "Sangue Coagulado", "Pulso da Conversão", "Bobina Catalisadora", "Espinhos do Vaghnor", "Véu Entrópico", "Botas de Veludo"]
+const PENDING_ART: Array[String] = []
 var game: Node
 var frames_dir := ""
 var failures: Array[String] = []

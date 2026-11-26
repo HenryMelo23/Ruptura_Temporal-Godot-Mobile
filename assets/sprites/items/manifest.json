@@ -628,5 +628,145 @@
       256
     ],
     "accent": "#FF5C1F"
+  },
+  "common/retorno_voluntario": {
+    "card": "Retorno Voluntário",
+    "rarity": "common",
+    "item": "Bumerangue de Bolso",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#5CC7FF"
+  },
+  "common/estoque_ganancia": {
+    "card": "Estoque da Ganância",
+    "rarity": "common",
+    "item": "Pote da Ganância",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FFC233"
+  },
+  "common/espectro_eletrico": {
+    "card": "Espectro Elétrico",
+    "rarity": "common",
+    "item": "Lanterna de Faíscas",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#73E6FF"
+  },
+  "common/eco_ruina": {
+    "card": "Eco da Ruína",
+    "rarity": "common",
+    "item": "Gongo Rachado",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FF6652"
+  },
+  "uncommon/fe_emaculada": {
+    "card": "Fé Emaculada",
+    "rarity": "uncommon",
+    "item": "Relicário de Munição",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FFDB73"
+  },
+  "uncommon/tornozeleira_chumbo": {
+    "card": "Tornozeleira de Chumbo",
+    "rarity": "uncommon",
+    "item": "Tornozeleira de Chumbo",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#9EA8BD"
+  },
+  "uncommon/disparo_vital": {
+    "card": "Disparo Vital",
+    "rarity": "uncommon",
+    "item": "Ponta Vital",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FF596B"
+  },
+  "uncommon/ultimo_impulso": {
+    "card": "Último Impulso",
+    "rarity": "uncommon",
+    "item": "Mola de Arrancada",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#59F2D9"
+  },
+  "uncommon/sangue_coagulado": {
+    "card": "Sangue Coagulado",
+    "rarity": "uncommon",
+    "item": "Frasco Coagulado",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#BF142E"
+  },
+  "uncommon/pulso_conversao": {
+    "card": "Pulso da Conversão",
+    "rarity": "uncommon",
+    "item": "Flor do Pulso",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#80FFB3"
+  },
+  "uncommon/bobina_catalisadora": {
+    "card": "Bobina Catalisadora",
+    "rarity": "uncommon",
+    "item": "Bobina Catalisadora",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#8CD9FF"
+  },
+  "uncommon/espinhos_vaghnor": {
+    "card": "Espinhos do Vaghnor",
+    "rarity": "uncommon",
+    "item": "Coroa de Espinhos de Vaghnor",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#D92640"
+  },
+  "uncommon/veu_entropico": {
+    "card": "Véu Entrópico",
+    "rarity": "uncommon",
+    "item": "Véu Entrópico",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#B399FF"
+  },
+  "uncommon/botas_veludo": {
+    "card": "Botas de Veludo",
+    "rarity": "uncommon",
+    "item": "Botas de Veludo",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#D98CF2"
   }
 }
