@@ -192,7 +192,7 @@ func turn_in() -> bool:
 	gears.clear()
 	completed += 1
 	core._apply_card(card)
-	core._add_text("CARTA: MOEDA ESTÁVEL", core.player_pos + Vector2(-110, -120), Color(1.0, 0.72, 0.18), 2.2, 22)
+	core._add_text("ITEM: MOEDA ESTÁVEL", core.player_pos + Vector2(-110, -120), Color(1.0, 0.72, 0.18), 2.2, 22)
 	core._spawn_radial_particles(core.player_pos, Color(1.0, 0.72, 0.18), 28)
 	return true
 

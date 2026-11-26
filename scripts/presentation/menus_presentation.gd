@@ -1612,7 +1612,7 @@ static func _geovana_build_model(game: Node2D) -> Dictionary:
 		"primary_label": primary_label,
 		"primary_enabled": unlocked,
 		"preview_enabled": unlocked and not random_selected and not aura_view and game.manifest_select_stage == game.MANIFEST_STAGE_MANIFESTATION,
-		"hint": "A / D, ARRASTE OU TOQUE NUMA CARTA",
+		"hint": "A / D, ARRASTE OU TOQUE NUM ITEM",
 		"keys": keys,
 		"chips_label": "CHIPS QUANTICOS (%d)" % game._quantum_chips().selected_count(),
 		"random_label": "ESPECTRO ALEATORIO" if aura_view else "MANIFESTACAO ALEATORIA",
@@ -2366,7 +2366,7 @@ static func _draw_team_revival_world(game: Node2D, camera: Vector2) -> void:
 		game.draw_circle(pos, 4.2 + pulse * 1.6, core)
 	if game.revival_altars_active:
 		game._draw_team_revival_altar(game.revival_altar_life_pos - camera, Color(1.0, 0.18, 0.26), "VIDA", t)
-		game._draw_team_revival_altar(game.revival_altar_points_pos - camera, Color(0.08, 0.62, 1.0), "4 CARTAS", t + 1.4)
+		game._draw_team_revival_altar(game.revival_altar_points_pos - camera, Color(0.08, 0.62, 1.0), "4 ITENS", t + 1.4)
 		game._draw_revival_altar_talkbox(camera)
 
 
@@ -2499,7 +2499,7 @@ static func _draw_shop_mp_waiting_legacy(game: Node2D, viewport: Vector2) -> voi
 	game._draw_glitch_title("AGUARDANDO EQUIPE", Vector2(panel.get_center().x, panel.position.y + 52.0), 24, Color(0.0, 1.0, 0.82))
 	var detail = "VOCE JA TERMINOU SUAS COMPRAS"
 	if game._affordable_card_count() <= 0:
-		detail = "SEM PONTOS PARA NOVAS CARTAS"
+		detail = "SEM PONTOS PARA NOVOS ITENS"
 	game._draw_centered(detail, panel.get_center() + Vector2(0, 10), game._readable_text_size(17), Color(1.0, 0.86, 0.26))
 	game._draw_centered("PRONTOS %d/%d - A PARTIDA VOLTA COM TODA A EQUIPE" % [game.shop_mp_ready_count, game.shop_mp_expected_count], panel.get_center() + Vector2(0, 48), game._readable_text_size(13), Color(0.9, 0.96, 1.0, 0.92))
 
@@ -2805,7 +2805,7 @@ static func _draw_run_summary(game: Node2D, area: Rect2, accent: Color, lost: bo
 		["DANO INIMIGOS", str(int(round(game.run_damage_to_enemies)))],
 		["PONTOS GANHOS", game._format_points(game.run_points_earned)],
 		["PONTOS GASTOS", game._format_points(game.run_points_spent)],
-		["CARTAS", str(game._deck_total_cards())],
+		["ITENS", str(game._deck_total_cards())],
 		["FASE DA QUEDA" if lost else "FASE CONCLUIDA", str(game.current_phase)]
 	]
 	var knowledge: Dictionary = game.umbra_run_knowledge if not game.umbra_run_knowledge.is_empty() else game.umbra_memory_controller.knowledge_report(game)
@@ -3338,8 +3338,8 @@ static func _draw_run_mode_popup(game: Node2D, viewport: Vector2) -> void:
 	game._draw_centered("Somente o host pode alterar", popup.position + Vector2(230.0, 64.0), 12, Color(0.68, 0.8, 0.86))
 	game.buttons["lobby_mode_shop"] = Rect2(popup.position + Vector2(28.0, 88.0), Vector2(194.0, 92.0))
 	game.buttons["lobby_mode_drop"] = Rect2(popup.position + Vector2(238.0, 88.0), Vector2(194.0, 92.0))
-	_draw_run_mode_choice(game, game.buttons["lobby_mode_shop"], "LOJA", "Cartas compradas\nnas pausas", game.run_mode_popup_selection == 0, Color(0.18, 0.86, 0.78))
-	_draw_run_mode_choice(game, game.buttons["lobby_mode_drop"], "DROP", "Inimigos podem\ndropar cartas", game.run_mode_popup_selection == 1, Color(1.0, 0.68, 0.18))
+	_draw_run_mode_choice(game, game.buttons["lobby_mode_shop"], "LOJA", "Itens comprados\nnas pausas", game.run_mode_popup_selection == 0, Color(0.18, 0.86, 0.78))
+	_draw_run_mode_choice(game, game.buttons["lobby_mode_drop"], "DROP", "Inimigos podem\ndropar itens", game.run_mode_popup_selection == 1, Color(1.0, 0.68, 0.18))
 
 
 static func _draw_run_mode_choice(game: Node2D, rect: Rect2, title: String, subtitle: String, selected: bool, accent: Color) -> void:

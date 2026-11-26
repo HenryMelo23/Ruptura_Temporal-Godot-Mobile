@@ -33,7 +33,7 @@ static func manifestation(key: String) -> Dictionary:
 				"rows": [
 					{"label": "ATAQUE", "title": "Três lâminas", "text": "Sequência de 3 cortes de perto; cada corte soma 1 Laceração (o terceiro soma 2). +5 px de alcance a cada 20 Coágulos; alvos grandes levam até +18%."},
 					{"label": "PASSIVA", "title": "Caçadora", "text": "Recebe 22% menos dano. Laceração: até 5 cargas por 4 s; cada uma dá +4% de dano dos cortes e sangra 5% do dano a cada 0,5 s. Incomuns valem +50% de pontos. Cada Coágulo: +0,3% de dano e +0,25% de velocidade de ataque."},
-					{"label": "REFORÇO · 10 s", "title": "Execução", "text": "Arma o próximo ATK. Se o corte pegar um inimigo dentro da barra de execução, a Geovana o executa: 0,9 s invulnerável, alvo reservado só para ela e 1 Coágulo garantido (recarga de 10 s). Se não, sai um golpe com +45% sem execução (recarga de 15 s). Cada ATK que acerta adianta a recarga em 0,3 s, até um piso de 4 s; a carta Intervalo Fraturado baixa esse piso."},
+					{"label": "REFORÇO · 10 s", "title": "Execução", "text": "Arma o próximo ATK. Se o corte pegar um inimigo dentro da barra de execução, a Geovana o executa: 0,9 s invulnerável, alvo reservado só para ela e 1 Coágulo garantido (recarga de 10 s). Se não, sai um golpe com +45% sem execução (recarga de 15 s). Cada ATK que acerta adianta a recarga em 0,3 s, até um piso de 4 s; o item Intervalo Fraturado baixa esse piso."},
 					{"label": "Q · 10 s", "title": "Círculo Lacerante", "text": "A lâmina dá 5 voltas em 1,5 s (128 px). Cada volta fere e cura 0,25% da vida perdida por alvo. +1 volta a cada 10 Coágulos."},
 					{"label": "E · 75 s", "title": "Carnificina Temporal", "text": "15 cortes em 3 s na área mirada, com a Geovana parada e invulnerável. Cada corte: 6% da vida máx. ou 65% do dano (o maior); alvos já lacerados levam 10% / 115%. +2 cortes a cada 20 Coágulos."},
 					{"label": "TP · 2 cargas", "title": "Execução", "text": "Depois do primeiro teleporte há 2,5 s para o segundo. Atravessar até 3 alvos aplica 10 cortes em 3 s (50 + 0,5% da vida máx. cada), invulnerável. Recarga de 2 s após os cortes."},
@@ -47,7 +47,7 @@ static func manifestation(key: String) -> Dictionary:
 				"difficulty": 2,
 				"rows": [
 					{"label": "ATAQUE", "title": "Feixe", "text": "Feixe rápido (60% do dano) que atravessa inimigos e ricocheteia nas bordas até 3 vezes, +2% de dano por ricochete. A mira automática só dispara em alvos até 420 px."},
-					{"label": "PASSIVA", "title": "Horizonte refratado", "text": "Cada carta Horizonte da Ruptura vira +3% de crítico nos feixes que já ricochetearam, em vez de alcance."},
+					{"label": "PASSIVA", "title": "Horizonte refratado", "text": "Cada item Horizonte da Ruptura vira +3% de crítico nos feixes que já ricochetearam, em vez de alcance."},
 					{"label": "Q · 7,5 s", "title": "Prisma de Refração", "text": "Prisma no ponto mirado por 6,2 s. Feixes que passam por ele viram 5 (mais abertos quanto mais perto você atira). O prisma queima 75% do dano/s em volta."},
 					{"label": "E · 75 s", "title": "Coroa Espectral", "text": "Até 10 s parada e invulnerável: feixes giram (350 px) e descargas acertam até 4 alvos a cada 0,24 s (430 px). Aperte E para encerrar antes."},
 					{"label": "TP · 4 s", "title": "Prisma de chegada", "text": "Deixa um prisma grande (76 px) no destino por 10 s, que também divide feixes. A recarga começa quando ele some."},
@@ -174,7 +174,7 @@ static func spectrum(name: String) -> Dictionary:
 			return _aura("Punição: ataque quando o inimigo se expõe.", [
 				["GATILHO", "Aberturas", "Acertar inimigos preparando ataque, se recuperando, atordoados ou prestes a atirar dá cargas; desviar de um ataque telegrafado com Teleporte dá 2."],
 				["EFEITO", "Golpe de Oportunidade", "Com 4 cargas, o próximo dano direto causa +62% do seu dano, atrasa o inimigo e devolve parte da recarga de Q/E."],
-				["CUSTO", "Janela", "12 s sem Abertura começa a perder cargas. Cartas, áreas persistentes e aliados não contam."],
+				["CUSTO", "Janela", "12 s sem Abertura começa a perder cargas. Itens, áreas persistentes e aliados não contam."],
 			])
 	return {}
 

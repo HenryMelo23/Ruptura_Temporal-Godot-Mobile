@@ -1333,9 +1333,9 @@ static func _draw_arauto_card_drops(game: Node2D, camera: Vector2) -> void :
 			var arrow := PackedVector2Array([arrow_tip, arrow_tip + Vector2(-7.0, -10.0), arrow_tip + Vector2(7.0, -10.0)])
 			game.draw_colored_polygon(arrow, Color(owner_color.r, owner_color.g, owner_color.b, alpha))
 			game._draw_centered(owner_name, p + Vector2(0.0, -58.0 + bob), 12, Color(owner_color.r, owner_color.g, owner_color.b, alpha))
-			game._draw_centered("SUA CARTA" if game._reward_owned_by_local(drop) else "RESERVADA", p + Vector2(0, 42 + bob), 10, Color(owner_color.r, owner_color.g, owner_color.b, 0.9 * alpha))
+			game._draw_centered("SEU ITEM" if game._reward_owned_by_local(drop) else "RESERVADA", p + Vector2(0, 42 + bob), 10, Color(owner_color.r, owner_color.g, owner_color.b, 0.9 * alpha))
 		else:
-			game._draw_centered("CARTA", p + Vector2(0, 42 + bob), 10, Color(0.88, 0.96, 1.0, 0.86 * alpha))
+			game._draw_centered("ITEM", p + Vector2(0, 42 + bob), 10, Color(0.88, 0.96, 1.0, 0.86 * alpha))
 
 
 static func _draw_arauto_evolution_fragment(game: Node2D, camera: Vector2) -> void :

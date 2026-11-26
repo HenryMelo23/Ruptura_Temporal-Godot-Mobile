@@ -74,7 +74,7 @@ static func _henry_build_model(game: Node2D) -> Dictionary:
 
 static func _draw_character_cards(game: Node2D, viewport: Vector2) -> void:
 	game._draw_glitch_title("ESCOLHA QUEM ATRAVESSA", Vector2(viewport.x * 0.5, 66.0), 34, CYAN)
-	game._draw_centered("Escolha o personagem e como as cartas entram na jornada.", Vector2(viewport.x * 0.5, 106.0), 15, Color(0.78, 0.92, 1.0))
+	game._draw_centered("Escolha o personagem e como os itens entram na jornada.", Vector2(viewport.x * 0.5, 106.0), 15, Color(0.78, 0.92, 1.0))
 	var card_size := Vector2(minf(330.0, viewport.x * 0.36), minf(390.0, viewport.y * 0.54))
 	var gap := minf(50.0, viewport.x * 0.04)
 	var total := card_size.x * 2.0 + gap
@@ -94,7 +94,7 @@ static func _draw_character_cards(game: Node2D, viewport: Vector2) -> void:
 	game.buttons["journey_mode_shop"] = Rect2(mode_left, mode_y, mode_button_width, 40.0)
 	game.buttons["journey_mode_drop"] = Rect2(mode_left + mode_button_width + mode_gap, mode_y, mode_button_width, 40.0)
 	_draw_mode_button(game, game.buttons["journey_mode_shop"], "LOJA", "compras entre combates", game.selected_run_mode == game.RUN_MODE_SHOP, CYAN)
-	_draw_mode_button(game, game.buttons["journey_mode_drop"], "DROP", "cartas dos inimigos", game.selected_run_mode == game.RUN_MODE_DROP, Color(1.0, 0.68, 0.18))
+	_draw_mode_button(game, game.buttons["journey_mode_drop"], "DROP", "itens dos inimigos", game.selected_run_mode == game.RUN_MODE_DROP, Color(1.0, 0.68, 0.18))
 	game._draw_centered("A/D PERSONAGEM  •  W/S MODO  •  ENTER CONFIRMA", Vector2(viewport.x * 0.5, mode_y + 62.0), 11, Color(0.66, 0.78, 0.84))
 	_draw_button(game, game.buttons["character_back"], "VOLTAR", false, Color(0.55, 0.72, 0.78))
 

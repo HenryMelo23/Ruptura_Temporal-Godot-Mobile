@@ -1,6 +1,6 @@
 extends RefCounted
 
-const CATEGORIES: = ["Manifestacoes", "Inimigos", "Chefes", "Fases", "Fracoes", "Espectros", "Cartas"]
+const CATEGORIES: = ["Manifestacoes", "Inimigos", "Chefes", "Fases", "Fracoes", "Espectros", "Itens"]
 const FILTERS: = ["all", "combat", "lore", "support"]
 const EXTERNAL_TEXT_PATH: = "res://docs/catalogo_temporal_textos.json"
 const Lore = preload("res://scripts/catalog/catalog_lore.gd")
@@ -38,7 +38,7 @@ static func category_label(index: int) -> String:
 		3: return "FASES"
 		4: return "FRACOES"
 		5: return "ESPECTROS"
-		_: return "CARTAS"
+		_: return "ITENS"
 
 
 static func entries_for_tab(tab_index: int, manifestations: Array, auras: Array, cards: Array) -> Array:
@@ -351,21 +351,21 @@ static func card_entries(cards: Array) -> Array:
 	var output: Array = []
 	for index in range(cards.size()):
 		var base: Dictionary = Dictionary(cards[index]).duplicate(true)
-		var display: = String(base.get("name", "Carta %d" % index))
+		var display: = String(base.get("name", "Item %d" % index))
 		var key: = String(base.get("id", normalize_id(display)))
 		base["id"] = key
 		base["kind"] = "card"
 		base["category"] = "cards"
 		base["source_type"] = "JOGO ATUAL"
 		base["sort_order"] = index
-		base["classification"] = "Carta de run"
+		base["classification"] = "Item de run"
 		base["role"] = "support" if String(base.get("desc", "")).findn("cura") >= 0 or String(base.get("desc", "")).findn("defesa") >= 0 else "combat"
 		base["subtitle"] = String(base.get("nick", "Fragmento de escolha"))
 		base["summary"] = String(base.get("nick", display)) + " - " + String(base.get("desc", "Efeito registrado."))
-		base["identity_text"] = "Carta registrada como %s. Ela representa uma decisao condensada: o jogador compra uma regra pequena e aceita que essa regra passe a deformar o restante da run." % display
-		base["history_text"] = "As cartas nao parecem vir de uma loja comum. A Ruptura as oferece como fragmentos de possibilidades recuperadas, e Geovana as trata como atalhos perigosos: cada uma ajuda agora e muda o peso das proximas escolhas."
-		base["mechanics_text"] = String(base.get("desc", "Efeito ativo durante a run.")) + " No deck, seu valor real depende de quantas copias ja foram compradas, do custo atual da loja e das cartas que combinam com ela."
-		base["field_note"] = "Nota de Geovana: nenhuma carta e gratis; algumas so demoram mais para cobrar."
+		base["identity_text"] = "Item registrado como %s. Ele representa uma decisao condensada: o jogador compra uma regra pequena e aceita que essa regra passe a deformar o restante da run." % display
+		base["history_text"] = "Os itens nao parecem vir de uma loja comum. A Ruptura os oferece como fragmentos de possibilidades recuperadas, e Geovana os trata como atalhos perigosos: cada um ajuda agora e muda o peso das proximas escolhas."
+		base["mechanics_text"] = String(base.get("desc", "Efeito ativo durante a run.")) + " No deck, seu valor real depende de quantas copias ja foram compradas, do custo atual da loja e dos itens que combinam com ele."
+		base["field_note"] = "Nota de Geovana: nenhum item e gratis; alguns so demoram mais para cobrar."
 		base["related_entry_ids"] = ["ruptura"]
 		base["keywords"] = [key, display, String(base.get("nick", "")), "carta", "deck", "loja"]
 		output.append(_apply_external_text(base))
@@ -458,10 +458,10 @@ static func faction_entries() -> Array:
 static func _faction_entries_base() -> Array:
 	return [
 		_entry("fraction", "ruptura", "Ruptura", "Cicatriz temporal e colapso espacial", "O acidente dimensional gerado pela explosão do dispositivo temporal.", "A Ruptura foi o acidente provocado pela explosão do dispositivo temporal. A violenta descarga espacial rasgou o tecido entre as dimensões, quase destruindo a realidade original de Geovana e espalhando os componentes por universos preexistentes.", "A Ruptura não criou as dimensões nem as criaturas que habitam cada mundo. A energia viva do dispositivo rasgou o espaço-tempo e deixou um rastro dimensional pontilhado entre os locais por onde suas peças passaram. A jornada de Geovana consiste em seguir esse rastro, recuperar cada peça e atravessar para a próxima dimensão.", "Conecta as diferentes dimensões da travessia e dita o rastro energético que Geovana deve seguir.", "map_phase_1", Color(1.0, 0.08, 0.78), ["geovana", "arauto"], "lore"), 
-		_entry("fraction", "geovana", "Geovana", "Pessoa no centro da anomalia", "A pessoa no centro da anomalia.", "Geovana nao recebe poderes limpos; recebe formas de sobreviver a um mundo que insiste em desmontar.", "O catalogo evita chama-la de arma. Ela e testemunha, erro, chave e alguem tentando atravessar tudo isso ainda sendo alguem.", "O jogador escolhe Manifestacao, Espectro e cartas para transformar uma run em estilo proprio.", "player_idle", Color(0.72, 0.92, 1.0), ["henrique", "ruptura"], "lore"), 
+		_entry("fraction", "geovana", "Geovana", "Pessoa no centro da anomalia", "A pessoa no centro da anomalia.", "Geovana nao recebe poderes limpos; recebe formas de sobreviver a um mundo que insiste em desmontar.", "O catalogo evita chama-la de arma. Ela e testemunha, erro, chave e alguem tentando atravessar tudo isso ainda sendo alguem.", "O jogador escolhe Manifestacao, Espectro e itens para transformar uma run em estilo proprio.", "player_idle", Color(0.72, 0.92, 1.0), ["henrique", "ruptura"], "lore"), 
 		_entry("fraction", "arauto", "Arauto", "Mensageiro entre limiares", "O mensageiro que interrompe a run.", "Aparece como aviso vivo: a Ruptura percebeu que Geovana esta crescendo e envia uma prova entre fase e chefe.", "Carrega fragmentos de evolucao. Mata-lo nao encerra uma ameaca; abre uma escolha.", "Entrega fragmento de evolucao de Manifestacao. O jogador escolhe opcoes que mudam comportamento da Manifestacao.", "arauto", Color(0.78, 0.52, 1.0), ["manifestacoes", "ruptura", "geovana"], "combat"), 
 		_entry("fraction", "manifestacoes", "Manifestacoes", "Assinaturas da Ressonancia", "Poderes que traduzem trauma em metodo.", "Cada Manifestacao e uma forma de Geovana sobreviver sem virar apenas ferramenta da Ruptura. Elas estabilizam disparos, habilidades e ultimates como assinaturas reconheciveis.", "O catalogo as organiza como padroes de combate, mas o campo mostra algo mais pessoal: cada forma parece responder a um tipo de medo, insistencia ou lembranca.", "A escolha define ataque base, HAB1, ultimate, leitura de posicionamento e estilo de risco. Evolucoes do Arauto alteram comportamento sem trocar a identidade central.", "choice_bg", Color(0.64, 0.44, 1.0), ["geovana", "arauto", "ruptura"], "lore"), 
-		_entry("fraction", "cartas", "Cartas", "Fragmentos compraveis", "Escolhas pequenas que mudam a run inteira.", "As Cartas condensam possibilidades recuperadas dentro da partida. Algumas aumentam forca bruta; outras mudam economia, seguranca, cura, leitura de perigo ou rotas de sobrevivencia.", "Geovana as compra como quem aceita um atalho que ainda nao revelou o custo inteiro. O deck vira historico da run e tambem sua assinatura.", "Cada compra altera estatisticas ou regras ativas. Cartas consumiveis somem ao uso, cartas raras exigem sorte desbloqueada e o valor da loja cresce conforme a partida amadurece.", "choice_bg", Color(1.0, 0.76, 0.26), ["geovana", "ruptura"], "support"), 
+		_entry("fraction", "cartas", "Itens", "Fragmentos compraveis", "Escolhas pequenas que mudam a run inteira.", "Os Itens condensam possibilidades recuperadas dentro da partida. Alguns aumentam forca bruta; outros mudam economia, seguranca, cura, leitura de perigo ou rotas de sobrevivencia.", "Geovana as compra como quem aceita um atalho que ainda nao revelou o custo inteiro. O deck vira historico da run e tambem sua assinatura.", "Cada compra altera estatisticas ou regras ativas. Itens consumiveis somem ao uso, itens raros exigem sorte desbloqueada e o valor da loja cresce conforme a partida amadurece.", "choice_bg", Color(1.0, 0.76, 0.26), ["geovana", "ruptura"], "support"), 
 		_entry("fraction", "henrique", "Henrique", "Ausencia que move a travessia", "O nome que transforma fuga em busca.", "Henrique aparece no nucleo emocional da jornada: nao como estatistica, mas como a razao pela qual Geovana continua atravessando mundos que nao prometem volta.", "Sem o manuscrito disponivel nesta maquina, o catalogo registra Henrique como eixo emocional apontado pelos documentos do projeto e pela estrutura narrativa ja citada nas tarefas.", "Funciona como ancora narrativa. Nao controla mecanicas diretas de combate, mas orienta a leitura de Geovana, da Ruptura e dos fragmentos.", "choice_bg", Color(1.0, 0.82, 0.36), ["geovana", "ruptura"], "lore"), 
 		_entry("fraction", "d37", "D37", "Codigo de travessia", "O nome tecnico que a Ruptura deixa nos arquivos.", "D37 e tratado como assinatura de anomalia e como marcador de investigacao. Ele ajuda a separar fenomeno, rastro e consequencia.", "Nos arquivos recuperados, D37 aparece menos como resposta e mais como coordenada: um ponto que insiste em aparecer quando Geovana chega perto demais da verdade.", "Funciona como conceito de canon para conectar fragmentos, mundos, leituras de catalogo e classificacoes de ameaca.", "choice_bg", Color(0.34, 1.0, 0.62), ["ruptura", "geovana"], "lore")
 	]

@@ -3219,7 +3219,7 @@ func _cards_report_rows() -> Array:
 func _cards_detailed_report_text() -> String:
 	var rows: = _cards_report_rows()
 	if rows.is_empty():
-		return "Nenhuma carta comprada."
+		return "Nenhum item comprado."
 	var parts: = []
 	for row in rows:
 		parts.append("%s x%d [%s] - %s" % [String(row["name"]), int(row["count"]), String(row["rarity"]), String(row["effect"])])
@@ -3283,7 +3283,7 @@ func _run_balance_flags() -> Array:
 	if player_damage > max(1.0, run_start_damage) * 8.0:
 		flags.append("Dano final acima de 8x o dano inicial")
 	if _deck_total_cards() > 0 and enemies_killed <= 0:
-		flags.append("Cartas compradas sem abates registrados")
+		flags.append("Itens comprados sem abates registrados")
 	if run_points_spent > run_points_earned + 500:
 		flags.append("Gasto de pontos acima do ganho esperado")
 	if _total_boss_damage_report() > 0 and boss_active and not bool(run_boss_reached.get(current_phase, false)):
@@ -14729,7 +14729,7 @@ func _update_arauto_card_drops(delta: float) -> void :
 					rpc_id(1, "_rpc_request_card_drop_collect", drop_id, _mp_unique_id())
 			var card_color: Color = card.get("color", Color(1.0, 0.86, 0.24))
 			_spawn_radial_particles(Vector2(drop["pos"]), card_color, 22)
-			_add_text(("FICHA ? %s" % _card_rarity_label(card)) if mystery else ("CARTA: %s" % String(card.get("nick", card.get("name", "???")))), player_pos + Vector2(-80, -88), card_color, 1.25, 20)
+			_add_text(("FICHA ? %s" % _card_rarity_label(card)) if mystery else ("ITEM: %s" % String(card.get("nick", card.get("name", "???")))), player_pos + Vector2(-80, -88), card_color, 1.25, 20)
 	arauto_card_drops = arauto_card_drops.filter( func(drop): return float(drop.get("life", 0.0)) > 0.0)
 
 
@@ -28723,8 +28723,8 @@ func _make_empty_shop_slot(label: = "Vaga Vazia") -> Dictionary:
 	return {
 		"empty_slot": true,
 		"name": label,
-		"nick": "Sem Carta",
-		"desc": "Nenhuma carta ocupando este espaco.",
+		"nick": "Sem Item",
+		"desc": "Nenhum item ocupando este espaco.",
 		"color": Color(0.4, 0.46, 0.52)
 	}
 
@@ -30742,7 +30742,7 @@ func _update_burned_card_marks_after_shop(picks: Array) -> void :
 				buffed["cinzas_buff_stacks"] = _cinzas_mark_stacks(_card_id(card))
 				buffed["cinzas_bonus_summary"] = _cinzas_return_bonus_summary(buffed)
 				buffed["cinzas_burn_seed"] = int(cinzas_burn_marks[mark_index].get("holes_seed", abs(_card_id(card).hash())))
-				buffed["desc"] = String(card.get("desc", "")) + "\nRetorno das Cinzas x%d: bonus destacado em chamas. Se voce rolar ou comprar outra carta, a brasa permanece ate esta carta ser comprada." % int(buffed["cinzas_buff_stacks"])
+				buffed["desc"] = String(card.get("desc", "")) + "\nRetorno das Cinzas x%d: bonus destacado em chamas. Se voce rolar ou comprar outro item, a brasa permanece ate este item ser comprado." % int(buffed["cinzas_buff_stacks"])
 				picks[i] = buffed
 				cinzas_burn_marks[mark_index]["eligible_misses"] = 0
 				cinzas_burn_marks[mark_index]["last_seen_visit"] = shop_visit_index
@@ -32630,7 +32630,7 @@ func _card_category(card_name: String) -> String:
 		"Desvio de Probabilidade": return "RISCO E CONTRAGOLPE"
 		"Ponto Cego": return "ATAQUE PELAS COSTAS"
 		"Mandamento da Ruptura": return "LEI DE HABILIDADES"
-		"Carta Zero": return "ESCALA DE CARTAS COMUNS"
+		"Carta Zero": return "ESCALA DE ITENS COMUNS"
 		"Necrocronismo": return "ECO QUE RICOCHETEIA"
 		"Coração de Antimatéria": return "CARGA DE IMPLOSAO"
 		"Cofre do Excesso": return "OVERKILL ARMAZENADO"
@@ -32646,7 +32646,7 @@ func _card_category(card_name: String) -> String:
 		"Tributo da Dor": return "ECONOMIA DE SOBREVIVENCIA"
 		"Estilhaço Prismático": return "ECONOMIA DE ABATES"
 		"Crítico Absoluto": return "AMPLIFICACAO CRITICA"
-		"Arquivo do Impossível": return "DUPLICACAO DE CARTAS"
+		"Arquivo do Impossível": return "DUPLICACAO DE ITENS"
 	return "MELHORIA"
 
 
@@ -32669,7 +32669,7 @@ func _card_lore(card_name: String) -> String:
 		"Devorador de Destinos": return "O destino mais pesado vira ancora. Quando ele cai, os futuros proximos se partem e Geovana veste os restos."
 		"Escolha Adiada": return "Uma decisao recusada hoje fica presa ao mesmo preco ate Geovana aceitar pagar ou soltar a linha."
 		"Trégua Regenerativa": return "Quando a linha para de ferir, o corpo lembra o caminho de volta."
-		"Cinzas da Escolha": return "Brasa que so anomalias carregadas de energia conseguem gerar: nenhuma loja vende. Uma carta sacrificada nao desaparece; outra nasce no lugar, e a queimada volta chamuscada, mais forte uma unica vez, ate que Geovana aceite comprar o que restou dela."
+		"Cinzas da Escolha": return "Brasa que so anomalias carregadas de energia conseguem gerar: nenhuma loja vende. Um item sacrificado nao desaparece; outro nasce no lugar, e o queimado volta chamuscado, mais forte uma unica vez, ate que Geovana aceite comprar o que restou dele."
 		"Reserva de Pulso": return "A cura que sobraria fica guardada como uma batida extra para o pior instante."
 		"Casulo Reativo": return "Depois de muitos impactos, a defesa fecha por instinto e ensina a rajada a esperar."
 		"Passagem Intangível": return "O salto nao termina no destino; por um instante, Geovana ainda nao voltou totalmente ao mundo."
@@ -32691,7 +32691,7 @@ func _card_lore(card_name: String) -> String:
 		"Desvio de Probabilidade": return "O golpe que quase aconteceu deixa uma sobra de chance pronta para ser cobrada."
 		"Ponto Cego": return "O destino tem costas. Quem ataca por elas encontra uma defesa que ainda nao virou o rosto."
 		"Mandamento da Ruptura": return "A terceira ordem nao pede permissao: ela atravessa cooldown, impacto e risco por pura autoridade temporal."
-		"Carta Zero": return "A origem reescreve os numeros pequenos. Toda carta comum passa a lembrar que veio depois dela."
+		"Carta Zero": return "A origem reescreve os numeros pequenos. Todo item comum passa a lembrar que veio depois dela."
 		"Necrocronismo": return "A morte rebobina: o inimigo volta como Eco, atravessa a horda em investidas e implode quando o tempo acaba."
 		"Coração de Antimatéria": return "Dano limpo comprime o vazio ate o proximo impacto direto transformar o alvo em centro de implosao."
 		"Cofre do Excesso": return "Nada se perde no excesso. O dano que sobraria e guardado para cobrar elites e chefes."
@@ -32724,7 +32724,7 @@ func _card_effect_snapshot(card: Dictionary, count: int) -> String:
 		CARD_ABSOLUTE_CRIT_ID:
 			return "dano critico final x%.1f (+100%% por copia)" % roguelike_point_card_controller.critical_damage_multiplier(safe_count)
 		CARD_IMPOSSIBLE_ARCHIVE_ID:
-			return "cada carta nao lendaria adquirida concede +%d copia(s) gratuita(s)" % safe_count
+			return "cada item nao lendario adquirido concede +%d copia(s) gratuita(s)" % safe_count
 		CARD_PARADOX_ID:
 			return "apos 18 acertos, habilidade abre eco por %.2fs causando %.0f%% do dano confirmado" % [_paradox_active_duration(safe_count), _paradox_echo_ratio(safe_count) * 100.0]
 		"Speed Boost":
@@ -32750,7 +32750,7 @@ func _card_effect_snapshot(card: Dictionary, count: int) -> String:
 		"Sorte":
 			return "efeito de probabilidade oculto"
 		"cinzas_escolha":
-			return "%d queima(s) consumivel(eis); carta que volta recebe bonus unico" % safe_count
+			return "%d queima(s) consumivel(eis); item que volta recebe bonus unico" % safe_count
 		"Poison":
 			return "veneno base %.2f%% + escala por compra" % ((0.05 + 0.009 * safe_count) * 100.0 if safe_count > 0 else 0.0)
 		"Coletora":
@@ -32762,7 +32762,7 @@ func _card_effect_snapshot(card: Dictionary, count: int) -> String:
 		"Trembo":
 			return "%d carga(s) de reversao temporal" % min(2, safe_count)
 		"carta_zero":
-			return "cartas comuns multiplicadas em %.1f%%" % ((1.0 + 0.06 * sqrt(float(safe_count))) * 100.0 if safe_count > 0 else 100.0)
+			return "itens comuns multiplicados em %.1f%%" % ((1.0 + 0.06 * sqrt(float(safe_count))) * 100.0 if safe_count > 0 else 100.0)
 		"necrocronismo":
 			return "Ecos: investida %.0f%% do dano, ate %d ativos" % [(_necro_total_power() * 100.0 if safe_count > 0 else 0.0), _necrocronism().alive_cap()]
 		"coracao_antimateria":
@@ -32933,7 +32933,7 @@ func _catalog_detail_description(item: Dictionary) -> String:
 	if kind == "card":
 		var card: = _catalog_card_source(item)
 		if _catalog_card_locked(item):
-			return "Registro lacrado. O catalogo ainda nao permite revelar o nome, a imagem ou o efeito desta carta."
+			return "Registro lacrado. O catalogo ainda nao permite revelar o nome, a imagem ou o efeito deste item."
 		var lines: = [String(card.get("desc", ""))]
 		for line in _card_projection_lines(card):
 			lines.append(String(line))
@@ -32955,7 +32955,7 @@ func _catalog_detail_lore(item: Dictionary) -> String:
 	var kind: = _catalog_item_kind(item)
 	if kind == "card":
 		if _catalog_card_locked(item):
-			return "Arquivo preservado sob sigilo temporal. Complete o objetivo para abrir a ficha completa da carta."
+			return "Arquivo preservado sob sigilo temporal. Complete o objetivo para abrir a ficha completa do item."
 		var card: = _catalog_card_source(item)
 		var book: Dictionary = RTCatalogLore.DATA.get(String(card.get("id", item.get("id", ""))), {})
 		if String(book.get("h", "")) != "":
@@ -33737,7 +33737,7 @@ func _queue_unlock_card_notification(card: Dictionary, challenge_text: String) -
 	if card.is_empty():
 		return
 	var accent: Color = Color(0.12, 0.82, 1.0)
-	_queue_unlock_notification("CARTA DESBLOQUEADA", String(card.get("name", "Carta")).to_upper(), challenge_text, _card_texture(card), accent)
+	_queue_unlock_notification("ITEM DESBLOQUEADO", String(card.get("name", "Item")).to_upper(), challenge_text, _card_texture(card), accent)
 
 
 func _queue_unlock_manifestation_notification(manifestation: Dictionary, challenge_text: String) -> void :
@@ -35122,7 +35122,7 @@ func _catalog_tab_label(index: int) -> String:
 		5:
 			return "ESPECTROS"
 		_:
-			return "CARTAS"
+			return "ITENS"
 
 
 func _catalog_tab_key() -> String:
@@ -35205,7 +35205,7 @@ func _catalog_short_text(item: Dictionary) -> String:
 
 func _catalog_detail_title(kind: String) -> String:
 	match kind:
-		"card": return "CARTA"
+		"card": return "ITEM"
 		"manifestation": return "MANIFESTACAO"
 		"spectrum": return "ESPECTRO"
 		"enemy": return "INIMIGO"
@@ -35241,7 +35241,7 @@ func _catalog_enemy_items() -> Array:
 		{"kind": "enemy", "name": "Lodario", "summary": "O peso mole da Chaga.", "desc": "O Lodario se arrasta como lama com vontade propria. Onde ele passa, a fase parece ficar mais espessa e menos generosa com erro.", "lore": "Ele e uma mistura de sedimento, memoria e carne cansada. A Matriarca nao o comanda como soldado; ela o derrama pelo mapa.", "mechanics": "Funciona como corpo de bloqueio: mais resistente e lento, bom para fechar caminhos e tornar a fuga menos limpa.", "color": Color(0.86, 0.7, 0.46), "texture": "enemy_phase_6_lodario"},
 		{"kind": "enemy", "name": "Pustula Fossil", "summary": "Uma ferida antiga que ainda pulsa.", "desc": "A Pustula Fossil parece parada demais para ser urgente, ate a arena obrigar Geovana a encostar naquilo que devia ter sido enterrado.", "lore": "A sexta ruptura conserva suas dores como reliquias. Cada Pustula e um fragmento fossilizado da Chaga tentando voltar a ser carne.", "mechanics": "Inimigo pesado de area e prioridade. Deve ser lido como obstaculo vivo que aumenta o custo de limpar a fase sem planejamento.", "color": Color(1.0, 0.62, 0.32), "texture": "enemy_phase_6_pustula_fossil"},
 		{"kind": "enemy", "name": "Sanguessuga Cronal", "summary": "Bebe segundos antes de beber sangue.", "desc": "Ela nao caca como um perseguidor comum. Cai longe do alvo, arma o bote por alguns segundos e so entao salta para grudar no presente de Geovana.", "lore": "A Sanguessuga Cronal e parasita de instante: gruda no presente e tenta tornar todo futuro curto demais para escapar.", "mechanics": "Armadilha viva da fase 6. Avisa a queda distante, permanece quase imperceptivel por 2s antes de armar o ataque e evita dividir o proprio raio de bote com outra sanguessuga.", "color": Color(0.92, 0.42, 0.72), "texture": "enemy_phase_6_sanguessuga_cronal"},
-		{"kind": "enemy", "name": "Suturador de Ambar", "summary": "Uma cicatriz que escolhe por onde a arena pode respirar.", "desc": "Ele circula o alvo enquanto costura a Chaga, dispara agulhas e usa um arpao para puxar, punir e roubar uma carta visivel.", "lore": "O Suturador e uma cicatriz que ainda trabalha. Seu ambar vivo segura a carne da fase 6 como se o futuro precisasse de costura.", "mechanics": "Encontro recorrente com quatro ataques: suturas de rota, leque mirado, arpao de puxao e coroa radial. O arpao pode roubar uma carta e mostra qual foi levada; ao morrer, entrega cartas e devolve as roubadas como espolios.", "color": Color(1.0, 0.66, 0.18), "texture": "enemy_phase_6_suturador_ambar"}
+		{"kind": "enemy", "name": "Suturador de Ambar", "summary": "Uma cicatriz que escolhe por onde a arena pode respirar.", "desc": "Ele circula o alvo enquanto costura a Chaga, dispara agulhas e usa um arpao para puxar, punir e roubar um item visivel.", "lore": "O Suturador e uma cicatriz que ainda trabalha. Seu ambar vivo segura a carne da fase 6 como se o futuro precisasse de costura.", "mechanics": "Encontro recorrente com quatro ataques: suturas de rota, leque mirado, arpao de puxao e coroa radial. O arpao pode roubar um item e mostra qual foi levado; ao morrer, entrega itens e devolve os roubados como espolios.", "color": Color(1.0, 0.66, 0.18), "texture": "enemy_phase_6_suturador_ambar"}
 	]
 
 
@@ -35258,8 +35258,8 @@ func _catalog_boss_items() -> Array:
 
 func _catalog_fraction_items() -> Array:
 	return [
-		{"kind": "fraction", "name": "Ruptura", "summary": "A força que reescreve fase, corpo e regra.", "desc": "A Ruptura nao e apenas inimiga. E uma condicao do mundo: cada fase mostra um jeito diferente dela tentar explicar que o tempo perdeu obediencia.", "lore": "Alguns arquivos dizem que ela comecou como acidente. Outros dizem que acidente e apenas o nome humano para algo que chegou cedo demais.", "mechanics": "Escala fases, manifesta inimigos, altera mapas, chama Arauto, oferece cartas e força Geovana a escolher como vai quebrar de volta.", "color": Color(1.0, 0.08, 0.78), "texture": "map_phase_1"},
-		{"kind": "fraction", "name": "Geovana", "summary": "A pessoa no centro da anomalia.", "desc": "Geovana nao recebe poderes limpos; recebe formas de sobreviver a um mundo que insiste em desmontar. Cada manifestacao e uma resposta emocional e mecanica.", "lore": "O catalogo evita chamar Geovana de arma. Ela e testemunha, erro, chave e alguem tentando atravessar tudo isso ainda sendo alguem.", "mechanics": "O jogador escolhe Manifestacao, Espectro e cartas para transformar uma run em estilo proprio.", "color": Color(0.72, 0.92, 1.0), "texture": "player_idle"},
+		{"kind": "fraction", "name": "Ruptura", "summary": "A força que reescreve fase, corpo e regra.", "desc": "A Ruptura nao e apenas inimiga. E uma condicao do mundo: cada fase mostra um jeito diferente dela tentar explicar que o tempo perdeu obediencia.", "lore": "Alguns arquivos dizem que ela comecou como acidente. Outros dizem que acidente e apenas o nome humano para algo que chegou cedo demais.", "mechanics": "Escala fases, manifesta inimigos, altera mapas, chama Arauto, oferece itens e força Geovana a escolher como vai quebrar de volta.", "color": Color(1.0, 0.08, 0.78), "texture": "map_phase_1"},
+		{"kind": "fraction", "name": "Geovana", "summary": "A pessoa no centro da anomalia.", "desc": "Geovana nao recebe poderes limpos; recebe formas de sobreviver a um mundo que insiste em desmontar. Cada manifestacao e uma resposta emocional e mecanica.", "lore": "O catalogo evita chamar Geovana de arma. Ela e testemunha, erro, chave e alguem tentando atravessar tudo isso ainda sendo alguem.", "mechanics": "O jogador escolhe Manifestacao, Espectro e itens para transformar uma run em estilo proprio.", "color": Color(0.72, 0.92, 1.0), "texture": "player_idle"},
 		{"kind": "fraction", "name": "Arauto", "summary": "O mensageiro que interrompe a run.", "desc": "Ele aparece como aviso vivo: a Ruptura percebeu que Geovana esta crescendo e envia uma prova entre fase e chefe.", "lore": "O Arauto carrega fragmentos de evolucao. Mata-lo nao encerra uma ameaca; abre uma escolha.", "mechanics": "Entrega fragmento de evolucao de manifestacao. O jogador escolhe entre opcoes que mudam o comportamento da manifestacao.", "color": Color(0.78, 0.52, 1.0), "texture": "arauto"}
 	]
 
@@ -39765,7 +39765,7 @@ func _try_apply_collection_unlock_cheat(cheat: String) -> bool:
 				unlocked_card_ids[card_id] = true
 		gameplay_cheat_text = ""
 		_save_card_unlocks()
-		_add_text("TODAS AS CARTAS LIBERADAS", player_pos + Vector2(0, -100), Color(1.0, 0.72, 0.22), 1.4, 24)
+		_add_text("TODOS OS ITENS LIBERADOS", player_pos + Vector2(0, -100), Color(1.0, 0.72, 0.22), 1.4, 24)
 		_play_sfx("ui_spectrum_switch", 0.01, 0.6, 1.08)
 		_vibrate(80, 0.32)
 		return true

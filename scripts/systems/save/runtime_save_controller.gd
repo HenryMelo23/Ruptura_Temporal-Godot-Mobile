@@ -920,7 +920,7 @@ func _retry_confirm_lines() -> Array[String]:
 	if retry_confirm_new_run or not _retry_available():
 		return [
 			"A run atual foi encerrada.",
-			"Uma nova jornada reinicia mapa, pontos, cartas e progressao da partida."
+			"Uma nova jornada reinicia mapa, pontos, itens e progressao da partida."
 		]
 	var attempt: int = retry_charges_used + 1
 	var hp_ratio: float = float(core.RUN_RETRY_HP_RATIOS[clampi(attempt - 1, 0, core.RUN_RETRY_HP_RATIOS.size() - 1)])

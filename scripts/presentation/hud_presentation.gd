@@ -217,7 +217,7 @@ static func _draw_performance_status_hud(game: Node2D, viewport: Vector2) -> voi
 	game.draw_rect(right_rect, Color(0.015, 0.025, 0.035, 0.9), true)
 	game.draw_rect(right_rect, Color(0.12, 0.9, 1.0), false, 1.0)
 	game.draw_string(game.font, right_rect.position + Vector2(10.0, 22.0), "PONTOS  %s" % game.hud_feedback.display_points(game, game.score), HORIZONTAL_ALIGNMENT_LEFT, right_rect.size.x - 20.0, 16, Color.WHITE)
-	game.draw_string(game.font, right_rect.position + Vector2(10.0, 45.0), "CARTAS COMPRAVEIS: %d" % game._affordable_card_count(), HORIZONTAL_ALIGNMENT_LEFT, right_rect.size.x - 20.0, 11, Color(0.72, 0.96, 1.0))
+	game.draw_string(game.font, right_rect.position + Vector2(10.0, 45.0), "ITENS COMPRAVEIS: %d" % game._affordable_card_count(), HORIZONTAL_ALIGNMENT_LEFT, right_rect.size.x - 20.0, 11, Color(0.72, 0.96, 1.0))
 
 	if game.boss_active and game.boss_hp > 0.0 and not game._boss3_miasma_hides_boss_bar() and not game._umbra_miasma_hides_boss_bar():
 		var boss_rect := Rect2(viewport.x * 0.5 - 180.0, 18.0, 360.0, 24.0)
@@ -1056,7 +1056,7 @@ static func _draw_edit_layout(game: Node2D, viewport: Vector2) -> void :
 	var cards_rect = Rect2(game._cards_panel_pos(viewport, left_rect), Vector2(min(224.0, viewport.x * 0.46), 94.0) * game.hud_cards_panel_scale)
 	var c_cards = Color(1, 1, 0, 0.6) if game.edit_layout_selected == "cards_panel" else Color(1.0, 0.64, 0.18, 0.3)
 	game.draw_rect(cards_rect, c_cards, false, 2)
-	game._draw_centered("CARTAS HUD", cards_rect.get_center(), 13, Color.WHITE)
+	game._draw_centered("ITENS HUD", cards_rect.get_center(), 13, Color.WHITE)
 	if game._edit_layout_scale_controls_visible("cards_panel"):
 		game._draw_layout_scale_controls(cards_rect)
 

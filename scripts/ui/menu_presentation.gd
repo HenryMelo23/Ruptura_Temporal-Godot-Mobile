@@ -59,10 +59,10 @@ static func draw_pause_deck(g: CanvasItem, viewport: Vector2) -> void:
 	var view_counts: Dictionary = g._deck_view_counts()
 	var view_name: String = g._deck_view_name()
 	g._draw_glitch_title("DECK DE %s" % view_name.to_upper(), Vector2(viewport.x * 0.5, panel.position.y + 44), 30 if not portrait else 26, Color(0.44, 0.84, 1.0))
-	g._draw_centered("TOTAL DE CARTAS: %d" % g._deck_total_cards_from_counts(view_counts), Vector2(viewport.x * 0.5, panel.position.y + 84), 18, Color.WHITE)
+	g._draw_centered("TOTAL DE ITENS: %d" % g._deck_total_cards_from_counts(view_counts), Vector2(viewport.x * 0.5, panel.position.y + 84), 18, Color.WHITE)
 	var owned: Array = g._owned_deck_cards_from_counts(view_counts)
 	if owned.is_empty():
-		g._draw_centered("Nenhuma carta comprada nesta run.", panel.get_center(), 18, Color(0.72, 0.88, 0.94))
+		g._draw_centered("Nenhum item comprado nesta run.", panel.get_center(), 18, Color(0.72, 0.88, 0.94))
 	else:
 		g._clamp_deck_selection(owned.size())
 		var center = Vector2(viewport.x * 0.5, panel.position.y + (245.0 if not portrait else 260.0))

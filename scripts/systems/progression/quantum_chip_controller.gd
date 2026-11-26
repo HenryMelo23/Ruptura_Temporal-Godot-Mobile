@@ -15,8 +15,8 @@ const SAVE_PATH := "user://quantum_chips.cfg"
 const CHIPS: Array = [
 	{
 		"id": CORRUPTOR, "name": "Corruptor Mercantil", "short": "CORRUPTOR",
-		"buff": "Modo Drop: cada carta dropada vira um ? da cor da raridade. A Fenda do Mercador abre so para voce escolher QUALQUER carta daquela raridade.",
-		"debuff": "So no modo Drop (sem loja). Voce nao ve a carta ao coletar; so troca o ? quando a fenda abrir.",
+		"buff": "Modo Drop: cada item dropado vira um ? da cor da raridade. A Fenda do Mercador abre so para voce escolher QUALQUER item daquela raridade.",
+		"debuff": "So no modo Drop (sem loja). Voce nao ve o item ao coletar; so troca o ? quando a fenda abrir.",
 		"drop_mode_only": true,
 		"color": Color(0.74, 0.4, 1.0), "glyph": "?",
 	},

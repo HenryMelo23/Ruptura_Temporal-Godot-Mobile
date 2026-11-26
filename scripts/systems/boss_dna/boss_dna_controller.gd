@@ -125,7 +125,7 @@ func on_boss_defeated(phase: int, pos: Vector2) -> bool:
 		var color := RTBossDnaCatalog.boss_color(phase)
 		core._add_text("DNA: %s" % String(RTBossDnaCatalog.boss(phase).get("name", "")), pos + Vector2(-120.0, -150.0), color, 2.6, 24)
 		core._add_text("GUARDADO PARA A MÁQUINA DO MERCADOR", pos + Vector2(-170.0, -118.0), Color(0.86, 0.94, 1.0), 2.6, 16)
-		bursts.append({"kind": "dna", "pos": pos, "radius": 140.0, "life": 1.4, "max": 1.4, "color": color})
+		bursts.append({"kind": "dna", "pos": pos, "radius": 140.0, "life": 1.4, "max": 1.4, "color": color, "phase": phase})
 	return true
 
 

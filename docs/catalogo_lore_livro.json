@@ -83,8 +83,8 @@
    },
    "cartas": {
     "s": "O que ela carrega nos bolsos do jaleco.",
-    "r": "Cada carta guarda um pedaço da vida de antes.",
-    "h": "O bolso esquerdo do jaleco foi feito para trenas e marcadores. Agora guarda núcleos, fragmentos, uma foto dobrada, um chocolate esquecido. As Cartas são o mesmo princípio: a Ruptura devolve à Geovana pedaços do que ela viveu, deformados em regra de combate. Quem lê todas, em ordem, lê a história dela com Henrique de trás pra frente.",
+    "r": "Cada item guarda um pedaço da vida de antes.",
+    "h": "O bolso esquerdo do jaleco foi feito para trenas e marcadores. Agora guarda núcleos, fragmentos, uma foto dobrada, um chocolate esquecido. Os itens são o mesmo princípio: a Ruptura devolve à Geovana pedaços do que ela viveu, deformados em regra de combate. Quem lê todos, em ordem, lê a história dela com Henrique de trás pra frente.",
     "n": "Algumas eu compraria de volta por qualquer preço. Outras eu queria esquecer.",
     "l": "\"Geovana enfiou a mão no bolso esquerdo do jaleco. De lá, puxou uma fotografia dobrada.\"",
     "e": [
@@ -1073,7 +1073,7 @@
    "disparo_crescente": {
     "s": "Um, dois, três tiros",
     "r": "Cada disparo atrasava a evolução do monstro.",
-    "h": "Ela não conseguia impedir o monstro de pedra de crescer, só atrasar. Então atirou de novo, e de novo, cada tiro mais concentrado que o anterior, recuando em zigue-zague. A carta lembra a lição: o próximo vale mais que o anterior.",
+    "h": "Ela não conseguia impedir o monstro de pedra de crescer, só atrasar. Então atirou de novo, e de novo, cada tiro mais concentrado que o anterior, recuando em zigue-zague. O item lembra a lição: o próximo vale mais que o anterior.",
     "n": "Os impactos soavam como marteladas numa bigorna viva.",
     "l": "\"Disparo após disparo, tentando interromper a transformação.\"",
     "e": [
@@ -1183,7 +1183,7 @@
    "coletora": {
     "s": "Arrancar o núcleo",
     "r": "Ou eu quebro, ou ele quebra.",
-    "h": "Ela enfiou o braço entre duas placas de rocha até achar a esfera que pulsava no peito do monstro, e segurou mesmo queimando os nervos. A carta é esse instante: terminar o que já está rachado.",
+    "h": "Ela enfiou o braço entre duas placas de rocha até achar a esfera que pulsava no peito do monstro, e segurou mesmo queimando os nervos. O item é esse instante: terminar o que já está rachado.",
     "n": "Ou eu quebro, ou ele quebra.",
     "l": "\"Os dedos escorregaram nas bordas cortantes de rocha, até encontrar a esfera.\"",
     "e": [
@@ -1205,7 +1205,7 @@
    "devorador_destinos": {
     "s": "O que o Pai comeu",
     "r": "Um deus que engole quem duvida.",
-    "h": "Stiff entrou na missa implorando pela filha e foi devorado inteiro diante de Geovana. O Pai-Rato chamava aquilo de bênção. A carta marca o que deve cair e, quando cai, cobra o destino dele de volta.",
+    "h": "Stiff entrou na missa implorando pela filha e foi devorado inteiro diante de Geovana. O Pai-Rato chamava aquilo de bênção. O item marca o que deve cair e, quando cai, cobra o destino dele de volta.",
     "n": "Ele engoliu o Stiff olhando pra mim. Eu devolvi com juros.",
     "l": "\"Logo você fará parte do Ninho...\"",
     "e": [
@@ -1249,7 +1249,7 @@
    "casulo_reativo": {
     "s": "O buraco na rocha",
     "r": "Um abrigo onde os joelhos encostavam no queixo.",
-    "h": "Ela entrou de lado num recorte de pedra, tampou a entrada com madeira e galhos e dormiu encolhida. A rocha resistiu ao vento a noite inteira. A carta é esse casulo, fechando quando a pressão aperta.",
+    "h": "Ela entrou de lado num recorte de pedra, tampou a entrada com madeira e galhos e dormiu encolhida. A rocha resistiu ao vento a noite inteira. O item é esse casulo, fechando quando a pressão aperta.",
     "n": "Não era confortável. Era funcional. Isso basta.",
     "l": "\"O abrigo era funcional. E isso era tudo o que precisava agora.\"",
     "e": [
@@ -1305,7 +1305,7 @@
    "orbita_coletora": {
     "s": "Cinco peças no ar",
     "r": "Azul, verde, roxo, amarelo e vermelho.",
-    "h": "Assim que ela se moveu na areia, cinco peças se soltaram do bracelete e flutuaram por um instante, \"como cacos de cristal vivo\", antes de serem sugadas em direções diferentes. A carta faz o caminho inverso: o que estiver solto volta a girar em volta dela.",
+    "h": "Assim que ela se moveu na areia, cinco peças se soltaram do bracelete e flutuaram por um instante, \"como cacos de cristal vivo\", antes de serem sugadas em direções diferentes. O item faz o caminho inverso: o que estiver solto volta a girar em volta dela.",
     "n": "Eu tentei alcançar. Agora elas é que vêm.",
     "l": "\"Elas flutuaram por um momento — cintilando entre cores.\"",
     "e": [
@@ -1316,7 +1316,7 @@
    "pacto_possibilidades": {
     "s": "Os cadernos de campo",
     "r": "Códigos riscados à mão, com o cheiro dele.",
-    "h": "Antes de sumir, ela levou os registros paralelos, croquis e pastas que nunca seriam vistos pela burocracia: \"ideias que surgiram entre um beijo e uma teoria\". A carta cava nessas páginas e desenterra possibilidades que ninguém mais leu.",
+    "h": "Antes de sumir, ela levou os registros paralelos, croquis e pastas que nunca seriam vistos pela burocracia: \"ideias que surgiram entre um beijo e uma teoria\". O item cava nessas páginas e desenterra possibilidades que ninguém mais leu.",
     "n": "Tudo o que era deles, e apenas deles.",
     "l": "\"Projetos que tinham o cheiro de Henrique.\"",
     "e": [
@@ -1338,7 +1338,7 @@
    "horizonte_ruptura": {
     "s": "Horizonte de eventos",
     "r": "Henrique caía num horizonte, estendendo a mão.",
-    "h": "No pesadelo do Nexo, ele caía para trás de uma linha que a luz não atravessa, e ela não conseguia esticar o braço o bastante. Acordada, ela estica. A carta aumenta o alcance de quem passou a vida querendo alcançar.",
+    "h": "No pesadelo do Nexo, ele caía para trás de uma linha que a luz não atravessa, e ela não conseguia esticar o braço o bastante. Acordada, ela estica. O item aumenta o alcance de quem passou a vida querendo alcançar.",
     "n": "Eu senti o calor da pele dele. Minhas mãos estavam presas.",
     "l": "\"Ao longe, Henrique caía em um horizonte de eventos.\"",
     "e": [
@@ -1360,7 +1360,7 @@
    "bastiao_inercial": {
     "s": "Meses trancada",
     "r": "O apartamento que não estava no nome de ninguém.",
-    "h": "Ela ficou meses no mesmo lugar, comida deixada na porta, ninguém a via. Parada, ela era impossível de alcançar. A carta lembra disso: quem não se move vira muralha.",
+    "h": "Ela ficou meses no mesmo lugar, comida deixada na porta, ninguém a via. Parada, ela era impossível de alcançar. O item lembra disso: quem não se move vira muralha.",
     "n": "Um exílio silencioso. Funcionou. Até a Lara bater.",
     "l": "\"Ficou meses trancada no pequeno apartamento escondido.\"",
     "e": [
@@ -1382,7 +1382,7 @@
    "rastro_de_retorno": {
     "s": "Pegadas na beira da água",
     "r": "Elas sumiam com a espuma.",
-    "h": "Na lua de mel, eles andavam descalços deixando pegadas que o mar apagava logo. A carta deixa o mesmo tipo de marca, e voltar a ela devolve um pouco do tempo que passou.",
+    "h": "Na lua de mel, eles andavam descalços deixando pegadas que o mar apagava logo. O item deixa o mesmo tipo de marca, e voltar a ela devolve um pouco do tempo que passou.",
     "n": "Mergulhados no presente como se fosse o único lugar possível.",
     "l": "\"Deixando pegadas que logo sumiam com a espuma.\"",
     "e": [
@@ -1404,7 +1404,7 @@
    "impulso_de_sobras": {
     "s": "Um anel no bolso do moletom",
     "r": "Ele esperou o horário certo: 23:10.",
-    "h": "Henrique carregou o anel no bolso a noite inteira, testando se aquilo fazia sentido fora da cabeça dele, até decidir que 23:10 era um bom horário. A carta guarda o que está pronto e espera o momento.",
+    "h": "Henrique carregou o anel no bolso a noite inteira, testando se aquilo fazia sentido fora da cabeça dele, até decidir que 23:10 era um bom horário. O item guarda o que está pronto e espera o momento.",
     "n": "Aceito. É um ótimo horário.",
     "l": "\"Acho que é um bom horário pra pedir a mulher da minha vida em casamento.\"",
     "e": [
@@ -1458,7 +1458,7 @@
    "ressonancia_de_alternancia": {
     "s": "Áudios e textos",
     "r": "Ele mandava áudio, ela respondia com texto. Depois invertiam.",
-    "h": "As primeiras conversas tinham um ritmo: áudios curtos dele, textos dela, depois trocavam, e riam disso também. A carta recompensa o mesmo jogo: alternar e não repetir.",
+    "h": "As primeiras conversas tinham um ritmo: áudios curtos dele, textos dela, depois trocavam, e riam disso também. O item recompensa o mesmo jogo: alternar e não repetir.",
     "n": "A conversa fluía como se só tivesse sido pausada por engano.",
     "l": "\"Henrique mandava áudios curtos, e ela respondia com texto.\"",
     "e": [
@@ -1469,7 +1469,7 @@
    "intervalo_fraturado": {
     "s": "Onze meses",
     "r": "Na física, tempo nenhum.",
-    "h": "Entre a volta ao projeto e a ativação passaram onze meses. Para a física, nada. Para a equipe certa, suficiente. Para ela, cada dia um pouco mais perto. A carta comprime a espera.",
+    "h": "Entre a volta ao projeto e a ativação passaram onze meses. Para a física, nada. Para a equipe certa, suficiente. Para ela, cada dia um pouco mais perto. O item comprime a espera.",
     "n": "Era cada dia mais perto de voltar para ele.",
     "l": "\"Na linguagem da física, era tempo nenhum.\"",
     "e": [
@@ -1524,7 +1524,7 @@
    "recusa_do_dano": {
     "s": "Nenhuma reação",
     "r": "Não houve ardor. Nem queimadura.",
-    "h": "Quando a gota de D37 tocou Henrique, não aconteceu nada: nenhum alerta, nenhum sintoma. Geovana transformou a lembrança mais cruel em regra: às vezes, o golpe simplesmente não pega. Ela nunca usa essa carta sem pensar nele.",
+    "h": "Quando a gota de D37 tocou Henrique, não aconteceu nada: nenhum alerta, nenhum sintoma. Geovana transformou a lembrança mais cruel em regra: às vezes, o golpe simplesmente não pega. Ela nunca usa esse item sem pensar nele.",
     "n": "Se não há sintomas, não há problema. Certo? Errado.",
     "l": "\"Não houve ardor. Nem queimadura. Nenhuma reação.\"",
     "e": [
@@ -1656,7 +1656,7 @@
    "mandamento_ruptura": {
     "s": "As sete fases da lousa",
     "r": "Do mapeamento de vórtices à Ruptura experimental.",
-    "h": "Fase 1: mapeamento de vórtices. Fase 2: espaço não linear. Fase 3: ancoragem. Fase 4: singularidade. Fase 5: interface neural. Fase 6: ativação com piloto. Fase 7: Ruptura. Ela escreveu em letras grandes e firmes. A carta segue a mesma disciplina: uma etapa de cada vez, até o colapso.",
+    "h": "Fase 1: mapeamento de vórtices. Fase 2: espaço não linear. Fase 3: ancoragem. Fase 4: singularidade. Fase 5: interface neural. Fase 6: ativação com piloto. Fase 7: Ruptura. Ela escreveu em letras grandes e firmes. O item segue a mesma disciplina: uma etapa de cada vez, até o colapso.",
     "n": "Não havia espaço para interpretação.",
     "l": "\"Cada etapa tinha um nome e uma meta.\"",
     "e": [
@@ -1679,7 +1679,7 @@
    "necrocronismo": {
     "s": "Células que não morriam",
     "r": "Elas se quebravam e se replicavam errado.",
-    "h": "Roberto explicou: o que entrou no corpo de Henrique não matava as células, as fragmentava e replicava de forma errada, \"como um câncer, mas com pressa\". A Ruptura aprendeu a mesma coisa e a carta usa contra os monstros: o que cai não descansa direito.",
+    "h": "Roberto explicou: o que entrou no corpo de Henrique não matava as células, as fragmentava e replicava de forma errada, \"como um câncer, mas com pressa\". A Ruptura aprendeu a mesma coisa e o item usa contra os monstros: o que cai não descansa direito.",
     "n": "Não aceito um adeus, Roberto. Não agora.",
     "l": "\"As células não estão morrendo. Estão se quebrando em partes menores.\"",
     "e": [

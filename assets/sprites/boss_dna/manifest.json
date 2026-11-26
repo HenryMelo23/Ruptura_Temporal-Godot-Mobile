@@ -1,0 +1,1264 @@
+{
+  "fx/asas_de_brasa_ground": {
+    "frames": 8,
+    "fps": 10,
+    "loop": true,
+    "size": [
+      384,
+      384
+    ],
+    "anchor": [
+      192,
+      192
+    ],
+    "tint": false,
+    "type": "zona",
+    "ability": "asas_de_brasa"
+  },
+  "fx/asas_de_brasa_wings": {
+    "frames": 8,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      384,
+      384
+    ],
+    "anchor": [
+      192,
+      200
+    ],
+    "tint": false,
+    "type": "special",
+    "ability": "asas_de_brasa"
+  },
+  "fx/carapaca_de_ambar": {
+    "frames": 8,
+    "fps": 10,
+    "loop": true,
+    "size": [
+      192,
+      192
+    ],
+    "anchor": [
+      96,
+      100
+    ],
+    "tint": false,
+    "type": "aura",
+    "ability": "carapaca_de_ambar"
+  },
+  "fx/carapaca_de_ambar_break": {
+    "frames": 6,
+    "fps": 15,
+    "loop": false,
+    "size": [
+      192,
+      192
+    ],
+    "anchor": [
+      96,
+      100
+    ],
+    "tint": false,
+    "type": "quebra",
+    "ability": "carapaca_de_ambar"
+  },
+  "fx/casco_de_sol": {
+    "frames": 8,
+    "fps": 10,
+    "loop": true,
+    "size": [
+      192,
+      192
+    ],
+    "anchor": [
+      96,
+      100
+    ],
+    "tint": false,
+    "type": "aura",
+    "ability": "casco_de_sol"
+  },
+  "fx/casulo_de_seda": {
+    "frames": 8,
+    "fps": 10,
+    "loop": true,
+    "size": [
+      192,
+      192
+    ],
+    "anchor": [
+      96,
+      100
+    ],
+    "tint": false,
+    "type": "aura",
+    "ability": "casulo_de_seda"
+  },
+  "fx/casulo_de_seda_burst": {
+    "frames": 8,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      384,
+      384
+    ],
+    "anchor": [
+      192,
+      192
+    ],
+    "tint": false,
+    "type": "explosao",
+    "ability": "casulo_de_seda"
+  },
+  "fx/congela_o_baile": {
+    "frames": 10,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      640,
+      360
+    ],
+    "anchor": [
+      320,
+      180
+    ],
+    "tint": false,
+    "type": "tela",
+    "ability": "congela_o_baile"
+  },
+  "fx/congelamento_subito": {
+    "frames": 8,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      384,
+      384
+    ],
+    "anchor": [
+      192,
+      192
+    ],
+    "tint": false,
+    "type": "explosao",
+    "ability": "congelamento_subito"
+  },
+  "fx/couraca_de_gelo": {
+    "frames": 8,
+    "fps": 10,
+    "loop": true,
+    "size": [
+      192,
+      192
+    ],
+    "anchor": [
+      96,
+      100
+    ],
+    "tint": false,
+    "type": "aura",
+    "ability": "couraca_de_gelo"
+  },
+  "fx/couraca_de_gelo_break": {
+    "frames": 6,
+    "fps": 15,
+    "loop": false,
+    "size": [
+      192,
+      192
+    ],
+    "anchor": [
+      96,
+      100
+    ],
+    "tint": false,
+    "type": "quebra",
+    "ability": "couraca_de_gelo"
+  },
+  "fx/distorcao_relogio": {
+    "frames": 10,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      384,
+      384
+    ],
+    "anchor": [
+      192,
+      192
+    ],
+    "tint": false,
+    "type": "special",
+    "ability": "distorcao_relogio"
+  },
+  "fx/dna_cast": {
+    "frames": 6,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      192,
+      192
+    ],
+    "anchor": [
+      96,
+      96
+    ],
+    "tint": true,
+    "type": "cast"
+  },
+  "fx/dna_extract": {
+    "frames": 10,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      232
+    ],
+    "tint": true,
+    "type": "extract"
+  },
+  "fx/drop_do_paredao": {
+    "frames": 6,
+    "fps": 10,
+    "loop": true,
+    "size": [
+      512,
+      512
+    ],
+    "anchor": [
+      256,
+      256
+    ],
+    "tint": false,
+    "type": "onda",
+    "ability": "drop_do_paredao"
+  },
+  "fx/foices_de_ambar": {
+    "frames": 6,
+    "fps": 12,
+    "loop": true,
+    "size": [
+      96,
+      96
+    ],
+    "anchor": [
+      48,
+      48
+    ],
+    "tint": false,
+    "type": "orbita",
+    "ability": "foices_de_ambar"
+  },
+  "fx/frozen_enemy": {
+    "frames": 4,
+    "fps": 6,
+    "loop": true,
+    "size": [
+      128,
+      128
+    ],
+    "anchor": [
+      64,
+      64
+    ],
+    "tint": true,
+    "type": "overlay"
+  },
+  "fx/fuga_pelo_bueiro_out": {
+    "frames": 8,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      384,
+      384
+    ],
+    "anchor": [
+      192,
+      192
+    ],
+    "tint": false,
+    "type": "explosao",
+    "ability": "fuga_pelo_bueiro"
+  },
+  "fx/fuga_pelo_bueiro_smoke": {
+    "frames": 8,
+    "fps": 10,
+    "loop": true,
+    "size": [
+      192,
+      192
+    ],
+    "anchor": [
+      96,
+      100
+    ],
+    "tint": false,
+    "type": "aura",
+    "ability": "fuga_pelo_bueiro"
+  },
+  "fx/lingua_arpao": {
+    "frames": 8,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      384,
+      384
+    ],
+    "anchor": [
+      192,
+      192
+    ],
+    "tint": false,
+    "type": "implosao",
+    "ability": "lingua_arpao"
+  },
+  "fx/mare_cosmica_cast": {
+    "frames": 8,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      384,
+      384
+    ],
+    "anchor": [
+      192,
+      192
+    ],
+    "tint": false,
+    "type": "explosao",
+    "ability": "mare_cosmica"
+  },
+  "fx/mare_cosmica_tide": {
+    "frames": 8,
+    "fps": 10,
+    "loop": true,
+    "size": [
+      512,
+      128
+    ],
+    "anchor": [
+      256,
+      64
+    ],
+    "tint": false,
+    "type": "faixa",
+    "ability": "mare_cosmica"
+  },
+  "fx/mergulho_na_chaga_out": {
+    "frames": 8,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      384,
+      384
+    ],
+    "anchor": [
+      192,
+      192
+    ],
+    "tint": false,
+    "type": "explosao",
+    "ability": "mergulho_na_chaga"
+  },
+  "fx/mergulho_na_chaga_pool": {
+    "frames": 8,
+    "fps": 10,
+    "loop": true,
+    "size": [
+      192,
+      192
+    ],
+    "anchor": [
+      96,
+      100
+    ],
+    "tint": false,
+    "type": "aura",
+    "ability": "mergulho_na_chaga"
+  },
+  "fx/miasma_do_esgoto": {
+    "frames": 8,
+    "fps": 10,
+    "loop": true,
+    "size": [
+      384,
+      384
+    ],
+    "anchor": [
+      192,
+      192
+    ],
+    "tint": false,
+    "type": "zona",
+    "ability": "miasma_do_esgoto"
+  },
+  "fx/nevasca_particular": {
+    "frames": 8,
+    "fps": 10,
+    "loop": true,
+    "size": [
+      384,
+      384
+    ],
+    "anchor": [
+      192,
+      192
+    ],
+    "tint": false,
+    "type": "zona",
+    "ability": "nevasca_particular"
+  },
+  "fx/ninhada_roedora": {
+    "frames": 6,
+    "fps": 12,
+    "loop": true,
+    "size": [
+      96,
+      96
+    ],
+    "anchor": [
+      48,
+      48
+    ],
+    "tint": false,
+    "type": "orbita",
+    "ability": "ninhada_roedora"
+  },
+  "fx/picada_dos_oito_olhos": {
+    "frames": 8,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      384,
+      384
+    ],
+    "anchor": [
+      192,
+      192
+    ],
+    "tint": false,
+    "type": "explosao",
+    "ability": "picada_dos_oito_olhos"
+  },
+  "fx/rajada_do_sertao": {
+    "frames": 6,
+    "fps": 10,
+    "loop": true,
+    "size": [
+      512,
+      512
+    ],
+    "anchor": [
+      256,
+      256
+    ],
+    "tint": false,
+    "type": "onda",
+    "ability": "rajada_do_sertao"
+  },
+  "fx/rastro_de_cinzas": {
+    "frames": 8,
+    "fps": 10,
+    "loop": true,
+    "size": [
+      384,
+      384
+    ],
+    "anchor": [
+      192,
+      192
+    ],
+    "tint": false,
+    "type": "zona",
+    "ability": "rastro_de_cinzas"
+  },
+  "fx/renascer_das_cinzas": {
+    "frames": 12,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      384,
+      384
+    ],
+    "anchor": [
+      192,
+      220
+    ],
+    "tint": false,
+    "type": "special",
+    "ability": "renascer_das_cinzas"
+  },
+  "fx/ressaca_temporal": {
+    "frames": 6,
+    "fps": 10,
+    "loop": true,
+    "size": [
+      512,
+      512
+    ],
+    "anchor": [
+      256,
+      256
+    ],
+    "tint": false,
+    "type": "onda",
+    "ability": "ressaca_temporal"
+  },
+  "fx/salto_esmagador": {
+    "frames": 8,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      384,
+      384
+    ],
+    "anchor": [
+      192,
+      192
+    ],
+    "tint": false,
+    "type": "explosao",
+    "ability": "salto_esmagador"
+  },
+  "fx/shield_hit": {
+    "frames": 5,
+    "fps": 15,
+    "loop": false,
+    "size": [
+      192,
+      192
+    ],
+    "anchor": [
+      96,
+      96
+    ],
+    "tint": true,
+    "type": "impact"
+  },
+  "fx/sol_a_pino": {
+    "frames": 10,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      640,
+      360
+    ],
+    "anchor": [
+      320,
+      180
+    ],
+    "tint": false,
+    "type": "tela",
+    "ability": "sol_a_pino"
+  },
+  "fx/tamborzao": {
+    "frames": 8,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      384,
+      384
+    ],
+    "anchor": [
+      192,
+      192
+    ],
+    "tint": false,
+    "type": "explosao",
+    "ability": "tamborzao"
+  },
+  "fx/teia_de_seda": {
+    "frames": 4,
+    "fps": 10,
+    "loop": true,
+    "size": [
+      384,
+      384
+    ],
+    "anchor": [
+      192,
+      192
+    ],
+    "tint": false,
+    "type": "zona",
+    "ability": "teia_de_seda"
+  },
+  "fx/vampirismo_dimensional": {
+    "frames": 8,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      384,
+      384
+    ],
+    "anchor": [
+      192,
+      192
+    ],
+    "tint": false,
+    "type": "implosao",
+    "ability": "vampirismo_dimensional"
+  },
+  "fx/vampirismo_dimensional_heal": {
+    "frames": 6,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      192,
+      192
+    ],
+    "anchor": [
+      96,
+      100
+    ],
+    "tint": false,
+    "type": "aura",
+    "ability": "vampirismo_dimensional"
+  },
+  "icons/asas_de_brasa": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "asas_de_brasa"
+  },
+  "icons/carapaca_de_ambar": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "carapaca_de_ambar"
+  },
+  "icons/casco_de_sol": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "casco_de_sol"
+  },
+  "icons/casulo_de_seda": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "casulo_de_seda"
+  },
+  "icons/congela_o_baile": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "congela_o_baile"
+  },
+  "icons/congelamento_subito": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "congelamento_subito"
+  },
+  "icons/couraca_de_gelo": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "couraca_de_gelo"
+  },
+  "icons/distorcao_relogio": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "distorcao_relogio"
+  },
+  "icons/drop_do_paredao": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "drop_do_paredao"
+  },
+  "icons/foices_de_ambar": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "foices_de_ambar"
+  },
+  "icons/fuga_pelo_bueiro": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "fuga_pelo_bueiro"
+  },
+  "icons/lingua_arpao": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "lingua_arpao"
+  },
+  "icons/mare_cosmica": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "mare_cosmica"
+  },
+  "icons/mergulho_na_chaga": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "mergulho_na_chaga"
+  },
+  "icons/miasma_do_esgoto": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "miasma_do_esgoto"
+  },
+  "icons/nevasca_particular": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "nevasca_particular"
+  },
+  "icons/ninhada_roedora": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "ninhada_roedora"
+  },
+  "icons/picada_dos_oito_olhos": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "picada_dos_oito_olhos"
+  },
+  "icons/rajada_do_sertao": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "rajada_do_sertao"
+  },
+  "icons/rastro_de_cinzas": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "rastro_de_cinzas"
+  },
+  "icons/renascer_das_cinzas": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "renascer_das_cinzas"
+  },
+  "icons/ressaca_temporal": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "ressaca_temporal"
+  },
+  "icons/salto_esmagador": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "salto_esmagador"
+  },
+  "icons/sol_a_pino": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "sol_a_pino"
+  },
+  "icons/tamborzao": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "tamborzao"
+  },
+  "icons/teia_de_seda": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "teia_de_seda"
+  },
+  "icons/vampirismo_dimensional": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "tint": false,
+    "type": "icon",
+    "ability": "vampirismo_dimensional"
+  },
+  "machine/body": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      512,
+      512
+    ],
+    "anchor": [
+      256,
+      500
+    ],
+    "tint": false,
+    "type": "machine"
+  },
+  "machine/fusion": {
+    "frames": 12,
+    "fps": 12,
+    "loop": false,
+    "size": [
+      512,
+      512
+    ],
+    "anchor": [
+      256,
+      500
+    ],
+    "tint": true,
+    "type": "fusion"
+  },
+  "machine/glass": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      512,
+      512
+    ],
+    "anchor": [
+      256,
+      500
+    ],
+    "tint": false,
+    "type": "glass"
+  },
+  "machine/liquid": {
+    "frames": 8,
+    "fps": 10,
+    "loop": true,
+    "size": [
+      512,
+      512
+    ],
+    "anchor": [
+      256,
+      500
+    ],
+    "tint": true,
+    "type": "liquid"
+  },
+  "machine/panel": {
+    "frames": 4,
+    "fps": 6,
+    "loop": true,
+    "size": [
+      512,
+      512
+    ],
+    "anchor": [
+      256,
+      500
+    ],
+    "tint": true,
+    "type": "panel"
+  },
+  "vials/dna_1": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      236
+    ],
+    "tint": false,
+    "type": "vial"
+  },
+  "vials/dna_10": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      236
+    ],
+    "tint": false,
+    "type": "vial"
+  },
+  "vials/dna_2": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      236
+    ],
+    "tint": false,
+    "type": "vial"
+  },
+  "vials/dna_3": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      236
+    ],
+    "tint": false,
+    "type": "vial"
+  },
+  "vials/dna_4": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      236
+    ],
+    "tint": false,
+    "type": "vial"
+  },
+  "vials/dna_6": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      236
+    ],
+    "tint": false,
+    "type": "vial"
+  },
+  "vials/dna_7": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      236
+    ],
+    "tint": false,
+    "type": "vial"
+  },
+  "vials/dna_8": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      236
+    ],
+    "tint": false,
+    "type": "vial"
+  },
+  "vials/dna_9": {
+    "frames": 1,
+    "fps": 0,
+    "loop": false,
+    "size": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      236
+    ],
+    "tint": false,
+    "type": "vial"
+  }
+}

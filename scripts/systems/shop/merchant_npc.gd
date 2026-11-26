@@ -321,7 +321,7 @@ func _mission_talk() -> void:
 	if not missions.reward_available():
 		dialogue.start([
 			{"who": "mercador", "text": "Moeda Estável, querida? Acabou. Você levou o cofre inteiro. Eu estou orgulhoso e falido.", "mood": "triste"},
-			_menu_line("Mas cartas eu ainda tenho. Sempre tenho."),
+			_menu_line("Mas itens eu ainda tenho. Sempre tenho."),
 		], _on_menu_choice)
 		return
 	var world: Vector2 = Vector2(core.WORLD_SIZE)
@@ -360,7 +360,7 @@ func _on_mission_choice(id: String) -> void:
 			if missions.donate():
 				_mission_talk()
 			else:
-				core._dialogue().start([_menu_line("Ué, cadê? Sem a carta não tem troca, querida.", "preocupado")], _on_menu_choice)
+				core._dialogue().start([_menu_line("Ué, cadê? Sem o item não tem troca, querida.", "preocupado")], _on_menu_choice)
 		_:
 			_pending_offer.clear()
 			core._dialogue().start([_menu_line("Sem pressa. A encomenda espera. Eu é que não.")], _on_menu_choice)
@@ -383,7 +383,7 @@ static func rupture_talk(retold: bool) -> Array:
 	if retold:
 		return [
 			{"who": "mercador", "text": "De novo? Tudo bem, velho repete mesmo. Resumo de feira, presta atenção:", "mood": "animado"},
-			{"who": "mercador", "text": "Derrubou o que segura a dimensão, nasce o Fragmento Instável. Até %d segundos, travessia perfeita: o Impulso sobe e a próxima carta vem melhor." % fast},
+			{"who": "mercador", "text": "Derrubou o que segura a dimensão, nasce o Fragmento Instável. Até %d segundos, travessia perfeita: o Impulso sobe e o próximo item vem melhor." % fast},
 			{"who": "mercador", "text": "Até %d, travessia estável: o Impulso fica e ainda sai um agradinho. Passou disso, colapso: o fragmento enfraquece e o Impulso vai embora." % standard, "mood": "preocupado"},
 			{"who": "mercador", "text": "Aos %d começa a emergência. Você tem %d segundos pra achar uma ruptura, senão a dimensão te cospe onde ela quiser, tonta e sem Impulso." % [total, escape], "mood": "preocupado"},
 			{"who": "geovana", "text": "Rápido é melhor. Já entendi.", "mood": "decidida"},
@@ -399,7 +399,7 @@ static func rupture_talk(retold: bool) -> Array:
 		{"who": "mercador", "text": "Porque você é a única coisa ali dentro que ainda sabe sair. Ele não é seu, nem de ninguém da sua turma. É do grupo inteiro. Não cabe no bolso, nem no meu."},
 		{"who": "mercador", "text": "Agora, a parte que me interessa, que é a parte do lucro.", "mood": "animado"},
 		{"who": "mercador", "text": "Se você atravessa logo, nos primeiros %d segundos, o caco vai junto com a correnteza. Que nem pular num trem andando: o embalo te leva." % fast, "mood": "animado"},
-		{"who": "mercador", "text": "Esse embalo é o Impulso de Ruptura. A próxima dimensão te recebe com ele, e a primeira carta que ela soltar pra você vem melhor. Não vem mais, vem MELHOR.", "mood": "animado"},
+		{"who": "mercador", "text": "Esse embalo é o Impulso de Ruptura. A próxima dimensão te recebe com ele, e o primeiro item que ela soltar pra você vem melhor. Não vem mais, vem MELHOR.", "mood": "animado"},
 		{"who": "mercador", "text": "É feira, querida. Quem chega cedo leva a fruta boa. Quem chega tarde leva a mesma quantidade, só que machucada."},
 		{"who": "geovana", "text": "E se eu fizer isso de novo, e de novo?", "mood": "decidida"},
 		{"who": "mercador", "text": "Aí o embalo empilha. Impulso um, dois, três, quatro. Quatro é o teto: acima disso nem o corpo de vocês nem a minha porta aguentam o tranco.", "mood": "animado"},

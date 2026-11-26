@@ -778,7 +778,7 @@ const CARD_DEFINITIONS: Dictionary = {
 		"policy": "legendary_non_burnable",
 		"eligible_attributes": [],
 		"burn_factor": 0.0,
-		"stat_label": "duplicacao de cartas",
+		"stat_label": "duplicacao de itens",
 		"float_text": "",
 	},
 	"coracao_paradoxo": {
@@ -910,7 +910,7 @@ static func get_burn_summary(card_or_id: Variant, stacks: int, base_damage: floa
 			return "Ao comprar: +%.1f%% no raio de coleta de recursos (+%d%%)" % [rad_pct, total_scale_pct]
 		"pacto_possibilidades":
 			var disc_pct: float = 4.0 * float(effective_stacks) * factor
-			return "Ao comprar: +%.1f%% de desconto para cartas novas (+%d%%)" % [disc_pct, total_scale_pct]
+			return "Ao comprar: +%.1f%% de desconto para itens novos (+%d%%)" % [disc_pct, total_scale_pct]
 		"tributo_da_dor":
 			return "Ao comprar: +%d%% nos pontos recebidos ao perder vida" % total_scale_pct
 		"intervalo_fraturado":
@@ -957,11 +957,11 @@ static func get_burn_summary(card_or_id: Variant, stacks: int, base_damage: floa
 			return "Ao comprar: +%d%% no dano pelas costas e desorientacao" % total_scale_pct
 		"fragmentacao_reativa", "bastiao_inercial", "rastro_de_retorno", "municao_de_rebate", "impulso_de_sobras", "eco_de_impacto", "zona_de_descompressao", "folego_de_perseguicao", "margem_de_erro", "ressonancia_de_alternancia":
 			var def: Dictionary = get_card_definition(card_id)
-			var label: String = String(def.get("stat_label", "atributos da carta"))
+			var label: String = String(def.get("stat_label", "atributos do item"))
 			return "Ao comprar: +%d%% de eficacia em %s" % [total_scale_pct, label]
 		_:
 			var def: Dictionary = get_card_definition(card_id)
 			if not def.is_empty() and bool(def.get("can_burn", false)):
-				var label: String = String(def.get("stat_label", "atributos da carta"))
+				var label: String = String(def.get("stat_label", "atributos do item"))
 				return "Ao comprar: +%d%% de poder adicional em %s" % [total_scale_pct, label]
-			return "Ao comprar: carta nao elegivel para fortalecimento por cinzas"
+			return "Ao comprar: item nao elegivel para fortalecimento por cinzas"

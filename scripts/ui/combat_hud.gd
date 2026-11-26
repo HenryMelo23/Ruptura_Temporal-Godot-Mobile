@@ -241,7 +241,7 @@ func stats_panel(host: Node2D, rect: Rect2, alpha: float) -> void:
 		var shine: float = 0.82 + 0.18 * sin(clock * 3.0)
 		host.draw_rect(badge, Color(XP_GOLD, shine * alpha))
 		host.draw_rect(badge, Color(BRONZE, alpha), false, 1.0)
-		var label: String = "%d CARTA%s" % [affordable, "S" if affordable > 1 else ""]
+		var label: String = ("%d ITENS" if affordable > 1 else "%d ITEM") % affordable
 		host.draw_string(host.menu_ui_font, badge.position + Vector2(0.0, 16.0), label, HORIZONTAL_ALIGNMENT_CENTER, badge.size.x, 12, Color(0.16, 0.07, 0.03, alpha))
 	_shop_status_line(host, Rect2(x, top + 54.0, right - x, 16.0), alpha)
 
@@ -249,7 +249,7 @@ func stats_panel(host: Node2D, rect: Rect2, alpha: float) -> void:
 ## Linha de baixo do painel de pontos: situacao da loja (fenda / drop).
 func _shop_status_line(host: Node2D, area: Rect2, alpha: float) -> void:
 	if host._is_drop_game_mode():
-		text(host, "MODO DROP  ·  CARTAS DOS INIMIGOS", area.position + Vector2(0.0, 11.0), 10, Color(GOLD, alpha), area.size.x)
+		text(host, "MODO DROP  ·  ITENS DOS INIMIGOS", area.position + Vector2(0.0, 11.0), 10, Color(GOLD, alpha), area.size.x)
 		return
 	var rift = host.shop_rift_controller
 	if rift == null or not rift.enabled():

@@ -109,7 +109,7 @@ static func explain_lines(has_dna: bool) -> Array:
 		{"who": "mercador", "text": "Funciona assim: cada chefe que você derruba deixa um DNA. Cada DNA tem três habilidades. Você escolhe UMA, entra na máquina e o Petro costura em você."},
 		{"who": "mercador", "text": "Algumas disparam sozinhas quando recarregam. Outras acordam quando você apanha. E as de quase-morte seguram o golpe que ia te derrubar: esse golpe nunca te mata."},
 		{"who": "mercador", "text": "Quer as outras duas do mesmo chefe, ou deixar uma mais forte? Derruba ele de novo. Cada DNA só serve para o chefe de onde veio."},
-		{"who": "mercador", "text": "DNA que você não usa fica guardado e viaja com você de dimensão em dimensão. E a fusão custa essência. Bastante. Comprar carta ou fundir: escolha sua."},
+		{"who": "mercador", "text": "DNA que você não usa fica guardado e viaja com você de dimensão em dimensão. E a fusão custa essência. Bastante. Comprar item ou fundir: escolha sua."},
 	]
 	if has_dna:
 		lines.append({"who": "mercador", "text": "E olha só: você já tem DNA. Quer abrir a máquina agora?", "mood": "animado", "choices": [
