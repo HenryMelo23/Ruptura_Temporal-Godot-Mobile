@@ -52,8 +52,7 @@ func _ensure_runtime_controllers_bound() -> void:
 		henry_colossus_ability_controller.configure(self)
 	if reactive_survival_card_controller.core != self:
 		reactive_survival_card_controller.configure(self)
-	if momentum_items_controller.core != self:
-		momentum_items_controller.configure(self)
+	item_owners.configure(self)
 	if roguelike_point_card_controller.core != self:
 		roguelike_point_card_controller.configure(self)
 	if card_power_feedback_controller.core != self:
@@ -7138,7 +7137,7 @@ func _reset_card_counts() -> void :
 func _reset_card_proc_state() -> void :
 	shop_controller.reset()
 	reactive_survival_card_controller.reset()
-	momentum_items_controller.reset()
+	item_owners.reset()
 	card_power_feedback_controller.reset()
 	fratura_cronal_cooldown = 0.0
 	fratura_cronal_armed = false
@@ -11830,21 +11829,18 @@ func _use_skill(target_world = null) -> void :
 		return
 	if active_character_key == CHARACTER_HENRY:
 		var henry_cooldown := _skill_cooldown()
-		var henry_stored := false
-		if time_alive - last_skill_time < henry_cooldown:
-			henry_stored = momentum_items_controller.use_stored_hab1()
-			if not henry_stored:
-				_add_text("%.1fs" % (henry_cooldown - (time_alive - last_skill_time)), player_pos + Vector2(0, -86), Color(1.0, 0.72, 0.28), 0.45, 18)
-				return
+		if time_alive - last_skill_time < henry_cooldown and momentum_items_controller.hab1_charges <= 0:
+			_add_text("%.1fs" % (henry_cooldown - (time_alive - last_skill_time)), player_pos + Vector2(0, -86), Color(1.0, 0.72, 0.28), 0.45, 18)
+			return
 		var henry_skill_started := false
 		match mutation_key:
 			"barometrico": henry_skill_started = henry_barometric_ability_controller.begin_skill(target_world)
 			"colosso": henry_skill_started = henry_colossus_ability_controller.begin_skill(target_world)
 			_: henry_skill_started = henry_incendiary_ability_controller.begin_skill(target_world)
-		if henry_stored and not henry_skill_started:
-			momentum_items_controller.hab1_charges += 1
 		if henry_skill_started:
-			if not henry_stored:
+			if time_alive - last_skill_time < henry_cooldown:
+				momentum_items_controller.use_stored_hab1()
+			else:
 				last_skill_time = time_alive
 			_register_manual_skill_use("skill_q", henry_cooldown)
 			_tutorial_note_action("skill")
@@ -12996,7 +12992,7 @@ func _update_advanced_manifestation_state(delta: float) -> void :
 	henry_barometric_ability_controller.update(delta)
 	henry_colossus_ability_controller.update(delta)
 	reactive_survival_card_controller.update(delta)
-	momentum_items_controller.update(delta)
+	item_owners.update(delta)
 
 
 func _trigger_screen_shake(strength: float, duration: float) -> void:
@@ -15389,7 +15385,7 @@ func _combat_targets() -> Array:
 		return _bargain_capsule_combat_targets()
 	var targets: Array = []
 	if _local_player_targetable():
-		targets.append({"peer_id": _mp_unique_id(), "pos": player_pos, "local": true, "hp": player_hp, "hp_max": player_hp_max})
+		targets.append({"peer_id": _mp_unique_id(), "pos": skirmish_items_controller.target_pos(player_pos), "local": true, "hp": player_hp, "hp_max": player_hp_max})
 	for peer_id in _targetable_remote_peer_ids():
 		var state: Dictionary = net_players_by_peer.get(peer_id, {})
 		targets.append({"peer_id": peer_id, "pos": Vector2(state.get("pos", net_player_pos)), "local": false, "hp": float(state.get("hp", 0.0)), "hp_max": float(state.get("hp_max", 1.0))})
@@ -18374,7 +18370,7 @@ func _bullet_critical_damage(bullet: Dictionary) -> Dictionary:
 
 
 func _critical_damage(base: float, always_crit: = false, bonus_crit_chance: float = 0.0) -> Dictionary:
-	var effective_crit: float = player_crit_chance + maxf(0.0, bonus_crit_chance)
+	var effective_crit: float = player_crit_chance + maxf(0.0, bonus_crit_chance) + skirmish_items_controller.crit_bonus()
 	var crit_chance: float = clampf(effective_crit, 0.0, 1.0)
 	var crit_overcap: float = maxf(0.0, effective_crit - 1.0)
 	if always_crit or rng.randf() < crit_chance:
@@ -18547,6 +18543,7 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 		_spawn_radial_particles(Vector2(enemy["pos"]), Color(1.0, 0.08, 0.24), 18)
 	var actual_damage: float = hp_before - max(0.0, float(enemy["hp"]))
 	card_power_feedback_controller.on_damage_confirmed(enemy, actual_damage, critical_hit, effective_source_category)
+	skirmish_items_controller.on_enemy_hit(enemy, actual_damage, critical_hit, source, effective_source_category, source_peer_id)
 	_register_paradox_confirmed_damage(actual_damage, source, effective_source_category, "enemy", int(enemy.get("uid", 0)), Vector2(enemy.get("pos", damage_origin)))
 	if actual_damage > 0.0:
 		_apply_henry_burn_from_damage(enemy, source, amount, source_peer_id, false)
@@ -18829,6 +18826,7 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		AuraSystem.on_boss_hit(aura_state, boss_pos, boss_hp_before - boss_hp)
 	var actual_boss_damage: float = boss_hp_before - boss_hp
 	_register_paradox_confirmed_damage(actual_boss_damage, source, effective_source_category, "boss", 0, boss_pos)
+	skirmish_items_controller.on_boss_hit(actual_boss_damage, critical_hit, source, effective_source_category, source_peer_id)
 	if actual_boss_damage > 0.0:
 		_apply_henry_burn_from_damage({}, source, amount, source_peer_id, true)
 		if _is_direct_player_damage_source(source, effective_source_category):
@@ -19298,7 +19296,7 @@ func _kill_enemy(enemy: Dictionary) -> void :
 	_add_card_unlock_progress("enemy_kills", 1.0, int(enemy.get("killed_by_peer_id", _mp_unique_id())))
 	shop_rift_controller.on_enemy_killed(enemy)
 	_merchant_dimension().dna.on_enemy_killed()
-	momentum_items_controller.on_enemy_killed(enemy)
+	item_owners.on_enemy_killed(enemy)
 	henry_incendiary_ability_controller.on_enemy_killed(enemy)
 	var gain = _points_for_enemy(enemy)
 	if manifestation_key == "lacerante" and _is_uncommon_enemy(enemy):
@@ -29458,6 +29456,11 @@ func _is_common_card(card: Dictionary) -> bool:
 	return _progression().is_common_card(card)
 
 
+## Cinzas queimam comuns e os incomuns que o catalogo marca como queimaveis.
+func _cinzas_accepts(card: Dictionary) -> bool:
+	return _is_common_card(card) or (_is_uncommon_card(card) and CardCatalogDefinitions.is_burn_eligible(_card_id(card)))
+
+
 func _card_texture(card: Dictionary) -> Texture2D:
 	var key: = "card_" + String(card.get("name", ""))
 	if card.has("frame_2") and _get_texture(key + "_2") != null:
@@ -29492,7 +29495,7 @@ func _card_drop_texture_loaded(card: Dictionary) -> bool:
 
 func _cinzas_bonus_stacks(card_id: String) -> int:
 	var card: Dictionary = _find_card_by_id(card_id)
-	if card.is_empty() or not _is_common_card(card) or not CardCatalogDefinitions.is_burn_eligible(card_id):
+	if card.is_empty() or not _cinzas_accepts(card) or not CardCatalogDefinitions.is_burn_eligible(card_id):
 		return 0
 	return maxi(0, int(cinzas_card_bonuses.get(card_id, 0)))
 
@@ -29503,13 +29506,13 @@ func _sanitize_legacy_cinzas_rarity_state() -> void:
 		var mark: Dictionary = Dictionary(mark_value)
 		var mark_card_id: String = String(mark.get("card_id", ""))
 		var marked_card: Dictionary = _find_card_by_id(mark_card_id)
-		if not marked_card.is_empty() and _is_common_card(marked_card) and CardCatalogDefinitions.is_burn_eligible(mark_card_id):
+		if not marked_card.is_empty() and _cinzas_accepts(marked_card) and CardCatalogDefinitions.is_burn_eligible(mark_card_id):
 			kept_marks.append(mark)
 	cinzas_burn_marks = kept_marks
 	for card_id_value in cinzas_card_bonuses.keys():
 		var bonus_card_id: String = String(card_id_value)
 		var bonus_card: Dictionary = _find_card_by_id(bonus_card_id)
-		if bonus_card.is_empty() or not _is_common_card(bonus_card) or not CardCatalogDefinitions.is_burn_eligible(bonus_card_id):
+		if bonus_card.is_empty() or not _cinzas_accepts(bonus_card) or not CardCatalogDefinitions.is_burn_eligible(bonus_card_id):
 			cinzas_card_bonuses.erase(card_id_value)
 
 
@@ -30166,7 +30169,7 @@ func _new_common_speed_multiplier() -> float:
 		mult += _folego_max_speed_bonus() * clampf(folego_charge, 0.0, 1.0)
 	if ressonancia_speed_timer > 0.0:
 		mult += ressonancia_speed_bonus
-	return mult + momentum_items_controller.movement_speed_bonus()
+	return mult + item_owners.movement_speed_bonus()
 
 
 func _interrupt_folego() -> void :
@@ -30637,7 +30640,7 @@ func _cinzas_mark_stacks(card_id: String) -> int:
 
 func _cinzas_card_eligible_for_return(card_id: String) -> bool:
 	var card: = _find_card_by_id(card_id)
-	if card.is_empty() or not _is_common_card(card) or _card_at_max(card):
+	if card.is_empty() or not _cinzas_accepts(card) or _card_at_max(card):
 		return false
 	return not _shop_locked_card_ids().has(card_id)
 
@@ -30681,7 +30684,7 @@ func _can_burn_shop_card(card: Dictionary) -> bool:
 		return false
 	if _support_card_count(CARD_CINZAS_ID) <= 0 or _shop_purchase_animating() or _is_empty_shop_slot(card):
 		return false
-	if not _is_common_card(card) or _card_at_max(card):
+	if not _cinzas_accepts(card) or _card_at_max(card):
 		return false
 	var card_id: = _card_id(card)
 	if not CardCatalogDefinitions.is_burn_eligible(card_id):
@@ -30747,7 +30750,7 @@ func _update_burned_card_marks_after_shop(picks: Array) -> void :
 	var visible_marked_ids: = {}
 	for i in range(picks.size()):
 		var card: Dictionary = picks[i]
-		if _is_common_card(card):
+		if _cinzas_accepts(card):
 			var mark_index: = _cinzas_mark_index(_card_id(card))
 			if mark_index >= 0 and bool(cinzas_burn_marks[mark_index].get("return_buff", false)):
 				var buffed: = card.duplicate(true)
@@ -31730,6 +31733,7 @@ func _register_manual_skill_use(skill_type: String, cooldown_total: float) -> fl
 	_add_card_unlock_progress("abilities_used", 1.0)
 	_record_telemetry_ability_use(skill_type, cooldown_total)
 	_grant_manto_impulso_shield()
+	skirmish_items_controller.on_skill_used(skill_type)
 	var action: String = ""
 	if skill_type == "skill_q":
 		action = "Q"
@@ -33408,7 +33412,7 @@ func _damage_player(amount: int, source: String, silent_hit_sfx: bool = false) -
 		if rng.randf() < 0.25:
 			_spawn_radial_particles(player_pos, Color(0.72, 0.9, 1.0), 2)
 		return
-	if prophetic_rewind.intercept_hit(source):
+	if prophetic_rewind.intercept_hit(source) or skirmish_items_controller.veil_blocks(source):
 		return
 	if current_phase == 2:
 		if source == "boss2_flash_freeze":
@@ -33485,6 +33489,7 @@ func _damage_player(amount: int, source: String, silent_hit_sfx: bool = false) -
 	card_power_feedback_controller.on_player_hit(float(amount), float(actual_hp_damage), source)
 	_queue_sutura_gradual(float(actual_hp_damage))
 	reactive_survival_card_controller.on_player_damaged(float(actual_hp_damage))
+	skirmish_items_controller.on_player_damaged(float(actual_hp_damage))
 	roguelike_point_card_controller.on_player_damaged(float(actual_hp_damage))
 	henry_incendiary_ability_controller.on_player_damaged(actual_hp_damage)
 	estase_reparadora_pause = max(estase_reparadora_pause, 0.5)
@@ -40644,7 +40649,7 @@ func _skill_cooldown_base() -> float:
 
 
 func _skill_cooldown() -> float:
-	return _intervalo_apply_to_hab1(_skill_cooldown_base())
+	return _intervalo_apply_to_hab1(_skill_cooldown_base()) * skirmish_items_controller.hab1_cooldown_multiplier()
 
 
 func _manifestation_color() -> Color:

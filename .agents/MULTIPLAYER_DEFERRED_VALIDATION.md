@@ -1267,3 +1267,18 @@ Owner: `scripts/systems/cards/momentum_items_controller.gd` (estado local do jog
 - **Estoque da Ganância:** só conta abate com `killed_by_peer_id` igual ao jogador local. O bônus entra em `_apply_limiar_ruina_damage`, que não recebe o peer. Conferir se o dano de outro jogador, aplicado no host, não usa os acúmulos do host.
 - **Espectro Elétrico:** os orbes não são replicados. Cada cliente vê e pega só os seus.
 - **Eco da Ruína:** os golpes parcelados mexem direto em `player_hp`, como a Margem de Erro. Conferir a reconciliação de vida no cliente e a morte no último golpe.
+
+## 2026-11-26 — 10 itens incomuns (Fé Emaculada … Botas de Veludo) (só solo validado)
+
+Owner: `scripts/systems/cards/skirmish_items_controller.gd`. Os ganchos filtram o peer: só abate e acerto do jogador local contam.
+
+**Pendente em sala real:**
+- **Véu Entrópico:** troca a posição do jogador local em `_combat_targets()` pela posição onde ele sumiu (chamariz). O cliente precisa replicar isso para o host, provavelmente via `stealthed` no estado leve, que hoje só existe para remotos.
+- **Pulso da Conversão:** cura só o jogador local. A cura de aliados próximos exige RPC.
+- **Sangramento dos Espinhos:**
+  - os ticks só causam dano na autoridade (`_is_world_authority`);
+  - a marcação `item_bleed` acontece no acerto local;
+  - conferir a replicação dos acúmulos para o host.
+- **Tornozeleira de Chumbo:** a lentidão em inimigo comum é `evolution_slow`, escrita localmente. Conferir no host.
+- **Sangue Coagulado:** mexe em `player_hp_max` local. Conferir a reconciliação no snapshot do cliente.
+- **Fé Emaculada:** pacote de munição local, sem réplica.

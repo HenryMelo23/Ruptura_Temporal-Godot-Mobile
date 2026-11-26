@@ -9,6 +9,7 @@ const BRASS := Color(0.95, 0.76, 0.36)
 const BURN_TIME := 0.95
 const ItemShowcase := preload("res://scripts/presentation/item_showcase.gd")
 const ShopItemSlot := preload("res://scripts/ui/shop_item_slot.gd")
+const ItemStatChips := preload("res://scripts/catalog/item_stat_chips.gd")
 var action := ""
 var elapsed := 0.0
 var duration := 0.0
@@ -488,14 +489,6 @@ func card_stat_chips(card_name: String) -> Array:
 			return ["-4% COMUM"]
 		"Solo Consolidado":
 			return ["-8% ZONA"]
-		"Retorno Voluntário":
-			return ["+1 USO HAB1"]
-		"Estoque da Ganância":
-			return ["+3.5% DANO/ABATE", "ATÉ 10"]
-		"Espectro Elétrico":
-			return ["ORBE 10s", "+12% VEL"]
-		"Eco da Ruína":
-			return ["-10% DANO", "3 GOLPES"]
 		"Fratura Cronal":
 			return ["7s ARMAR", "+4/12% FRAG"]
 		"Pulso Desestabilizador":
@@ -540,7 +533,7 @@ func card_stat_chips(card_name: String) -> Array:
 			return ["POS-DANO", "CURA 3.2s"]
 		"Egide Hemofaga":
 			return ["OVERHEAL", "+ESCUDO"]
-	return ["MELHORIA"]
+	return ItemStatChips.CHIPS.get(card_name, ["MELHORIA"])
 
 
 func draw_card_stat_chips(g, chips: Array, origin: Vector2, max_width: float, accent: Color, size: = 13) -> float:

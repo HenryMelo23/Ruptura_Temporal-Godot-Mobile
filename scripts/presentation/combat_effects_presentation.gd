@@ -11,6 +11,7 @@ const HenryBarometric = preload("res://scripts/presentation/henry_barometric_pre
 const HenryColossus = preload("res://scripts/presentation/henry_colossus_presentation.gd")
 const ReactiveSurvivalCards = preload("res://scripts/presentation/reactive_survival_card_presentation.gd")
 const MomentumItems = preload("res://scripts/presentation/momentum_items_presentation.gd")
+const SkirmishItems = preload("res://scripts/presentation/skirmish_items_presentation.gd")
 const CardPowerFeedback = preload("res://scripts/presentation/card_power_feedback_presentation.gd")
 const Devorador = preload("res://scripts/presentation/devorador_destinos_presentation.gd")
 const LaceranteVfx = preload("res://scripts/presentation/lacerante_vfx_presentation.gd")
@@ -704,6 +705,7 @@ static func _draw_common_card_world(game: Node2D, camera: Vector2) -> void :
 		game.draw_circle(anchor_pos, 13.0 + sin(t * 7.0) * 2.0, Color(0.34, 1.0, 0.66, 0.48 * ancora_world_ratio))
 	ReactiveSurvivalCards.draw(game, camera)
 	MomentumItems.draw(game, camera)
+	SkirmishItems.draw(game, camera)
 
 
 static func _draw_rare_card_world(game: Node2D, camera: Vector2) -> void :

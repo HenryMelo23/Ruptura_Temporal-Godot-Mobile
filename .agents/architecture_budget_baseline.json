@@ -34,12 +34,12 @@
     },
     "scripts/catalog/card_catalog_definitions.gd": {
       "classes": 1,
-      "code_loc": 934,
+      "code_loc": 948,
       "functions": 9,
       "largest_function": "get_burn_summary",
       "long_functions": 0,
       "max_function_code_loc": 101,
-      "physical_loc": 967,
+      "physical_loc": 981,
       "signals": 0,
       "top_functions": {
         "display_name": 7,
@@ -68,15 +68,15 @@
     },
     "scripts/main_runtime_core.gd": {
       "classes": 0,
-      "code_loc": 39647,
+      "code_loc": 39661,
       "functions": 3325,
       "largest_function": "_start_game",
       "long_functions": 21,
       "max_function_code_loc": 383,
-      "physical_loc": 46729,
+      "physical_loc": 46743,
       "signals": 0,
       "top_functions": {
-        "_damage_boss": 293,
+        "_damage_boss": 294,
         "_handle_key": 301,
         "_spawn_enemy": 362,
         "_start_game": 383,
@@ -85,12 +85,12 @@
     },
     "scripts/main_runtime_state.gd": {
       "classes": 0,
-      "code_loc": 3787,
+      "code_loc": 3809,
       "functions": 1,
       "largest_function": "_safe_load",
       "long_functions": 0,
       "max_function_code_loc": 5,
-      "physical_loc": 3903,
+      "physical_loc": 3925,
       "signals": 0,
       "top_functions": {
         "_safe_load": 5
@@ -132,16 +132,16 @@
     },
     "scripts/presentation/combat_effects_presentation.gd": {
       "classes": 0,
-      "code_loc": 3081,
+      "code_loc": 3085,
       "functions": 99,
       "largest_function": "_draw_projectiles",
       "long_functions": 3,
       "max_function_code_loc": 281,
-      "physical_loc": 3402,
+      "physical_loc": 3406,
       "signals": 0,
       "top_functions": {
         "_draw_canonical_network_ability": 87,
-        "_draw_common_card_world": 233,
+        "_draw_common_card_world": 235,
         "_draw_game": 277,
         "_draw_projectiles": 281,
         "_draw_rare_card_world": 102
@@ -789,16 +789,16 @@
     },
     "scripts/ui/shop_presentation.gd": {
       "classes": 0,
-      "code_loc": 1347,
+      "code_loc": 1330,
       "functions": 59,
       "largest_function": "draw_legacy",
       "long_functions": 2,
       "max_function_code_loc": 322,
-      "physical_loc": 1564,
+      "physical_loc": 1547,
       "signals": 0,
       "top_functions": {
         "card_stat_chips": 105,
-        "draw": 159,
+        "draw": 137,
         "draw_input_hints": 39,
         "draw_legacy": 322,
         "reroll_visual_state": 39
@@ -855,7 +855,7 @@
       "function": "_handle_key"
     },
     {
-      "code_loc": 293,
+      "code_loc": 294,
       "file": "scripts/main_runtime_core.gd",
       "function": "_damage_boss"
     },
@@ -877,10 +877,10 @@
   ],
   "long_function_code_loc": 120,
   "project_totals": {
-    "code_loc": 116700,
-    "functions": 7784,
+    "code_loc": 117893,
+    "functions": 7884,
     "long_functions": 45,
-    "physical_loc": 137450
+    "physical_loc": 138977
   },
   "ratchet_allowance": {
     "classes": 0,
@@ -892,9 +892,9 @@
     "signals": 0
   },
   "review": {
-    "date": "2026-11-24",
-    "head": "eb17470",
-    "reason": "Lote 2026-11-24: guarda unico da oficina do Mercador (local sealed em _update_game, ~+16 linhas de gates) e hooks finos da Profecia (var + blocks_world/update/intercept_hit/reset); logica em owners novos (RTPropheticRewind, RTDialogueTextScale, RTMerchantDimension.seals_phase_world). +9 do core ja vinham de lotes anteriores sobre 7baf1c2."
+    "date": "2026-11-26",
+    "head": "a4e9c1b",
+    "reason": "Lote de itens de 26/11: +14 linhas de dados no cat\u00e1logo CARDS (4 comuns e 10 incomuns) e 3 preloads/vars de donos (momentum, skirmish, fachada). L\u00f3gica fica em scripts/systems/cards/; n\u00facleo s\u00f3 ganhou ganchos de uma linha."
   },
   "schema": 2,
   "targets": [
@@ -923,10 +923,10 @@
   ],
   "totals": {
     "classes": 34,
-    "code_loc": 79711,
+    "code_loc": 79748,
     "functions": 5223,
     "long_functions": 44,
-    "physical_loc": 92412,
+    "physical_loc": 92449,
     "signals": 2
   }
 }

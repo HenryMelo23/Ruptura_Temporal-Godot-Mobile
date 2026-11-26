@@ -567,7 +567,7 @@ static func _draw_player(game: Node2D, camera: Vector2) -> void :
 			game.draw_texture_rect(tex, Rect2(pos, draw_size), false, shadow_color)
 		game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
-	var player_modulate = Color.WHITE
+	var player_modulate = Color(1.0, 1.0, 1.0, game.skirmish_items_controller.player_alpha())
 	if bool(profile.get("preserve_height", false)):
 		game._draw_entity_by_height_rotated(tex, center + profile["offset"], float(profile.get("height", game.PLAYER_DRAW_LACERAR_HEIGHT)), rotation, player_modulate, flip_h)
 	else:
