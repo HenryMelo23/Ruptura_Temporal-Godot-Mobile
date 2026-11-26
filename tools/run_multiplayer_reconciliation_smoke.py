@@ -76,5 +76,6 @@ if __name__ == "__main__":
     run_scenario("team-chips", "multiplayer_world_interaction_smoke", trio, "chips")
     run_scenario("phase8", "multiplayer_world_interaction_smoke", trio, "phase8")
     run_scenario("phase9", "multiplayer_world_interaction_smoke", trio, "phase9")
+    run_scenario("phase10", "multiplayer_world_interaction_smoke", trio, "phase10")
     run_scenario("match", "multiplayer_integration_smoke", trio + ["client2"])
-    print("MULTIPLAYER_RECONCILIATION_OK ready spectator shop boss1-rewind death-cycle deck lacerante-execution score-boss-entry world-shop boss-aftermath team-chips phase8 phase9 manifestation spectrum match")
+    print("MULTIPLAYER_RECONCILIATION_OK ready spectator shop boss1-rewind death-cycle deck lacerante-execution score-boss-entry world-shop boss-aftermath team-chips phase8 phase9 phase10 manifestation spectrum match")

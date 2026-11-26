@@ -50,7 +50,7 @@ func _initialize() -> void:
 			relay_host = arg.trim_prefix("--host=")
 		elif arg.begins_with("--result-dir="):
 			result_dir = arg.trim_prefix("--result-dir=")
-	if role not in ["server", "host", "client"] or scenario not in ["altar", "shop", "phase8", "phase9", "aftermath", "chips"]:
+	if role not in ["server", "host", "client"] or scenario not in ["altar", "shop", "phase8", "phase9", "phase10", "aftermath", "chips"]:
 		_fail("invalid arguments")
 		return
 	game = load("res://scenes/Main.tscn").instantiate()
@@ -113,6 +113,10 @@ func _run_player_step() -> void:
 			game.current_phase = 1
 	if game_started_ms == 0:
 		return
+	if scenario == "chips" and game.mode == "game":
+		# This scenario waits for a shared token and a shop round trip. Keep
+		# ambient phase enemies from ending the fixture before that contract runs.
+		game.run_retry_invulnerability_timer = 60.0
 	if role == "host":
 		_run_host_interaction_step()
 	else:
@@ -176,6 +180,8 @@ func _run_host_interaction_step() -> void:
 			game.player_pos = FAR_POS
 		elif scenario == "phase9":
 			_prepare_phase9_fixture()
+		elif scenario == "phase10":
+			_prepare_phase10_fixture()
 		else:
 			_prepare_phase8_fixture()
 		game.net_world_visual_sync_last_ms = 0
@@ -203,6 +209,9 @@ func _run_host_interaction_step() -> void:
 		_run_chips_step()
 	elif scenario == "phase9":
 		_run_phase9_host_step()
+	elif scenario == "phase10":
+		if _result_exists("client") and not _result_exists("host"):
+			_write_result("host", "phase10=true authority=true enemy=true beat=true boss_visual=true")
 	else:
 		_check(game.current_phase == 8, "host did not enter phase 8")
 		_check(game._story().active_id == "" and not game._dialogue().busy(), "host opened multiplayer narrative")
@@ -246,6 +255,8 @@ func _run_client_interaction_step() -> void:
 		_run_chips_step()
 	elif scenario == "phase9":
 		_run_phase9_client_step()
+	elif scenario == "phase10":
+		_run_phase10_client_step()
 	else:
 		if game.current_phase != 8:
 			return
@@ -260,6 +271,36 @@ func _run_client_interaction_step() -> void:
 			return
 		_check(game._story().active_id == "" and not game._dialogue().busy(), "client opened multiplayer narrative")
 		_write_result("client", "phase8=true replica=true enemy=true bullets=true boss_visual=true narrative=false")
+
+
+func _prepare_phase10_fixture() -> void:
+	game.current_phase = RTBaileController.PHASE
+	game.experimental_phase_controller.begin_definitive_phase(game.current_phase)
+	game.baile_controller.reset()
+	game.boss10_controller.reset()
+	game.enemies.clear()
+	game._spawn_enemy(RTBaileController.MONARCA, Vector2(660, 440))
+	game.baile_controller.beat.bpm = RTBaileBeatClock.BPM_REMIX
+	game.boss10_controller.mode = "holofote"
+	game.boss10_controller.stage = 2
+	game.net_world_sync_last_ms = 0
+	game.net_world_visual_sync_last_ms = 0
+
+
+func _run_phase10_client_step() -> void:
+	if game.current_phase != RTBaileController.PHASE:
+		return
+	var enemy_seen := false
+	for enemy_value in game.enemies:
+		if enemy_value is Dictionary and String(enemy_value.get("type", "")) == RTBaileController.MONARCA:
+			enemy_seen = true
+			break
+	if not enemy_seen or not is_equal_approx(game.baile_controller.beat.bpm, RTBaileBeatClock.BPM_REMIX):
+		return
+	if game.boss10_controller.mode != "holofote" or game.boss10_controller.stage != 2:
+		return
+	_check(game._story().active_id == "" and not game._dialogue().busy(), "client opened multiplayer narrative in phase 10")
+	_write_result("client", "phase10=true replica=true enemy=true beat=true boss_visual=true narrative=false")
 
 
 func _prepare_phase8_fixture() -> void:
@@ -415,7 +456,7 @@ func _run_chips_step() -> void:
 			game.arauto_card_drops.append({"drop_id": "chip_wire_drop", "owner_peer": peer_id, "card": game.CARDS[0], "pos": peer_pos, "vel": Vector2.ZERO, "life": 30.0, "age": 0.0, "mystery": true, "mystery_rarity": "common"})
 			game.net_world_visual_sync_last_ms = 0
 		if chips.team_token_total() == 1 and _result_exists("client_token") and not chip_rift_spawned:
-			game.time_alive = 1000.0
+			game.time_alive = maxf(game.time_alive, 26.0)
 			game.arauto.clear()
 			game.shop_last_exit_time = 0.0
 			game.shop_rift_next_allowed_time = 0.0
