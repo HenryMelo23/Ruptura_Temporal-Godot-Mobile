@@ -1,6 +1,7 @@
 extends SceneTree
-## Coletora: a execucao de um inimigo dispara a animacao da foice (sombras,
-## angulo, corte, explosao), que dura 0,8 s e nunca passa de 6 ao mesmo tempo.
+## Coletora: a execucao de um inimigo dispara a animacao da foice (forma da
+## sombra, angulo, corte, explosao, barra ceifada, alma subindo), que dura 1,4 s
+## e nunca passa de 6 ao mesmo tempo.
 ## Com "capture" salva as fases em .agent_logs/coletora/ (precisa de janela).
 ## godot4 --headless --path . --script tests/coletora_scythe_smoke.gd
 ## godot4 --path . --audio-driver Dummy --resolution 1280x720 --script tests/coletora_scythe_smoke.gd -- capture
@@ -55,8 +56,9 @@ func _run() -> void:
 	game._damage_enemy(target, 90.0, "atk", false, true, game.player_pos, "basic_attack")
 	_check(fx.fx.size() == 1, "execucao nao disparou a foice (%d)" % fx.fx.size())
 	_check(fx.fx.size() == 0 or Dictionary(fx.fx[0]).get("tex") != null, "foice sem a copia do inimigo")
-	fx.update(0.85)
-	_check(fx.fx.is_empty(), "animacao deveria acabar em 0,8 s")
+	_check(fx.fx.size() == 0 or float(Dictionary(fx.fx[0]).get("ratio", 0.0)) > 0.0, "a barra deveria guardar a vida de antes da execucao")
+	fx.update(1.45)
+	_check(fx.fx.is_empty(), "animacao deveria acabar em 1,4 s")
 	for k in range(9):
 		fx.on_execute(_enemy(Vector2(100 + k * 20, 0)))
 	_check(fx.fx.size() == 6, "limite de 6 foices simultaneas (%d)" % fx.fx.size())
@@ -70,7 +72,7 @@ func _run() -> void:
 	if capture:
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT))
 		game.enemies.clear()
-		var times := [0.14, 0.33, 0.47, 0.56, 0.7]
+		var times := [0.2, 0.4, 0.5, 0.62, 0.95]
 		for k in range(times.size()):
 			fx.on_execute(_enemy(Vector2(-440 + k * 220, 40)))
 			fx.fx[k]["t"] = times[k]

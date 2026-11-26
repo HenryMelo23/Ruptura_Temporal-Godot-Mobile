@@ -18538,10 +18538,10 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 	enemy["last_damage_time"] = time_alive
 	enemy["last_damage_amount"] = incoming_damage
 	if execute_threshold > 0.0 and float(enemy["hp"]) > 0.0 and float(enemy["hp"]) / float(enemy["max_hp"]) <= execute_threshold:
+		coletora_scythe_fx.on_execute(enemy)
 		enemy["hp"] = 0.0
 		collector_hud_pulse = 0.85
 		_add_text("COLETORA", enemy["pos"] + Vector2(0, -62), Color(0.95, 0.08, 0.24), 0.75, _damage_text_size(18))
-		coletora_scythe_fx.on_execute(enemy)
 	var actual_damage: float = hp_before - max(0.0, float(enemy["hp"]))
 	card_power_feedback_controller.on_damage_confirmed(enemy, actual_damage, critical_hit, effective_source_category)
 	skirmish_items_controller.on_enemy_hit(enemy, actual_damage, critical_hit, source, effective_source_category, source_peer_id)
