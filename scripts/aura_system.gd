@@ -23,6 +23,9 @@ const COLORS: = {
 }
 
 const RATIONAL_STILL_TIME: = 4.5
+## O placar interno vale 10x o que o HUD mostra (POINT_DISPLAY_DENOMINATION).
+## "ANALISE +7" precisa somar 7 pontos visiveis, nao 0,7.
+const RATIONAL_POINT_SCALE: = 10
 const RATIONAL_DILATION_TIME: = 8.0
 const RATIONAL_REBOUND_TIME: = 3.0
 const RATIONAL_COOLDOWN: = 30.0
@@ -574,10 +577,17 @@ static func update(state: Dictionary, delta: float, context: Dictionary) -> Arra
 					state["oportunista_charges"] = maxi(0, int(state["oportunista_charges"]) - 1)
 		"Racional":
 			var moved: = player_pos.distance_to(Vector2(state.get("last_pos", player_pos)))
-			state["still"] = float(state.get("still", 0.0)) + delta if moved <= 1.25 else 0.0
+			# Oficina do Mercador com o relogio parado (conversa, fenda estavel):
+			# a analise congela, senao ficar parada ali renderia pontos sem fim.
+			var analysis_paused: bool = bool(context.get("rational_analysis_paused", false))
+			if moved > 1.25:
+				state["still"] = 0.0
+			elif not analysis_paused:
+				state["still"] = float(state.get("still", 0.0)) + delta
 			if float(state["still"]) >= RATIONAL_STILL_TIME:
 				state["still"] = 0.0
-				events.append({"type": "score", "amount": 5 + level * 2, "text": "ANALISE +%d" % (5 + level * 2)})
+				var analysis_points: int = 5 + level * 2
+				events.append({"type": "score", "amount": analysis_points * RATIONAL_POINT_SCALE, "text": "ANALISE +%d" % analysis_points})
 				if level >= 2 and int(state.get("rational_focus", 0)) < rational_focus_cap(state):
 					state["rational_focus"] = int(state.get("rational_focus", 0)) + 1
 					events.append({"type": "text", "text": "FOCO ANALITICO %d/%d" % [int(state["rational_focus"]), rational_focus_cap(state)]})
@@ -941,6 +951,7 @@ static func speed_multiplier(state: Dictionary) -> float:
 	var ascended: = bool(state.get("ascended", false))
 	match String(state.get("name", "")):
 		"Racional": return (1.45 if ascended else 1.35) if float(state["rational_dilation"]) > 0.0 else 1.0
+		"Profetica": return RTPropheticRewind.MOVE_BUFF if float(state.get(RTPropheticRewind.BUFF_KEY, 0.0)) > 0.0 else 1.0
 		"Impulsiva": return 1.2 * (1.0 + 0.15 * int(state["impulsive_rank"])) if float(state["impulsive_active"]) > 0.0 else 1.0
 		"Devota": return 0.9 if float(state["devoted_slow"]) > 0.0 else 1.0
 		"Voraz":
@@ -980,6 +991,7 @@ static func damage_multiplier(state: Dictionary) -> float:
 	return 1.0
 
 static func attack_interval_multiplier(state: Dictionary) -> float:
+	if String(state.get("name", "")) == "Profetica" and float(state.get(RTPropheticRewind.BUFF_KEY, 0.0)) > 0.0: return RTPropheticRewind.ATTACK_INTERVAL_BUFF
 	if String(state.get("name", "")) == "Racional" and float(state["rational_dilation"]) > 0.0: return 0.66 if bool(state.get("ascended", false)) else 0.72
 	if String(state.get("name", "")) == "Voraz": return maxf(0.84 if bool(state.get("ascended", false)) else 0.88, 1.0 - voracious_intensity(state) * (0.045 + int(state["level"]) * 0.003))
 	if String(state.get("name", "")) == "Crepuscular": return maxf(0.75, 1.0 - _crepuscular_attack_reduction(state))

@@ -48,6 +48,17 @@ func _open_counter(dimension) -> void:
 	dimension.counter_armed = true
 	game.player_pos = RTMerchantDimension.MERCHANT_POS
 	dimension.update(0.016)
+	_choose_buy()
+
+
+## O balcao abre o menu COMPRAR / PERGUNTAR / NADA AGORA (solo); escolhe COMPRAR.
+func _choose_buy() -> void:
+	var talk: RTDialogueController = game._dialogue()
+	if not talk.busy():
+		return
+	talk.revealed = 99999.0
+	talk.grace = 0.0
+	talk.choose(0)
 
 
 ## Termina a cena de entrada/saida da fenda (mergulho, queda ou saida).

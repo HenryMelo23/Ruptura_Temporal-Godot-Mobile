@@ -701,7 +701,7 @@ static func _draw_event_hook(game: Node2D, event: Dictionary, pos: Vector2, prog
 
 static func _draw_event_card_steal(game: Node2D, event: Dictionary, pos: Vector2, progress: float, fade: float) -> void:
 	var color: Color = event.get("card_color", COLOR_AMBER_WARM)
-	var card_name := String(event.get("card_name", "CARTA")).to_upper()
+	var card_name := String(event.get("card_name", "ITEM")).to_upper()
 	var viewport := game.get_viewport_rect().size
 	var panel_size := Vector2(224.0, 50.0)
 	var desired := pos + Vector2(0.0, -37.0 - progress * 10.0) - Vector2(panel_size.x * 0.5, panel_size.y * 0.5)
@@ -712,7 +712,7 @@ static func _draw_event_card_steal(game: Node2D, event: Dictionary, pos: Vector2
 	var panel := Rect2(panel_pos, panel_size)
 	game.draw_rect(panel, Color(COLOR_FISSURE_VOID.r, COLOR_FISSURE_VOID.g, COLOR_FISSURE_VOID.b, 0.88 * fade), true)
 	game.draw_rect(panel, Color(color.r, color.g, color.b, 0.92 * fade), false, 2.5)
-	game.draw_string(game.font, panel.position + Vector2(10.0, 18.0), "CARTA ROUBADA", HORIZONTAL_ALIGNMENT_CENTER, panel.size.x - 20.0, game._readable_text_size(11), Color(1.0, 0.56, 0.28, fade))
+	game.draw_string(game.font, panel.position + Vector2(10.0, 18.0), "ITEM ROUBADO", HORIZONTAL_ALIGNMENT_CENTER, panel.size.x - 20.0, game._readable_text_size(11), Color(1.0, 0.56, 0.28, fade))
 	game.draw_string(game.font, panel.position + Vector2(10.0, 39.0), card_name, HORIZONTAL_ALIGNMENT_CENTER, panel.size.x - 20.0, game._readable_text_size(14), Color(1.0, 0.96, 0.82, fade))
 
 

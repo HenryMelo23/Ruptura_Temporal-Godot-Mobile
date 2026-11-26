@@ -77,11 +77,15 @@ work:
 python3 tools/check_architecture_budget.py
 ```
 
-Only refresh the baseline after reviewing a deliberate architecture change:
+`--report` adds the hotspot table and top 10 functions; `--json` is
+machine-readable. Only refresh the baseline after reviewing a deliberate
+architecture change (the reason is stored in the baseline):
 
 ```bash
-python3 tools/check_architecture_budget.py --write-baseline
+python3 tools/check_architecture_budget.py --write-baseline --reason "..."
 ```
+
+Details, allowances and exceptions: `.agents/REFRACTOR_CAMPAIGN.md` (Ratchet).
 
 ## Completion
 

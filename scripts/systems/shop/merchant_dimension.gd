@@ -65,10 +65,50 @@ var mp_budget_cards := 0
 ## inteira, senao o relogio correria so para metade dos jogadores.
 var mp_room_stable := false
 var mp_last_second_announced := -1
+## Fisica local dos moveis soltos e do proprio Mercador.
+var physics := RTMerchantWorkshopPhysics.new()
+## Rede do Petro: DNA dos chefes, a maquina do canto e a tela de fusao.
+var dna := RTBossDnaController.new()
+var machine := RTBossDnaMachine.new()
+var fusion_screen := RTBossDnaFusionScreen.new()
 
 
 func configure(runtime_core: Node) -> void:
 	core = runtime_core
+	dna.configure(runtime_core)
+	machine.configure(runtime_core)
+	fusion_screen.configure(runtime_core)
+
+
+## ------------------------------------------- guarda do mundo da fase
+## A oficina e uma sala segura: com ela ativa NADA da fase atualiza, nasce,
+## atira, desenha no chao dela ou causa dano (horda, Arauto, Larapio,
+## Supremos, chefes, eventos, hazards, fragmento). O core consulta so isto.
+func seals_phase_world() -> bool:
+	return active
+
+
+## Vazamentos removidos no fim do quadro (deve ficar 0; os testes cobram).
+var world_leaks := 0
+var leak_sources: Dictionary = {}
+
+
+## Fim de cada quadro na oficina: qualquer inimigo ou projetil inimigo que
+## tenha escapado da suspensao e removido e contado por origem.
+func enforce_seal() -> void:
+	if not active or core == null:
+		return
+	for entry in core.enemies:
+		_note_leak("enemy:" + String(Dictionary(entry).get("type", "?")))
+	for entry in core.enemy_bullets:
+		_note_leak("bullet:" + String(Dictionary(entry).get("source", "?")))
+	core.enemies.clear()
+	core.enemy_bullets.clear()
+
+
+func _note_leak(source: String) -> void:
+	world_leaks += 1
+	leak_sources[source] = int(leak_sources.get(source, 0)) + 1
 
 
 ## Sinal de "minha fenda esta estavel" dentro do pacote de orcamento.
@@ -79,6 +119,17 @@ func stable() -> bool:
 	if core == null:
 		return false
 	return core._merchant_npc().mission_complete() or mp_room_stable
+
+
+## O relogio da fenda esta correndo agora (mesma regra de update()). Fora
+## dele (conversa, fenda estavel, cena de entrada/saida) nada que dependa de
+## tempo na oficina deve render, ex.: a Analise parada da Racional.
+func clock_running() -> bool:
+	if not active or core == null or stable() or collapsing > 0.0:
+		return false
+	if core._dialogue().busy() or core._rift_transition().busy_in_dimension():
+		return false
+	return true
 
 
 func remaining() -> float:
@@ -180,6 +231,12 @@ func enter() -> bool:
 	core.player_pos = PLAYER_ENTRY
 	core.camera_follow_initialized = false
 	core.spawn_timer = 99999.0
+	physics.setup(RTMerchantDimensionPresentation.PROPS, [
+		["counter", RTMerchantDimensionPresentation.COUNTER_POS + Vector2(0.0, -24.0), 62.0],
+		["teleporter", TELEPORTER_POS + Vector2(0.0, 40.0), 72.0],
+		["dna_machine", RTBossDnaMachine.POS + Vector2(0.0, -20.0), RTBossDnaMachine.SOLID_RADIUS],
+	], WORLD_SIZE, MERCHANT_POS)
+	machine.on_dimension_entered()
 	active = true
 	entry_age = 0.0
 	# Multiplayer skips narrative: the first approach must open the counter
@@ -240,8 +297,11 @@ func leave(expelled: bool) -> void:
 		core._merchant_npc().on_player_expelled()
 	core.WORLD_SIZE = Vector2(saved.get("world", core.DEFAULT_WORLD_SIZE))
 	core.player_pos = Vector2(saved.get("player_pos", core.player_pos))
-	core.enemies.assign(Array(saved.get("enemies", [])))
-	core.enemy_bullets.assign(Array(saved.get("enemy_bullets", [])))
+	# Boss ja chamado/ativo: a horda guardada nao volta (a chamada do boss
+	# sempre limpa a fase).
+	var boss_started: bool = bool(core.boss_active) or String(core.mode) == "boss_call" or float(core.boss_call_timer) >= 0.0
+	core.enemies.assign([] if boss_started else Array(saved.get("enemies", [])))
+	core.enemy_bullets.assign([] if boss_started else Array(saved.get("enemy_bullets", [])))
 	core.bullets.assign(Array(saved.get("bullets", [])))
 	core.heal_orbs.assign(Array(saved.get("heal_orbs", [])))
 	core.spawn_timer = float(saved.get("spawn_timer", 2.0))
@@ -267,6 +327,10 @@ func update(delta: float) -> void:
 	_refresh_mp_expectation()
 	var npc: RTMerchantNpc = core._merchant_npc()
 	npc.update(delta)
+	physics.apply_bullets(core.bullets)
+	physics.update(delta)
+	if physics.consume_complaint() and not core._dialogue().busy():
+		npc.complain_bump()
 	if core._rift_transition().busy_in_dimension():
 		# Chegando ou saindo pela fenda: o relogio e a bancada esperam a cena.
 		return
@@ -278,10 +342,12 @@ func update(delta: float) -> void:
 			leave(true)
 		return
 	# O cronometro corre com a fenda instavel, inclusive com a loja aberta:
-	# escolher carta tambem gasta o tempo dela. Conversa de historia pausa; o
-	# menu do balcao (comprar/perguntar) e decisao de compra e gasta tempo.
-	if not stable() and (not core._dialogue().busy() or not core._dialogue().choices().is_empty()):
-		timer += delta
+	# escolher carta tambem gasta o tempo dela. Qualquer conversa com o
+	# Mercador (historia, perguntas e o proprio menu do balcao) pausa.
+	if not stable() and not core._dialogue().busy():
+		# Dilatacao da Racional (e qualquer aura que desacelere o mundo)
+		# tambem segura o relogio da fenda.
+		timer += delta * AuraSystem.world_multiplier(core.aura_state)
 		_tick_countdown_feedback()
 		if timer >= limit:
 			_begin_collapse()
@@ -297,6 +363,7 @@ func update(delta: float) -> void:
 			else:
 				leave(false)
 		return
+	machine.update(entry_age)
 	if core.mode != "game" or core._dialogue().busy():
 		return
 	var dist: float = core.player_pos.distance_to(MERCHANT_POS)
@@ -381,7 +448,7 @@ func _open_counter() -> void:
 
 
 func save_state() -> Dictionary:
-	return {"active": active, "timer": timer, "limit": limit, "confiscated": confiscated, "talked": talked_this_visit, "collapses": collapses, "rift_entries": core._rift_transition().entries if core != null else 0}
+	return {"active": active, "timer": timer, "limit": limit, "confiscated": confiscated, "talked": talked_this_visit, "collapses": collapses, "rift_entries": core._rift_transition().entries if core != null else 0, "npc_run": core._merchant_npc().run_state() if core != null else {}, "dna": dna.save_state()}
 
 
 func load_state(data: Dictionary) -> void:
@@ -390,5 +457,7 @@ func load_state(data: Dictionary) -> void:
 	confiscated = int(data.get("confiscated", 0))
 	talked_this_visit = bool(data.get("talked", false))
 	collapses = int(data.get("collapses", 0))
+	dna.load_state(Dictionary(data.get("dna", {})))
 	if core != null:
 		core._rift_transition().load_state({"entries": int(data.get("rift_entries", 0))})
+		core._merchant_npc().load_run_state(Dictionary(data.get("npc_run", {})))

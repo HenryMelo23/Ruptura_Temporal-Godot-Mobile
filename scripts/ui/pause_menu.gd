@@ -37,7 +37,7 @@ static func draw(host: Node2D, viewport: Vector2) -> void:
 	if not compact:
 		host._draw_ui_text("Respire. A ruptura pode esperar.", Vector2(x, top + 108), 13, HUD.MUTED)
 	var rects := action_rects(viewport)
-	var labels := ["Continuar", "Deck · %d cartas" % host._deck_total_cards(), "Configurações", "Menu inicial"]
+	var labels := ["Continuar", "Deck · %d itens" % host._deck_total_cards(), "Configurações", "Menu inicial"]
 	for i in range(KEYS.size()):
 		host.buttons[KEYS[i]] = rects[i]
 		var focused: bool = host._pause_selection_active(i) or (host._uses_desktop_ui() and rects[i].has_point(host.get_global_mouse_position()))

@@ -29,15 +29,15 @@ func _run() -> void:
 	game._spawn_arauto()
 	_check(game._arauto_active(), "Arauto fixture did not spawn")
 
-	var expected_points: int = int(round(float(game.card_cost) * game.ARAUTO_POINT_REWARD_CARD_COST_RATIO))
+	var expected_points: int = RTSupremeEnemyRewards.points_for("arauto", int(game.card_cost))
 	var score_before: int = int(game.score)
 	game.arauto["entry_timer"] = 0.0
 	game.arauto["hp"] = 1.0
 	game._damage_arauto(99999.0, "reward_smoke", false)
 
 	_check(not game._arauto_active(), "Arauto did not finish")
-	_check(game.score - score_before == expected_points, "Arauto did not credit one current card cost")
-	_check(game.arauto_card_drops.size() == game.ARAUTO_CARD_REWARD_COUNT, "Existing card reward changed")
+	_check(game.score - score_before == expected_points, "Arauto did not credit its supreme point reward")
+	_check(game.arauto_card_drops.is_empty(), "Arauto still drops cards")
 
 	if failed:
 		_cleanup()

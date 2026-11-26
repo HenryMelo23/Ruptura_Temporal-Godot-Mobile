@@ -573,6 +573,8 @@ static func _draw_keyboard_settings(game: Node2D, viewport: Vector2) -> void :
 	for i in range(actions.size()):
 		var action = actions[i]
 		var value = "PRESSIONE TECLA/MOUSE..." if game.keyboard_mapping_action == action else game._format_key_binding_name(game.keyboard_bindings.get(action, game.INPUT_BIND_NONE))
+		if action == "attack" and game.keyboard_mapping_action != action and game._desktop_attack_uses_cursor():
+			value = game.KeyboardBindingDefaultsScript.cursor_label(value)
 		game._draw_gameplay_preference(game.settings_buttons[action], game._keyboard_action_title(action), game._keyboard_action_subtitle(action), value, game._keyboard_action_color(action), game.settings_selected == i)
 	game._draw_settings_card(game.settings_buttons["reset"], "RESTAURAR PADRAO", "restaurar os atalhos originais", Color(0.58, 0.82, 1.0), game.settings_selected == actions.size())
 	game._draw_settings_card(game.settings_buttons["back"], "VOLTAR", "retornar", Color(1.0, 0.26, 0.36), game.settings_selected == actions.size() + 1)
@@ -582,7 +584,8 @@ static func _draw_gameplay_settings(game: Node2D, viewport: Vector2) -> void :
 	game._draw_settings_shell(viewport, "Jogabilidade", "Ajuste os comandos, a mira e a leitura do combate.")
 	game.settings_buttons = game._gameplay_preferences_rects(viewport)
 	var analog_accent = Color(0.0, 1.0, 0.82) if game.analog_fixed else Color(1.0, 0.74, 0.22)
-	game._draw_gameplay_preference(game.settings_buttons["analog"], "ANALOGICO", "Origem do controle de movimento.", "FIXO" if game.analog_fixed else "DINAMICO", analog_accent, game.settings_selected == game._gameplay_preference_index("analog"))
+	if game.settings_buttons.has("analog"):
+		game._draw_gameplay_preference(game.settings_buttons["analog"], "ANALOGICO", "Origem do controle de movimento.", "FIXO" if game.analog_fixed else "DINAMICO", analog_accent, game.settings_selected == game._gameplay_preference_index("analog"))
 	game._draw_gameplay_preference(game.settings_buttons["target_priority"], "PRIORIDADE DO DISPARO", "Define o alvo escolhido pela mira automatica.", game._target_priority_label(), Color(1.0, 0.48, 0.74), game.settings_selected == game._gameplay_preference_index("target_priority"))
 	if game._uses_desktop_ui() and game.settings_buttons.has("desktop_aim"):
 		game._draw_gameplay_preference(game.settings_buttons["desktop_aim"], "MIRA DAS HABILIDADES", "Como Q/E usam o cursor no desktop.", game._desktop_aim_mode_label(), Color(0.42, 0.92, 1.0), game.settings_selected == game._gameplay_preference_index("desktop_aim"))
@@ -604,10 +607,14 @@ static func _draw_gameplay_settings(game: Node2D, viewport: Vector2) -> void :
 	game._draw_gameplay_preference(interface_panel, "TEXTOS DA INTERFACE", "Escala de textos da loja e manifestações.", "%d%%" % int(round(game.interface_text_scale * 100.0)), Color(0.62, 0.88, 1.0), game.settings_selected == game._gameplay_preference_index("interface_text"))
 	game._draw_small_rect_button(game._interface_text_minus_rect(interface_panel), "-", Color(0.04, 0.1, 0.16), Color(0.62, 0.88, 1.0))
 	game._draw_small_rect_button(game._interface_text_plus_rect(interface_panel), "+", Color(0.04, 0.1, 0.16), Color(0.62, 0.88, 1.0))
-	var bark_panel = game.settings_buttons["geovana_bark"]
-	game._draw_gameplay_preference(bark_panel, "BALÕES DE FALA", "Tamanho dos balões de fala durante a partida.", "%d%%" % int(round(game.geovana_bark_scale * 100.0)), Color(1.0, 0.82, 0.42), game.settings_selected == game._gameplay_preference_index("geovana_bark"))
-	game._draw_small_rect_button(game._interface_text_minus_rect(bark_panel), "-", Color(0.16, 0.11, 0.04), Color(1.0, 0.82, 0.42))
-	game._draw_small_rect_button(game._interface_text_plus_rect(bark_panel), "+", Color(0.16, 0.11, 0.04), Color(1.0, 0.82, 0.42))
+	if game.settings_buttons.has("dialogue_text"):
+		var dialogue_panel: Rect2 = game.settings_buttons["dialogue_text"]
+		var dialogue_accent := Color(0.85, 0.70, 0.34)
+		game._draw_gameplay_preference(dialogue_panel, "TEXTO DAS CONVERSAS", "Tamanho das falas do Mercador e da UMBRA.", RTDialogueTextScale.label(game), dialogue_accent, game.settings_selected == game._gameplay_preference_index("dialogue_text"))
+		game._draw_small_rect_button(game._interface_text_minus_rect(dialogue_panel), "-", Color(0.14, 0.1, 0.04), dialogue_accent)
+		game._draw_small_rect_button(game._interface_text_plus_rect(dialogue_panel), "+", Color(0.14, 0.1, 0.04), dialogue_accent)
+	var color_on: bool = game.ColorVisionFilterScript.shader_mode(game.color_vision_mode) > 0
+	game._draw_gameplay_preference(game.settings_buttons["color_vision"], "MODO DE COR", "Filtro para daltonismo ou alto contraste.", game.ColorVisionFilterScript.label(game.color_vision_mode), Color(1.0, 0.82, 0.42) if color_on else Color(0.48, 0.52, 0.58), game.settings_selected == game._gameplay_preference_index("color_vision"))
 	var fps_accent = Color(0.0, 1.0, 0.82) if game.show_fps_counter else Color(0.48, 0.52, 0.58)
 	game._draw_gameplay_preference(game.settings_buttons["fps"], "CONTADOR DE FPS", "Mostra desempenho no canto da tela.", "ON" if game.show_fps_counter else "OFF", fps_accent, game.settings_selected == game._gameplay_preference_index("fps"))
 	game._draw_toggle_switch(game._shop_mode_toggle_rect(game.settings_buttons["fps"]), game.show_fps_counter, fps_accent)
@@ -620,8 +627,9 @@ static func _draw_gameplay_settings(game: Node2D, viewport: Vector2) -> void :
 		cheat_value = "DIGITANDO..."
 	game._draw_gameplay_preference(game.settings_buttons["gameplay_cheat"], "CHEAT SECRETO", "Campo reservado para códigos de QA e dev.", cheat_value, cheat_accent, game.settings_selected == game._gameplay_preference_index("gameplay_cheat"))
 	var haptics_accent = Color(0.0, 1.0, 0.82) if game.haptics_enabled else Color(0.48, 0.52, 0.58)
-	game._draw_gameplay_preference(game.settings_buttons["haptics"], "VIBRACAO", "Feedback tatil dos impactos e habilidades.", "ON" if game.haptics_enabled else "OFF", haptics_accent, game.settings_selected == game._gameplay_preference_index("haptics"))
-	game._draw_toggle_switch(game._shop_mode_toggle_rect(game.settings_buttons["haptics"]), game.haptics_enabled, haptics_accent)
+	if game.settings_buttons.has("haptics"):
+		game._draw_gameplay_preference(game.settings_buttons["haptics"], "VIBRACAO", "Feedback tatil dos impactos e habilidades.", "ON" if game.haptics_enabled else "OFF", haptics_accent, game.settings_selected == game._gameplay_preference_index("haptics"))
+		game._draw_toggle_switch(game._shop_mode_toggle_rect(game.settings_buttons["haptics"]), game.haptics_enabled, haptics_accent)
 	if game.ui_platform_override_unlocked and game.settings_buttons.has("ui_platform_profile"):
 		game._draw_gameplay_preference(game.settings_buttons["ui_platform_profile"], "PERFIL DE INTERFACE", "Auto detecta %s; cheat libera Android/Desktop." % game._runtime_platform_name(), game._ui_platform_profile_label(), Color(1.0, 0.78, 0.22), game.settings_selected == game._gameplay_preference_index("ui_platform_profile"))
 	if game.QA_STREAMING_FEATURE_ENABLED and game.qa_streaming_unlocked and game.settings_buttons.has("qa_stream_quality"):
@@ -947,6 +955,8 @@ static func _draw_spectrum_reveal_fragments(game: Node2D, center_x: float, cente
 		var rect = Rect2(pos_x - card_w * scale * 0.5, center_y - card_h * scale * 0.5, card_w * scale, card_h * scale)
 		var manifest_idx: int = game._manifest_selection_index_for_slot(manifest_slot + diff, false)
 		var aura_idx: int = game._manifest_selection_index_for_slot(aura_slot + diff, true)
+		if manifest_idx < 0 or aura_idx < 0:
+			continue
 		var manifest_item: Dictionary = game.MANIFESTATIONS[manifest_idx]
 		var aura_item: Dictionary = game.AURAS[aura_idx]
 		var manifest_color = game._manifest_select_item_color(manifest_item, false)
@@ -1569,10 +1579,27 @@ static func _geovana_build_model(game: Node2D) -> Dictionary:
 			"unlocked": game._manifest_select_item_unlocked(index, aura_view),
 			"unread": game._content_is_unread("specter" if aura_view else "manifestation", key),
 		})
+	var random_enabled: bool = game._build_random_slot_enabled()
+	var random_view: String = game._build_random_view(aura_view)
+	var random_selected: bool = random_enabled and game._build_random_shown(random_view)
+	if random_enabled:
+		items.append(random_build_item(aura_view))
 	var selected_slot: int = maxi(0, game._manifest_selection_slot_for_index(selected, aura_view))
+	if random_selected:
+		selected_slot = items.size() - 1
 	var selected_entry: Dictionary = source[clampi(selected, 0, source.size() - 1)]
-	var unlocked: bool = game._manifest_select_item_unlocked(selected, aura_view)
+	var unlocked: bool = true if random_selected else game._manifest_select_item_unlocked(selected, aura_view)
 	var dossier: Dictionary = RTBuildChoiceDossier.spectrum(String(selected_entry.get("name", ""))) if aura_view else RTBuildChoiceDossier.manifestation(String(selected_entry.get("key", "")))
+	if random_selected:
+		dossier = random_build_dossier(aura_view)
+	var manifest_hidden: bool = bool(game.build_random_hidden.get("manifest", false))
+	var manifest_name: String = "???" if manifest_hidden else String(game.MANIFESTATIONS[game.selected_manifestation].get("name", "")).to_upper()
+	var keys: Dictionary = {"primary": "manifest_start", "back": "manifest_back", "preview": "manifest_preview", "pick_prefix": "build_pick_", "prev": "build_prev", "next": "build_next", "chips": "build_chips"}
+	if not random_enabled:
+		keys["random"] = "build_random"
+	var primary_label: String = ("INICIAR" if aura_view else "ESCOLHER ESPECTRO") if unlocked else "BLOQUEADO"
+	if random_selected:
+		primary_label = "SORTEAR E INICIAR" if aura_view else "SORTEAR E SEGUIR"
 	return {
 		"theme": "geovana",
 		"step": 1 if aura_view else 0,
@@ -1581,14 +1608,43 @@ static func _geovana_build_model(game: Node2D) -> Dictionary:
 		"target_scroll": float(game.aura_scroll_pos if aura_view else game.manifest_scroll_pos) if bool(game.manifest_is_dragging) else float(selected_slot),
 		"dossier": dossier,
 		"locked_text": game._manifest_select_unlock_objective_text(selected, aura_view, true),
-		"summary": ("MANIFESTAÇÃO: " + String(game.MANIFESTATIONS[game.selected_manifestation].get("name", "")).to_upper()) if aura_view else "",
-		"primary_label": ("INICIAR" if aura_view else "ESCOLHER ESPECTRO") if unlocked else "BLOQUEADO",
+		"summary": ("MANIFESTAÇÃO: " + manifest_name) if aura_view else "",
+		"primary_label": primary_label,
 		"primary_enabled": unlocked,
-		"preview_enabled": unlocked and not aura_view and game.manifest_select_stage == game.MANIFEST_STAGE_MANIFESTATION,
-		"hint": "A / D, ARRASTE OU TOQUE NUMA CARTA",
-		"keys": {"primary": "manifest_start", "back": "manifest_back", "preview": "manifest_preview", "pick_prefix": "build_pick_", "prev": "build_prev", "next": "build_next", "random": "build_random", "chips": "build_chips"},
+		"preview_enabled": unlocked and not random_selected and not aura_view and game.manifest_select_stage == game.MANIFEST_STAGE_MANIFESTATION,
+		"hint": "A / D, ARRASTE OU TOQUE NUM ITEM",
+		"keys": keys,
 		"chips_label": "CHIPS QUANTICOS (%d)" % game._quantum_chips().selected_count(),
 		"random_label": "ESPECTRO ALEATORIO" if aura_view else "MANIFESTACAO ALEATORIA",
+	}
+
+
+## Carta "ALEATORIA" do carrossel: sem arte, um "?" grande desenhado pela tela.
+static func random_build_item(second_step: bool, henry: bool = false) -> Dictionary:
+	var label: String = ("EFEITO ALEATÓRIO" if second_step else "MUTAÇÃO ALEATÓRIA") if henry else ("ESPECTRO ALEATÓRIO" if second_step else "MANIFESTAÇÃO ALEATÓRIA")
+	return {
+		"index": -7,
+		"key": "random",
+		"name": label,
+		"color": Color(1.0, 0.86, 0.32) if henry else Color(0.4, 0.95, 1.0),
+		"texture": null,
+		"unlocked": true,
+		"unread": false,
+		"random": true,
+	}
+
+
+static func random_build_dossier(second_step: bool, henry: bool = false) -> Dictionary:
+	var what: String = ("um efeito" if second_step else "uma mutação") if henry else ("um espectro desbloqueado" if second_step else "uma manifestação desbloqueada")
+	return {
+		"style": "Escolha às cegas",
+		"tagline": "Sorteia %s e segue direto." % what,
+		"rows": [
+			{"label": "SORTEIO", "title": "Sem revelar", "text": "Confirme e o jogo segue sem mostrar o que saiu."},
+			{"label": "PARTIDA", "title": "Descoberta", "text": "Você só descobre a escolha dentro da partida."},
+		],
+		"note": "Boa sorte. A Ruptura escolhe por você.",
+		"difficulty": 0,
 	}
 
 
@@ -2310,7 +2366,7 @@ static func _draw_team_revival_world(game: Node2D, camera: Vector2) -> void:
 		game.draw_circle(pos, 4.2 + pulse * 1.6, core)
 	if game.revival_altars_active:
 		game._draw_team_revival_altar(game.revival_altar_life_pos - camera, Color(1.0, 0.18, 0.26), "VIDA", t)
-		game._draw_team_revival_altar(game.revival_altar_points_pos - camera, Color(0.08, 0.62, 1.0), "4 CARTAS", t + 1.4)
+		game._draw_team_revival_altar(game.revival_altar_points_pos - camera, Color(0.08, 0.62, 1.0), "4 ITENS", t + 1.4)
 		game._draw_revival_altar_talkbox(camera)
 
 
@@ -2443,7 +2499,7 @@ static func _draw_shop_mp_waiting_legacy(game: Node2D, viewport: Vector2) -> voi
 	game._draw_glitch_title("AGUARDANDO EQUIPE", Vector2(panel.get_center().x, panel.position.y + 52.0), 24, Color(0.0, 1.0, 0.82))
 	var detail = "VOCE JA TERMINOU SUAS COMPRAS"
 	if game._affordable_card_count() <= 0:
-		detail = "SEM PONTOS PARA NOVAS CARTAS"
+		detail = "SEM PONTOS PARA NOVOS ITENS"
 	game._draw_centered(detail, panel.get_center() + Vector2(0, 10), game._readable_text_size(17), Color(1.0, 0.86, 0.26))
 	game._draw_centered("PRONTOS %d/%d - A PARTIDA VOLTA COM TODA A EQUIPE" % [game.shop_mp_ready_count, game.shop_mp_expected_count], panel.get_center() + Vector2(0, 48), game._readable_text_size(13), Color(0.9, 0.96, 1.0, 0.92))
 
@@ -2749,7 +2805,7 @@ static func _draw_run_summary(game: Node2D, area: Rect2, accent: Color, lost: bo
 		["DANO INIMIGOS", str(int(round(game.run_damage_to_enemies)))],
 		["PONTOS GANHOS", game._format_points(game.run_points_earned)],
 		["PONTOS GASTOS", game._format_points(game.run_points_spent)],
-		["CARTAS", str(game._deck_total_cards())],
+		["ITENS", str(game._deck_total_cards())],
 		["FASE DA QUEDA" if lost else "FASE CONCLUIDA", str(game.current_phase)]
 	]
 	var knowledge: Dictionary = game.umbra_run_knowledge if not game.umbra_run_knowledge.is_empty() else game.umbra_memory_controller.knowledge_report(game)
@@ -3282,8 +3338,8 @@ static func _draw_run_mode_popup(game: Node2D, viewport: Vector2) -> void:
 	game._draw_centered("Somente o host pode alterar", popup.position + Vector2(230.0, 64.0), 12, Color(0.68, 0.8, 0.86))
 	game.buttons["lobby_mode_shop"] = Rect2(popup.position + Vector2(28.0, 88.0), Vector2(194.0, 92.0))
 	game.buttons["lobby_mode_drop"] = Rect2(popup.position + Vector2(238.0, 88.0), Vector2(194.0, 92.0))
-	_draw_run_mode_choice(game, game.buttons["lobby_mode_shop"], "LOJA", "Cartas compradas\nnas pausas", game.run_mode_popup_selection == 0, Color(0.18, 0.86, 0.78))
-	_draw_run_mode_choice(game, game.buttons["lobby_mode_drop"], "DROP", "Inimigos podem\ndropar cartas", game.run_mode_popup_selection == 1, Color(1.0, 0.68, 0.18))
+	_draw_run_mode_choice(game, game.buttons["lobby_mode_shop"], "LOJA", "Itens comprados\nnas pausas", game.run_mode_popup_selection == 0, Color(0.18, 0.86, 0.78))
+	_draw_run_mode_choice(game, game.buttons["lobby_mode_drop"], "DROP", "Inimigos podem\ndropar itens", game.run_mode_popup_selection == 1, Color(1.0, 0.68, 0.18))
 
 
 static func _draw_run_mode_choice(game: Node2D, rect: Rect2, title: String, subtitle: String, selected: bool, accent: Color) -> void:

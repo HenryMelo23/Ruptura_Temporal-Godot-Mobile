@@ -589,6 +589,20 @@ const CARD_DEFINITIONS: Dictionary = {
 		"stat_label": "escudo hemofago raro",
 		"float_text": "CINZAS: EGIDE",
 	},
+	"fe_emaculada": {"id": "fe_emaculada", "name": "Fé Emaculada", "category": CATEGORY_COOLDOWN, "rarity": RARITY_UNCOMMON, "can_burn": true, "policy": "numeric_attribute", "eligible_attributes": ["power"], "burn_factor": 0.50, "stat_label": "pacote de munição", "float_text": "CINZAS: FÉ EMACULADA"},
+	"tornozeleira_chumbo": {"id": "tornozeleira_chumbo", "name": "Tornozeleira de Chumbo", "category": CATEGORY_CROWD_CONTROL, "rarity": RARITY_UNCOMMON, "can_burn": true, "policy": "numeric_attribute", "eligible_attributes": ["power"], "burn_factor": 0.50, "stat_label": "passo pesado", "float_text": "CINZAS: TORNOZELEIRA DE CHUMBO"},
+	"disparo_vital": {"id": "disparo_vital", "name": "Disparo Vital", "category": CATEGORY_LIFESTEAL, "rarity": RARITY_UNCOMMON, "can_burn": true, "policy": "numeric_attribute", "eligible_attributes": ["power"], "burn_factor": 0.50, "stat_label": "crítico curativo", "float_text": "CINZAS: DISPARO VITAL"},
+	"ultimo_impulso": {"id": "ultimo_impulso", "name": "Último Impulso", "category": CATEGORY_SPEED, "rarity": RARITY_UNCOMMON, "can_burn": true, "policy": "numeric_attribute", "eligible_attributes": ["power"], "burn_factor": 0.50, "stat_label": "arrancada", "float_text": "CINZAS: ÚLTIMO IMPULSO"},
+	"sangue_coagulado": {"id": "sangue_coagulado", "name": "Sangue Coagulado", "category": CATEGORY_HEALING, "rarity": RARITY_UNCOMMON, "can_burn": true, "policy": "numeric_attribute", "eligible_attributes": ["power"], "burn_factor": 0.50, "stat_label": "vida acumulada", "float_text": "CINZAS: SANGUE COAGULADO"},
+	"pulso_conversao": {"id": "pulso_conversao", "name": "Pulso da Conversão", "category": CATEGORY_HEALING, "rarity": RARITY_UNCOMMON, "can_burn": true, "policy": "numeric_attribute", "eligible_attributes": ["power"], "burn_factor": 0.50, "stat_label": "nova de cura", "float_text": "CINZAS: PULSO DA CONVERSÃO"},
+	"bobina_catalisadora": {"id": "bobina_catalisadora", "name": "Bobina Catalisadora", "category": CATEGORY_DAMAGE, "rarity": RARITY_UNCOMMON, "can_burn": true, "policy": "numeric_attribute", "eligible_attributes": ["power"], "burn_factor": 0.50, "stat_label": "raio guardado", "float_text": "CINZAS: BOBINA CATALISADORA"},
+	"espinhos_vaghnor": {"id": "espinhos_vaghnor", "name": "Espinhos do Vaghnor", "category": CATEGORY_DAMAGE, "rarity": RARITY_UNCOMMON, "can_burn": true, "policy": "numeric_attribute", "eligible_attributes": ["power"], "burn_factor": 0.50, "stat_label": "sangue contagioso", "float_text": "CINZAS: ESPINHOS DO VAGHNOR"},
+	"veu_entropico": {"id": "veu_entropico", "name": "Véu Entrópico", "category": CATEGORY_DEFENSE, "rarity": RARITY_UNCOMMON, "can_burn": true, "policy": "numeric_attribute", "eligible_attributes": ["power"], "burn_factor": 0.50, "stat_label": "sumiço", "float_text": "CINZAS: VÉU ENTRÓPICO"},
+	"botas_veludo": {"id": "botas_veludo", "name": "Botas de Veludo", "category": CATEGORY_SPEED, "rarity": RARITY_UNCOMMON, "can_burn": true, "policy": "numeric_attribute", "eligible_attributes": ["power"], "burn_factor": 0.50, "stat_label": "passo macio", "float_text": "CINZAS: BOTAS DE VELUDO"},
+	"retorno_voluntario": {"id": "retorno_voluntario", "name": "Retorno Voluntário", "category": CATEGORY_COOLDOWN, "can_burn": true, "policy": "numeric_attribute", "eligible_attributes": ["power"], "burn_factor": 0.50, "stat_label": "usos guardados da HAB1", "float_text": "CINZAS: RETORNO"},
+	"estoque_ganancia": {"id": "estoque_ganancia", "name": "Estoque da Ganância", "category": CATEGORY_DAMAGE, "can_burn": true, "policy": "numeric_attribute", "eligible_attributes": ["power"], "burn_factor": 0.50, "stat_label": "dano por abate", "float_text": "CINZAS: GANÂNCIA"},
+	"espectro_eletrico": {"id": "espectro_eletrico", "name": "Espectro Elétrico", "category": CATEGORY_SPEED, "can_burn": true, "policy": "numeric_attribute", "eligible_attributes": ["power"], "burn_factor": 0.50, "stat_label": "velocidade dos orbes", "float_text": "CINZAS: ESPECTRO"},
+	"eco_ruina": {"id": "eco_ruina", "name": "Eco da Ruína", "category": CATEGORY_DEFENSE, "can_burn": true, "policy": "numeric_attribute", "eligible_attributes": ["power"], "burn_factor": 0.50, "stat_label": "golpes do eco", "float_text": "CINZAS: ECO"},
 	"fratura_cronal": {
 		"id": "fratura_cronal",
 		"name": "Fratura Cronal",
@@ -778,7 +792,7 @@ const CARD_DEFINITIONS: Dictionary = {
 		"policy": "legendary_non_burnable",
 		"eligible_attributes": [],
 		"burn_factor": 0.0,
-		"stat_label": "duplicacao de cartas",
+		"stat_label": "duplicacao de itens",
 		"float_text": "",
 	},
 	"coracao_paradoxo": {
@@ -910,7 +924,7 @@ static func get_burn_summary(card_or_id: Variant, stacks: int, base_damage: floa
 			return "Ao comprar: +%.1f%% no raio de coleta de recursos (+%d%%)" % [rad_pct, total_scale_pct]
 		"pacto_possibilidades":
 			var disc_pct: float = 4.0 * float(effective_stacks) * factor
-			return "Ao comprar: +%.1f%% de desconto para cartas novas (+%d%%)" % [disc_pct, total_scale_pct]
+			return "Ao comprar: +%.1f%% de desconto para itens novos (+%d%%)" % [disc_pct, total_scale_pct]
 		"tributo_da_dor":
 			return "Ao comprar: +%d%% nos pontos recebidos ao perder vida" % total_scale_pct
 		"intervalo_fraturado":
@@ -957,11 +971,11 @@ static func get_burn_summary(card_or_id: Variant, stacks: int, base_damage: floa
 			return "Ao comprar: +%d%% no dano pelas costas e desorientacao" % total_scale_pct
 		"fragmentacao_reativa", "bastiao_inercial", "rastro_de_retorno", "municao_de_rebate", "impulso_de_sobras", "eco_de_impacto", "zona_de_descompressao", "folego_de_perseguicao", "margem_de_erro", "ressonancia_de_alternancia":
 			var def: Dictionary = get_card_definition(card_id)
-			var label: String = String(def.get("stat_label", "atributos da carta"))
+			var label: String = String(def.get("stat_label", "atributos do item"))
 			return "Ao comprar: +%d%% de eficacia em %s" % [total_scale_pct, label]
 		_:
 			var def: Dictionary = get_card_definition(card_id)
 			if not def.is_empty() and bool(def.get("can_burn", false)):
-				var label: String = String(def.get("stat_label", "atributos da carta"))
+				var label: String = String(def.get("stat_label", "atributos do item"))
 				return "Ao comprar: +%d%% de poder adicional em %s" % [total_scale_pct, label]
-			return "Ao comprar: carta nao elegivel para fortalecimento por cinzas"
+			return "Ao comprar: item nao elegivel para fortalecimento por cinzas"

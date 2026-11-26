@@ -72,7 +72,7 @@ func _load_next_rarity() -> bool:
 		chips().consume_token(rarity)
 		picks_done += 1
 		core._apply_score_delta(int(core._points_for_enemy({"points": 75})) * 4, true, "")
-		core._add_text("SEM CARTAS %s: PONTOS" % rarity.to_upper(), core.player_pos + Vector2(-90, -110), Color(1.0, 0.86, 0.3), 1.2, 18)
+		core._add_text("SEM ITENS %s: PONTOS" % rarity.to_upper(), core.player_pos + Vector2(-90, -110), Color(1.0, 0.86, 0.3), 1.2, 18)
 	index = 0
 	var last: String = String(chips().last_pick_id.get(rarity, ""))
 	for i in range(pool.size()):
@@ -118,7 +118,7 @@ func pick() -> void:
 	chips().consume_token(rarity)
 	picks_done += 1
 	core._spawn_radial_particles(core.player_pos, core._card_rarity_color(card), 20)
-	core._add_text("CARTA: %s" % String(card.get("nick", card.get("name", ""))), core.player_pos + Vector2(-80, -88), core._card_rarity_color(card), 1.2, 20)
+	core._add_text("ITEM: %s" % String(card.get("nick", card.get("name", ""))), core.player_pos + Vector2(-80, -88), core._card_rarity_color(card), 1.2, 20)
 	core._play_sfx("shop_buy", 0.02, 0.6, 1.0)
 	if not _load_next_rarity():
 		close()

@@ -192,7 +192,7 @@ static func short_text(host: Node, item: Dictionary) -> String:
 static func detail_title(kind: String) -> String:
 	match kind:
 		"card":
-			return "CARTA"
+			return "ITEM"
 		"manifestation":
 			return "MANIFESTACAO"
 		"spectrum":

@@ -2,6 +2,7 @@ extends RefCounted
 
 const RTPlayerProgressSync = preload("res://scripts/systems/player_progress_sync.gd")
 const ManifestationRosterSaveMigration = preload("res://scripts/systems/save/manifestation_roster_save_migration.gd")
+const FirstRunHudDefaultsScript = preload("res://scripts/ui/first_run_hud_defaults.gd")
 const INTERRUPTED_RUN_BINARY_MAGIC := "RTS2"
 const AUTOSAVE_TRANSIENT_FIELDS := {
 	"bullets": true,
@@ -297,6 +298,8 @@ func _load_config() -> void :
 	core.qa_streaming_enabled = false
 	core.qa_streaming_status = ""
 	if not FileAccess.file_exists("user://hud_config.save"):
+		# Primeira instalacao: layout Android e preferencias padrao do autor.
+		FirstRunHudDefaultsScript.apply(core, core.get_viewport_rect().size)
 		return
 	var file = FileAccess.open("user://hud_config.save", FileAccess.READ)
 	if file:
@@ -386,7 +389,9 @@ func _load_config() -> void :
 				elif k == "gfx_fps_limit": core.gfx_fps_limit = core._sanitize_graphics_fps_limit(int(v))
 				elif k == "damage_text_scale": core.damage_text_scale = core._sanitize_damage_text_scale(float(v))
 				elif k == "interface_text_scale": core.interface_text_scale = clamp(float(v), 0.9, 1.6)
+				elif k == "dialogue_text_scale": core.dialogue_text_scale = RTDialogueTextScale.sanitize(float(v))
 				elif k == "geovana_bark_scale": core.geovana_bark_scale = clampf(float(v), 0.5, 1.5)
+				elif k == "color_vision_mode": core.color_vision_mode = core.ColorVisionFilterScript.sanitize(v)
 				elif k == "auto_attack_range_color": core.auto_attack_range_color_index = int(v)
 				elif k == "auto_attack_range_opacity": core.auto_attack_range_opacity = float(v)
 				elif k == "vol_master": core.vol_master = float(v)
@@ -497,7 +502,9 @@ func _save_config() -> void :
 		file.store_string("gfx_fps_limit=" + str(core._sanitize_graphics_fps_limit(core.gfx_fps_limit)) + "\n")
 		file.store_string("damage_text_scale=" + str(core.damage_text_scale) + "\n")
 		file.store_string("interface_text_scale=" + str(core.interface_text_scale) + "\n")
+		file.store_string("dialogue_text_scale=" + str(RTDialogueTextScale.sanitize(core.dialogue_text_scale)) + "\n")
 		file.store_string("geovana_bark_scale=" + str(core.geovana_bark_scale) + "\n")
+		file.store_string("color_vision_mode=" + core.ColorVisionFilterScript.sanitize(core.color_vision_mode) + "\n")
 		file.store_string("auto_attack_range_color=" + str(core.RangedAttackRange.sanitize_indicator_color_index(core.auto_attack_range_color_index)) + "\n")
 		file.store_string("auto_attack_range_opacity=" + str(core.RangedAttackRange.sanitize_indicator_opacity(core.auto_attack_range_opacity)) + "\n")
 		file.store_string("vol_master=" + str(core.vol_master) + "\n")
@@ -913,7 +920,7 @@ func _retry_confirm_lines() -> Array[String]:
 	if retry_confirm_new_run or not _retry_available():
 		return [
 			"A run atual foi encerrada.",
-			"Uma nova jornada reinicia mapa, pontos, cartas e progressao da partida."
+			"Uma nova jornada reinicia mapa, pontos, itens e progressao da partida."
 		]
 	var attempt: int = retry_charges_used + 1
 	var hp_ratio: float = float(core.RUN_RETRY_HP_RATIOS[clampi(attempt - 1, 0, core.RUN_RETRY_HP_RATIOS.size() - 1)])

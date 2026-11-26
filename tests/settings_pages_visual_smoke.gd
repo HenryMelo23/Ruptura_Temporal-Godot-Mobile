@@ -238,18 +238,19 @@ func _check_settings_interactions(viewport: Vector2) -> void:
 	_check(game.mode == "settings_gameplay", "gameplay did not open")
 	var gameplay: Dictionary = game._gameplay_preferences_rects(viewport)
 	_check(gameplay.has("desktop_hud_scale"), "desktop HUD scale rect missing")
-	_check(gameplay.has("geovana_bark"), "Geovana bark scale rect missing")
+	_check(not gameplay.has("geovana_bark"), "speech balloon option still listed")
+	_check(gameplay.has("color_vision") and not gameplay.has("analog") and not gameplay.has("haptics"), "desktop gameplay options")
 	game.damage_text_scale = game.DAMAGE_TEXT_SCALE_MIN
 	game._handle_gameplay_settings_touch(game._damage_text_minus_rect(gameplay["damage_text"]).get_center(), viewport)
 	_check(is_zero_approx(game.damage_text_scale), "damage text did not turn off below the visible minimum")
 	_check(game._damage_text_scale_label() == "DESLIGADO", "disabled damage text label is wrong")
 	game._handle_gameplay_settings_touch(game._damage_text_plus_rect(gameplay["damage_text"]).get_center(), viewport)
 	_check(is_equal_approx(game.damage_text_scale, game.DAMAGE_TEXT_SCALE_MIN), "damage text did not return at the visible minimum")
-	game.geovana_bark_scale = 0.5
-	game._handle_gameplay_settings_touch(game._interface_text_plus_rect(gameplay["geovana_bark"]).get_center(), viewport)
-	_check(is_equal_approx(game.geovana_bark_scale, 0.6), "Geovana bark scale plus failed")
-	game._handle_gameplay_settings_touch(game._interface_text_minus_rect(gameplay["geovana_bark"]).get_center(), viewport)
-	_check(is_equal_approx(game.geovana_bark_scale, 0.5), "Geovana bark scale minus failed")
+	game.color_vision_mode = "off"
+	game._handle_gameplay_settings_touch(Rect2(gameplay["color_vision"]).get_center(), viewport)
+	_check(game.color_vision_mode == "protanopia", "color vision touch did not cycle")
+	game.color_vision_mode = "off"
+	game.ColorVisionFilterScript.apply(game)
 	game.desktop_hud_scale = game.DESKTOP_HUD_SCALE_MIN
 	game._handle_gameplay_settings_touch(game._desktop_hud_scale_plus_rect(gameplay["desktop_hud_scale"]).get_center(), viewport)
 	_check(is_equal_approx(game.desktop_hud_scale, game.DESKTOP_HUD_SCALE_MIN + game.DESKTOP_HUD_SCALE_STEP), "desktop HUD scale plus failed")

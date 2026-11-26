@@ -53,6 +53,7 @@ func clear() -> void:
 	choice_rects.clear()
 
 
+
 func choices() -> Array:
 	return Array(current.get("choices", []))
 

@@ -253,7 +253,8 @@ static func _edge_distance(start: Vector2, direction: Vector2, safe: Rect2) -> f
 
 ## Marcadores de HUD de todos os alvos guiados (altar descoberto e fenda).
 static func draw_overlay(game: Node2D, camera: Vector2, viewport: Vector2) -> void:
-	if game.mode not in ["game", "boss_call", "pause_countdown"]:
+	# Na oficina do Mercador as setas apontariam para coordenadas da fase.
+	if game.mode not in ["game", "boss_call", "pause_countdown"] or game._merchant_dimension().seals_phase_world():
 		return
 	var rift_target: Dictionary = game.shop_rift_controller.guide_target()
 	if not rift_target.is_empty():

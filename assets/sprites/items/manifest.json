@@ -1,0 +1,772 @@
+{
+  "common/speed_boost": {
+    "card": "Speed Boost",
+    "rarity": "common",
+    "item": "Tênis da Última Corrida",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#00FFC7"
+  },
+  "common/porcao": {
+    "card": "Porção",
+    "rarity": "common",
+    "item": "Frasco Coração Piedoso",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#61FF8A"
+  },
+  "common/disparo_crescente": {
+    "card": "Disparo crescente",
+    "rarity": "common",
+    "item": "Cartucho do Ódio",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FF4D47"
+  },
+  "common/tempestade": {
+    "card": "Tempestade",
+    "rarity": "common",
+    "item": "Garrafa de Tempestade",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#F5D138"
+  },
+  "common/speed_atack": {
+    "card": "Speed Atack",
+    "rarity": "common",
+    "item": "Gatilho de Mola",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FFE033"
+  },
+  "common/teleporte": {
+    "card": "Teleporte",
+    "rarity": "common",
+    "item": "Bipe de Salto 3000",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FF00EB"
+  },
+  "common/defesa": {
+    "card": "Defesa",
+    "rarity": "common",
+    "item": "Broquel Sinérgico",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#B3E0FF"
+  },
+  "common/sorte": {
+    "card": "Sorte",
+    "rarity": "common",
+    "item": "Dado Velado",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FFA8CC"
+  },
+  "common/reserva_de_pulso": {
+    "card": "Reserva de Pulso",
+    "rarity": "common",
+    "item": "Pilha de Pulso",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#70EBFF"
+  },
+  "common/casulo_reativo": {
+    "card": "Casulo Reativo",
+    "rarity": "common",
+    "item": "Casulo de Placas",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#8AFFDB"
+  },
+  "common/passagem_intangivel": {
+    "card": "Passagem Intangível",
+    "rarity": "common",
+    "item": "Véu Fantasma",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#B8E6FF"
+  },
+  "common/ancora_vital": {
+    "card": "Âncora Vital",
+    "rarity": "common",
+    "item": "Âncora do Retorno",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#57FFA8"
+  },
+  "common/inercia_cronal": {
+    "card": "Inércia Cronal",
+    "rarity": "common",
+    "item": "Peso de Pêndulo",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#8FBDFF"
+  },
+  "common/orbita_coletora": {
+    "card": "Órbita Coletora",
+    "rarity": "common",
+    "item": "Ímã Coletor",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#6BFFAD"
+  },
+  "common/folego_de_perseguicao": {
+    "card": "Fôlego de Perseguição",
+    "rarity": "common",
+    "item": "Espora de Caça",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FF8F38"
+  },
+  "common/intervalo_fraturado": {
+    "card": "Intervalo Fraturado",
+    "rarity": "common",
+    "item": "Ampulheta Rachada",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#94D6FF"
+  },
+  "common/nucleo_revigorante": {
+    "card": "Núcleo Revigorante",
+    "rarity": "common",
+    "item": "Semente Revigorante",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#70FF9E"
+  },
+  "common/limiar_de_ruina": {
+    "card": "Limiar de Ruína",
+    "rarity": "common",
+    "item": "Cinzel da Primeira Fenda",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FF7338"
+  },
+  "common/estase_reparadora": {
+    "card": "Estase Reparadora",
+    "rarity": "common",
+    "item": "Vela da Quietude",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#85FFDB"
+  },
+  "common/manto_de_impulso": {
+    "card": "Manto de Impulso",
+    "rarity": "common",
+    "item": "Fecho do Manto",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#4DE0FF"
+  },
+  "common/recusa_do_dano": {
+    "card": "Recusa do Dano",
+    "rarity": "common",
+    "item": "Luva da Recusa",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#A8D1FF"
+  },
+  "common/carrasco_de_colossos": {
+    "card": "Carrasco de Colossos",
+    "rarity": "common",
+    "item": "Machadinha do Carrasco",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FF6B38"
+  },
+  "common/sutura_gradual": {
+    "card": "Sutura Gradual",
+    "rarity": "common",
+    "item": "Agulha de Sutura",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#85FF9E"
+  },
+  "common/fratura_cronal": {
+    "card": "Fratura Cronal",
+    "rarity": "common",
+    "item": "Relógio Trincado",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#BD9EFF"
+  },
+  "common/pulso_desestabilizador": {
+    "card": "Pulso Desestabilizador",
+    "rarity": "common",
+    "item": "Granada Instável",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FF6B52"
+  },
+  "common/pressao_de_cerco": {
+    "card": "Pressão de Cerco",
+    "rarity": "common",
+    "item": "Grampo de Cerco",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FFC747"
+  },
+  "common/choque_de_fontes": {
+    "card": "Choque de Fontes",
+    "rarity": "common",
+    "item": "Diapasões Cruzados",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#B8F5FF"
+  },
+  "common/limiar_de_colapso": {
+    "card": "Limiar de Colapso",
+    "rarity": "common",
+    "item": "Corrente dos Três Elos",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FF6B2E"
+  },
+  "common/desvio_de_probabilidade": {
+    "card": "Desvio de Probabilidade",
+    "rarity": "common",
+    "item": "Moeda Raspada",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#BD7AFF"
+  },
+  "common/ponto_cego": {
+    "card": "Ponto Cego",
+    "rarity": "common",
+    "item": "Punhal do Ponto Cego",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FFDB57"
+  },
+  "uncommon/roubo_de_vida": {
+    "card": "Roubo de Vida",
+    "rarity": "uncommon",
+    "item": "Projétil Sanguessuga",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#F21A57"
+  },
+  "uncommon/cinzas_da_escolha": {
+    "card": "Cinzas da Escolha",
+    "rarity": "uncommon",
+    "item": "Urna das Cinzas",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FF9447"
+  },
+  "uncommon/moeda_estavel": {
+    "card": "Moeda Estável",
+    "rarity": "uncommon",
+    "item": "Moeda Estável",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FFB82E"
+  },
+  "uncommon/pacto_das_possibilidades": {
+    "card": "Pacto das Possibilidades",
+    "rarity": "uncommon",
+    "item": "Contrato do Pacto",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#F580FF"
+  },
+  "uncommon/tributo_da_dor": {
+    "card": "Tributo da Dor",
+    "rarity": "uncommon",
+    "item": "Cofre Ferido",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FF942E"
+  },
+  "uncommon/horizonte_de_ruptura": {
+    "card": "Horizonte de Ruptura",
+    "rarity": "uncommon",
+    "item": "Luneta do Horizonte",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#38ADFF"
+  },
+  "uncommon/fragmentacao_reativa": {
+    "card": "Fragmentação Reativa",
+    "rarity": "uncommon",
+    "item": "Ouriço de Estilhaços",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#EB244C"
+  },
+  "uncommon/bastiao_inercial": {
+    "card": "Bastião Inercial",
+    "rarity": "uncommon",
+    "item": "Ombreira do Bastião",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#D6A34C"
+  },
+  "uncommon/estilhaco_prismatico": {
+    "card": "Estilhaço Prismático",
+    "rarity": "uncommon",
+    "item": "Lasca de Prisma",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#52D6FF"
+  },
+  "uncommon/rastro_de_retorno": {
+    "card": "Rastro de Retorno",
+    "rarity": "uncommon",
+    "item": "Marco de Vestígio",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#33B2FF"
+  },
+  "uncommon/municao_de_rebate": {
+    "card": "Munição de Rebate",
+    "rarity": "uncommon",
+    "item": "Bumerangue de Munição",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#2E9EFF"
+  },
+  "uncommon/impulso_de_sobras": {
+    "card": "Impulso de Sobras",
+    "rarity": "uncommon",
+    "item": "Bateria Dupla",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#2E9EFF"
+  },
+  "uncommon/eco_de_impacto": {
+    "card": "Eco de Impacto",
+    "rarity": "uncommon",
+    "item": "Sino do Eco",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#38A3FF"
+  },
+  "uncommon/zona_de_descompressao": {
+    "card": "Zona de Descompressão",
+    "rarity": "uncommon",
+    "item": "Válvula de Descompressão",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#29B8FF"
+  },
+  "uncommon/margem_de_erro": {
+    "card": "Margem de Erro",
+    "rarity": "uncommon",
+    "item": "Ábaco da Dívida",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#2E9EFF"
+  },
+  "uncommon/ressonancia_de_alternancia": {
+    "card": "Ressonância de Alternância",
+    "rarity": "uncommon",
+    "item": "Rosa dos Quatro Cristais",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#2E9EFF"
+  },
+  "uncommon/ferrolho_de_ruptura": {
+    "card": "Ferrolho de Ruptura",
+    "rarity": "uncommon",
+    "item": "Prego Espacial",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#4794FF"
+  },
+  "rare/trembo": {
+    "card": "Trembo",
+    "rarity": "rare",
+    "item": "Coleira do Trembo",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#29B8FF"
+  },
+  "rare/petro": {
+    "card": "Petro",
+    "rarity": "rare",
+    "item": "Núcleo do Petro",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#3DF2FF"
+  },
+  "rare/poison": {
+    "card": "Poison",
+    "rarity": "rare",
+    "item": "Relicário do Cuspe Sagrado",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#ADFF33"
+  },
+  "rare/coletora": {
+    "card": "Coletora",
+    "rarity": "rare",
+    "item": "Foice do Tempo",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#F2143D"
+  },
+  "rare/mercenaria": {
+    "card": "Mercenária",
+    "rarity": "rare",
+    "item": "Insígnia da Mercenária",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FF9E29"
+  },
+  "rare/devorador_de_destinos": {
+    "card": "Devorador de Destinos",
+    "rarity": "rare",
+    "item": "Mandíbula do Devorador",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#EB1AB8"
+  },
+  "rare/tregua_regenerativa": {
+    "card": "Trégua Regenerativa",
+    "rarity": "rare",
+    "item": "Chave da Trégua",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#61FFB8"
+  },
+  "rare/egide_hemofaga": {
+    "card": "Égide Hemófaga",
+    "rarity": "rare",
+    "item": "Égide Hemófaga",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FFB838"
+  },
+  "rare/mandamento_da_ruptura": {
+    "card": "Mandamento da Ruptura",
+    "rarity": "rare",
+    "item": "Lousa do Mandamento",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#F0B2FF"
+  },
+  "rare/carta_zero": {
+    "card": "Carta Zero",
+    "rarity": "rare",
+    "item": "Anel Zero",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#E6F5FF"
+  },
+  "rare/necrocronismo": {
+    "card": "Necrocronismo",
+    "rarity": "rare",
+    "item": "Lanterna Necrocrônica",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#75FFF0"
+  },
+  "rare/coracao_de_antimateria": {
+    "card": "Coração de Antimatéria",
+    "rarity": "rare",
+    "item": "Coração de Antimatéria",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#C23DFF"
+  },
+  "rare/cofre_do_excesso": {
+    "card": "Cofre do Excesso",
+    "rarity": "rare",
+    "item": "Cofre do Excesso",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FF4738"
+  },
+  "rare/critico_absoluto": {
+    "card": "Crítico Absoluto",
+    "rarity": "rare",
+    "item": "Mira Absoluta",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FFC21F"
+  },
+  "legendary/coracao_do_paradoxo": {
+    "card": "Coração do Paradoxo",
+    "rarity": "legendary",
+    "item": "Coração do Paradoxo",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FF5C1F"
+  },
+  "legendary/arquivo_do_impossivel": {
+    "card": "Arquivo do Impossível",
+    "rarity": "legendary",
+    "item": "Arquivo do Impossível",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FF5C1F"
+  },
+  "common/retorno_voluntario": {
+    "card": "Retorno Voluntário",
+    "rarity": "common",
+    "item": "Bumerangue de Bolso",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#5CC7FF"
+  },
+  "common/estoque_ganancia": {
+    "card": "Estoque da Ganância",
+    "rarity": "common",
+    "item": "Pote da Ganância",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FFC233"
+  },
+  "common/espectro_eletrico": {
+    "card": "Espectro Elétrico",
+    "rarity": "common",
+    "item": "Lanterna de Faíscas",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#73E6FF"
+  },
+  "common/eco_ruina": {
+    "card": "Eco da Ruína",
+    "rarity": "common",
+    "item": "Gongo Rachado",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FF6652"
+  },
+  "uncommon/fe_emaculada": {
+    "card": "Fé Emaculada",
+    "rarity": "uncommon",
+    "item": "Relicário de Munição",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FFDB73"
+  },
+  "uncommon/tornozeleira_chumbo": {
+    "card": "Tornozeleira de Chumbo",
+    "rarity": "uncommon",
+    "item": "Tornozeleira de Chumbo",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#9EA8BD"
+  },
+  "uncommon/disparo_vital": {
+    "card": "Disparo Vital",
+    "rarity": "uncommon",
+    "item": "Ponta Vital",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#FF596B"
+  },
+  "uncommon/ultimo_impulso": {
+    "card": "Último Impulso",
+    "rarity": "uncommon",
+    "item": "Mola de Arrancada",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#59F2D9"
+  },
+  "uncommon/sangue_coagulado": {
+    "card": "Sangue Coagulado",
+    "rarity": "uncommon",
+    "item": "Frasco Coagulado",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#BF142E"
+  },
+  "uncommon/pulso_conversao": {
+    "card": "Pulso da Conversão",
+    "rarity": "uncommon",
+    "item": "Flor do Pulso",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#80FFB3"
+  },
+  "uncommon/bobina_catalisadora": {
+    "card": "Bobina Catalisadora",
+    "rarity": "uncommon",
+    "item": "Bobina Catalisadora",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#8CD9FF"
+  },
+  "uncommon/espinhos_vaghnor": {
+    "card": "Espinhos do Vaghnor",
+    "rarity": "uncommon",
+    "item": "Coroa de Espinhos de Vaghnor",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#D92640"
+  },
+  "uncommon/veu_entropico": {
+    "card": "Véu Entrópico",
+    "rarity": "uncommon",
+    "item": "Véu Entrópico",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#B399FF"
+  },
+  "uncommon/botas_veludo": {
+    "card": "Botas de Veludo",
+    "rarity": "uncommon",
+    "item": "Botas de Veludo",
+    "size": [
+      256,
+      256
+    ],
+    "accent": "#D98CF2"
+  }
+}

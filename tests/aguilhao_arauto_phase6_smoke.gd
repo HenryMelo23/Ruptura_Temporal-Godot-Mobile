@@ -153,7 +153,7 @@ func _run() -> void:
 	game.arauto["hp"] = 1.0
 	game._damage_arauto(99999.0, "smoke", false, false)
 	assert(not game._arauto_active())
-	assert(game.arauto_card_drops.size() == game.ARAUTO_CARD_REWARD_COUNT)
+	assert(game.arauto_card_drops.size() == 0)
 	assert(not game.arauto_evolution_fragment.is_empty())
 	assert(game.enemies.all(func(enemy): return not bool(enemy.get("aguilhao_nodule", false)) and not bool(enemy.get("aguilhao_spawned", false))))
 

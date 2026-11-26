@@ -96,7 +96,7 @@ func _run() -> void:
 	game._add_card_unlock_progress("enemy_kills", 151.0)
 	_check(game._card_unlocked(locked_card), "Poison did not unlock after enemy-kill challenge")
 	_check(game.unlock_notifications.size() == 1, "card unlock notification was not queued")
-	_check(String(game.unlock_notifications[0].get("title", "")) == "CARTA DESBLOQUEADA", "card unlock title mismatch")
+	_check(String(game.unlock_notifications[0].get("title", "")) == "ITEM DESBLOQUEADO", "card unlock title mismatch")
 	_check(String(game.unlock_notifications[0].get("challenge", "")).contains("Eliminar 180/180"), "card unlock challenge text mismatch")
 	var sfx_was_played: bool = false
 	for player in game.sfx_players:

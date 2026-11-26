@@ -33,7 +33,7 @@ func _run() -> void:
 	game.time_alive = 1500.0
 	var twenty_five_min_multiplier: float = game._boss_time_hp_multiplier()
 	var twenty_five_min_phase5_hp: float = game._boss_hp_for_phase(5)
-	_check(twenty_five_min_multiplier >= 1.9, "25-minute run did not materially raise boss endurance")
+	_check(twenty_five_min_multiplier >= 3.0, "25-minute run did not materially raise boss endurance")
 	_check(twenty_five_min_phase5_hp > fresh_phase5_hp * 1.9, "late boss did not keep pace with time played")
 	game.score_total = 999999
 	game.enemies_killed = 999999
@@ -52,6 +52,7 @@ func _run() -> void:
 	_check(two_hour_multiplier > one_hour_multiplier, "two-hour run stopped increasing boss hp")
 	_check(three_hour_multiplier > two_hour_multiplier, "three-hour run stopped increasing boss hp")
 	_check(ten_hour_multiplier > three_hour_multiplier, "ten-hour run stopped increasing boss hp")
+	_check(two_hour_multiplier - one_hour_multiplier > one_hour_multiplier - 1.0, "boss hp time curve is not accelerating (super-linear)")
 	_check(one_hour_phase1_hp > fresh_phase1_hp * twenty_five_min_multiplier, "one-hour boss durability did not grow")
 	game.time_alive = 3600.0
 	_check(is_equal_approx(float(game._boss_farm_pressure_multiplier()), float(game.BOSS_FARM_DAMAGE_MAX_MULT)), "long farm should reach pressure cap")

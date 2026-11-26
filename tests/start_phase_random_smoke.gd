@@ -91,6 +91,18 @@ func _check_forced_initial_phase_cheats() -> void:
 		if phase == 7:
 			_check(not bool(game.boss_ready), "FASE7 should start without boss call")
 			_check(String(game.enemies[0].get("type", "")) == game.ENEMY_CINERIDO, "FASE7 should start with Cinerido")
+	# Fases do ciclo de farm, incluindo a de dois digitos (Bailao).
+	for phase in [8, 9, 10]:
+		game.gameplay_cheat_text = "FASE%d" % phase
+		_check(game._try_apply_gameplay_cheat(), "FASE%d cheat was not accepted" % phase)
+		_check(int(game.forced_initial_phase) == phase, "FASE%d did not set forced initial phase" % phase)
+		game._start_game()
+		_check(int(game.current_phase) == phase, "FASE%d did not start on requested phase" % phase)
+		_check(game._current_map_texture() != null, "FASE%d map texture missing" % phase)
+	for invalid in ["FASE11", "FASE100"]:
+		game.gameplay_cheat_text = invalid
+		_check(not game._try_apply_initial_phase_cheat(invalid), "%s should be rejected" % invalid)
+		_check(int(game.forced_initial_phase) == 10, "%s changed the forced phase" % invalid)
 	game.gameplay_cheat_text = "FASE3"
 	_check(game._try_apply_gameplay_cheat(), "FASE3 cheat was not accepted before phase6 replace")
 	game.gameplay_cheat_text = "FASE6"

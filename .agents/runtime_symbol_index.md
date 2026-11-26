@@ -5,14 +5,15 @@ Generated for navigation, not as an exhaustive API reference. For files over
 
 ## Current Metrics
 
-Metrics come from `python3 tools/check_architecture_budget.py --json`.
+Metrics come from `python3 tools/check_architecture_budget.py --report` (or `--json`);
+snapshot below is HEAD 73d2ada (2026-11-19).
 `code_loc` excludes blank and comment-only lines.
 
 | File | Physical LOC | Code LOC | Functions | Largest function |
 | --- | ---: | ---: | ---: | --- |
-| `scripts/main_runtime_core.gd` | 46378 | 39807 | 3185 | `_handle_key` 456 code LOC |
-| `scripts/main_runtime_state.gd` | 3524 | 3488 | 1 | `_safe_load` 5 code LOC |
-| `scripts/presentation/combat_effects_presentation.gd` | 4063 | 3719 | 99 | `_draw_projectiles` 327 code LOC |
+| `scripts/main_runtime_core.gd` | 46686 | 39620 | 3325 | `_start_game` 381 code LOC (`_handle_key` 301 after P1.02) |
+| `scripts/main_runtime_state.gd` | 3901 | 3794 | 1 | `_safe_load` 5 code LOC |
+| `scripts/presentation/combat_effects_presentation.gd` | 3383 | 3066 | 98 | `_draw_game` 289 code LOC |
 | `scripts/presentation/death_camera.gd` | owner | owner | owner | `RTDeathCamera.begin`, `apply`, `draw_subject`, `clear`; solo death close-up and temporary grayscale post-process before Specter upgrade |
 | `scripts/presentation/lightning_presentation.gd` | owner | owner | owner | `bolt`, `contact`, `channel`, `visible_segments`; shared render-only electrical geometry and silhouette protection |
 | `scripts/presentation/combat_text_presentation.gd` | owner | owner | owner | `add_damage`, `draw`; merged damage numbers, critical animation and disabled allocation guard |
@@ -52,6 +53,7 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | `scripts/systems/cards/card_power_feedback_controller.gd` | owner | owner | owner | `on_card_acquired`, `on_damage_confirmed`, `on_lifesteal`, `on_player_hit`; bounded local card-power and danger feedback |
 | `scripts/systems/save/runtime_save_controller.gd` | 654 | 605 | 33 | `_load_config` 117 code LOC |
 | `scripts/systems/player/player_control_controller.gd` | owner | owner | owner | `read_move`, `aim_direction`, touch/gamepad/desktop input routing, Parasítica HAB1 and Lacerante ultimate quick-versus-held aiming |
+| `scripts/ui/settings_controller.gd` | owner | owner | owner | `handle_key` + per-screen `_settings_*_key` (settings, gamepad, keys, gameplay, audio, graphics, data) and `_handle_*_settings_touch`; core `_handle_key` only dispatches |
 | `scripts/lacerante_sprites.gd` | owner | owner | owner | `register`, `snapshot`, `draw_height`; canonical Lacerante movement/attack/Q/ultimate frame selection for local and remote players |
 | `scripts/systems/umbra_observation_schema.gd` | owner | owner | owner | `build_from_runtime`, `build_from_snapshot`, `validate_observation` |
 | `scripts/systems/online/umbra_authority_controller.gd` | owner | owner | owner | `build_authoritative_decision`, `revalidate_before_execution`, `accept_replica_event` |
@@ -74,6 +76,16 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Shop purchase feedback | `func update` purchase completion | `scripts/ui/shop_controller.gd:738`; successful completion emits `shop_spend` once after charging the pending price |
 | Shop paid reroll cost | `next_paid_reroll_cost` | `scripts/ui/shop_controller.gd:135` |
 | Shop drawing | `func draw` | `scripts/ui/shop_presentation.gd:382` |
+| Shop input hints (keyboard/gamepad/touch) | `input_hints`, `draw_input_hints` | `scripts/ui/shop_presentation.gd`; `KEY_R` reserva, gamepad `lacerante_empower` queima e `boss` reserva na loja |
+| Burned shop slot refill | `_burn_shop_card` -> `_refill_shop_slot_after_purchase(index, [burned_id])` | `scripts/main_runtime_core.gd` |
+| Shop-excluded cards (Cinzas, Moeda Estavel) | `SHOP_EXCLUDED_CARD_IDS`, `_spawn_supreme_cinzas_drop` | `scripts/main_runtime_state.gd`, `scripts/main_runtime_core.gd`; Cinzas cai de Larapio/Sineiro/Suturador/Arauto |
+| Hidden random build slot | `BUILD_RANDOM_INDEX`, `_build_random_slot_enabled`, `_resolve_build_random_pick`, `_step_manifest_build_selection`, `_step_henry_build_selection` | `scripts/main_runtime_core.gd`; models in `menus_presentation.gd:_geovana_build_model` and `character_select_presentation.gd:_henry_build_model` |
+| Merchant orders (Moeda Estavel) | `class_name RTMerchantMissionController` | `scripts/systems/shop/merchant_mission_controller.gd`; menu in `RTMerchantNpc._mission_talk`; run-scoped via `RTMerchantNpc.begin_run/run_state` |
+| Merchant workshop physics | `class_name RTMerchantWorkshopPhysics` | `scripts/systems/shop/merchant_workshop_physics.gd`; player collision through `_clamp_player_world` |
+| Merchant workshop safe room (fases 1-10) | `RTMerchantDimension.seals_phase_world`, `enforce_seal`, `world_leaks`, `clock_running` | `scripts/systems/shop/merchant_dimension.gd`; core `_update_game` local `sealed` gates every phase-world update (spawns, Arauto/Larapio, enemies, bullets, hazards, boss, weather, fragment, altar, UMBRA trigger); `_damage_player` returns inside; `CombatEffectsPresentation._draw_phase_world_ground` + `phase_world` gates drawing; test `tests/gameplay_batch_nov24_smoke.gd` |
+| Profecia (espectro Profetica, rewind 10 s) | `class_name RTPropheticRewind`, `RTPropheticRewindPresentation` | `scripts/systems/abilities/prophetic_rewind_controller.gd`, `scripts/presentation/prophetic_rewind_presentation.gd`; core hooks: `prophetic_rewind` var, `blocks_world` (top of `_update_game`), `update` (end of `_update_game`), `intercept_hit` (in `_damage_player`), `reset` (in `_start_game`); buffs via `AuraSystem.speed_multiplier`/`attack_interval_multiplier` + `BUFF_KEY` |
+| Dialogue text size option | `class_name RTDialogueTextScale` | `scripts/presentation/dialogue_text_scale.gd`; state `dialogue_text_scale`; settings key `dialogue_text`; save `dialogue_text_scale=`; used by `RTDialogueBoxPresentation.draw_box` |
+| Stalker camouflage | `_stalker_camouflaged`, `STALKER_CAMO_*` | `scripts/main_runtime_core.gd` (`_update_stalker`, `_damage_enemy`, bullet loop), targeting skip in `runtime_targeting_controller.gd` |
 | Triggered point/critical card owner | `class_name RTRoguelikePointCardController` | `scripts/systems/cards/roguelike_point_card_controller.gd`; kill drop, damage reward, final critical multiplier and non-legendary duplication contracts |
 | Card power/danger feedback owner | `on_card_acquired`, `on_damage_confirmed`, `on_lifesteal`, `on_player_hit` | `scripts/systems/cards/card_power_feedback_controller.gd`; queues shop acquisitions until gameplay and caps primitive-only feedback |
 | Legacy shop drawing | `func draw_legacy` | `scripts/ui/shop_presentation.gd:502` |
@@ -190,5 +202,6 @@ sed -n '29590,29650p' scripts/main_runtime_core.gd
 ```
 
 ```bash
+python3 tools/check_architecture_budget.py --report
 python3 tools/check_architecture_budget.py --json
 ```

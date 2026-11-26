@@ -1,6 +1,7 @@
 class_name RTCharacterSelectPresentation
 extends RefCounted
 
+const MenusPresentation = preload("res://scripts/presentation/menus_presentation.gd")
 const CYAN := Color(0.12, 0.94, 1.0)
 const ORANGE := Color(1.0, 0.42, 0.08)
 const HENRY_AMBER := Color(1.0, 0.76, 0.22)
@@ -44,15 +45,26 @@ static func _henry_build_model(game: Node2D) -> Dictionary:
 		var key: String = String(entry.get("key", ""))
 		items.append({"index": i, "key": key, "name": String(entry.get("name", "")), "color": entry.get("accent", HENRY_AMBER), "texture": _henry_choice_icon_texture(key), "unlocked": true, "unread": false})
 	var key_selected: String = String(source[selected].get("key", ""))
+	# Slot "ALEATORIA" no fim: sorteio oculto, o jogador descobre na partida.
+	var random_selected: bool = game._build_random_shown("mutation" if mutation_step else "effect")
+	items.append(MenusPresentation.random_build_item(not mutation_step, true))
+	var selected_slot: int = items.size() - 1 if random_selected else selected
+	var dossier: Dictionary = RTBuildChoiceDossier.mutation(key_selected) if mutation_step else RTBuildChoiceDossier.effect(key_selected)
+	if random_selected:
+		dossier = MenusPresentation.random_build_dossier(not mutation_step, true)
+	var mutation_name: String = "???" if bool(game.build_random_hidden.get("mutation", false)) else String(game.HENRY_MUTATIONS[clampi(game.selected_mutation, 0, game.HENRY_MUTATIONS.size() - 1)].get("name", "")).to_upper()
+	var primary_label: String = "CONTINUAR" if mutation_step else "INICIAR"
+	if random_selected:
+		primary_label = "SORTEAR E SEGUIR" if mutation_step else "SORTEAR E INICIAR"
 	return {
 		"theme": "henry",
 		"step": 0 if mutation_step else 1,
 		"items": items,
-		"selected_slot": selected,
-		"target_scroll": float(selected),
-		"dossier": RTBuildChoiceDossier.mutation(key_selected) if mutation_step else RTBuildChoiceDossier.effect(key_selected),
-		"summary": "" if mutation_step else "MUTAÇÃO: " + String(game.HENRY_MUTATIONS[clampi(game.selected_mutation, 0, game.HENRY_MUTATIONS.size() - 1)].get("name", "")).to_upper(),
-		"primary_label": "CONTINUAR" if mutation_step else "INICIAR",
+		"selected_slot": selected_slot,
+		"target_scroll": float(selected_slot),
+		"dossier": dossier,
+		"summary": "" if mutation_step else "MUTAÇÃO: " + mutation_name,
+		"primary_label": primary_label,
 		"primary_enabled": true,
 		"preview_enabled": false,
 		"hint": "A / D OU TOQUE NUMA PLACA",
@@ -62,7 +74,7 @@ static func _henry_build_model(game: Node2D) -> Dictionary:
 
 static func _draw_character_cards(game: Node2D, viewport: Vector2) -> void:
 	game._draw_glitch_title("ESCOLHA QUEM ATRAVESSA", Vector2(viewport.x * 0.5, 66.0), 34, CYAN)
-	game._draw_centered("Escolha o personagem e como as cartas entram na jornada.", Vector2(viewport.x * 0.5, 106.0), 15, Color(0.78, 0.92, 1.0))
+	game._draw_centered("Escolha o personagem e como os itens entram na jornada.", Vector2(viewport.x * 0.5, 106.0), 15, Color(0.78, 0.92, 1.0))
 	var card_size := Vector2(minf(330.0, viewport.x * 0.36), minf(390.0, viewport.y * 0.54))
 	var gap := minf(50.0, viewport.x * 0.04)
 	var total := card_size.x * 2.0 + gap
@@ -82,7 +94,7 @@ static func _draw_character_cards(game: Node2D, viewport: Vector2) -> void:
 	game.buttons["journey_mode_shop"] = Rect2(mode_left, mode_y, mode_button_width, 40.0)
 	game.buttons["journey_mode_drop"] = Rect2(mode_left + mode_button_width + mode_gap, mode_y, mode_button_width, 40.0)
 	_draw_mode_button(game, game.buttons["journey_mode_shop"], "LOJA", "compras entre combates", game.selected_run_mode == game.RUN_MODE_SHOP, CYAN)
-	_draw_mode_button(game, game.buttons["journey_mode_drop"], "DROP", "cartas dos inimigos", game.selected_run_mode == game.RUN_MODE_DROP, Color(1.0, 0.68, 0.18))
+	_draw_mode_button(game, game.buttons["journey_mode_drop"], "DROP", "itens dos inimigos", game.selected_run_mode == game.RUN_MODE_DROP, Color(1.0, 0.68, 0.18))
 	game._draw_centered("A/D PERSONAGEM  •  W/S MODO  •  ENTER CONFIRMA", Vector2(viewport.x * 0.5, mode_y + 62.0), 11, Color(0.66, 0.78, 0.84))
 	_draw_button(game, game.buttons["character_back"], "VOLTAR", false, Color(0.55, 0.72, 0.78))
 

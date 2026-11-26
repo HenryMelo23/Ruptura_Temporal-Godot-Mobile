@@ -7,6 +7,9 @@ const CYAN := Color(0.18, 0.88, 0.89)
 const GOLD := Color(1.0, 0.78, 0.29)
 const BRASS := Color(0.95, 0.76, 0.36)
 const BURN_TIME := 0.95
+const ItemShowcase := preload("res://scripts/presentation/item_showcase.gd")
+const ShopItemSlot := preload("res://scripts/ui/shop_item_slot.gd")
+const ItemStatChips := preload("res://scripts/catalog/item_stat_chips.gd")
 var action := ""
 var elapsed := 0.0
 var duration := 0.0
@@ -99,6 +102,103 @@ func burn_visible(g) -> bool:
 
 func reserve_visible(g) -> bool:
 	return g._new_common_card_count(g.CARD_ESCOLHA_ADIADA_ID) > 0 or g._shop_slot_locked(g.shop_selected)
+
+
+## Nome curto de um botao de controle para a faixa de atalhos.
+static func joy_button_label(button_index: int) -> String:
+	match button_index:
+		JOY_BUTTON_A: return "A"
+		JOY_BUTTON_B: return "B"
+		JOY_BUTTON_X: return "X"
+		JOY_BUTTON_Y: return "Y"
+		JOY_BUTTON_LEFT_SHOULDER: return "LB"
+		JOY_BUTTON_RIGHT_SHOULDER: return "RB"
+		JOY_BUTTON_BACK: return "SELECT"
+		JOY_BUTTON_START: return "START"
+		JOY_BUTTON_DPAD_LEFT, JOY_BUTTON_DPAD_RIGHT: return "◀▶"
+	return "B%d" % button_index
+
+
+func _pad(g, action_name: String) -> String:
+	return joy_button_label(int(g.gamepad_bindings.get(action_name, -1)))
+
+
+## Pares [tecla/botao, funcao] da loja para o dispositivo em uso. Queimar e
+## reservar so aparecem quando a carta de suporte correspondente esta no deck.
+func input_hints(g) -> Array:
+	var hints: Array = []
+	var burn: bool = burn_visible(g)
+	var reserve: bool = reserve_visible(g)
+	if bool(g.is_gamepad_active):
+		hints.append(["◀▶", "ESCOLHER"])
+		hints.append([_pad(g, "attack"), "COMPRAR"])
+		hints.append([_pad(g, "skill"), "TROCAR"])
+		if burn:
+			hints.append([_pad(g, "lacerante_empower"), "QUEIMAR"])
+		if reserve:
+			hints.append([_pad(g, "boss"), "TRAVAR"])
+		hints.append([_pad(g, "secondary"), "DECK"])
+		hints.append([_pad(g, "pause"), "SAIR"])
+	elif g._uses_touch_ui():
+		hints.append(["TOQUE NO ITEM", "ESCOLHER"])
+		hints.append(["COMPRAR", "LEVA O ITEM"])
+		if burn:
+			hints.append(["QUEIMAR", "TROCA O ITEM"])
+		if reserve:
+			hints.append(["RESERVAR", "TRAVA A VAGA"])
+	else:
+		hints.append(["A/D", "ESCOLHER"])
+		hints.append(["ENTER", "COMPRAR"])
+		hints.append(["Q", "TROCAR"])
+		if burn:
+			hints.append(["B", "QUEIMAR"])
+		if reserve:
+			hints.append(["R", "TRAVAR"])
+		hints.append(["E", "DECK"])
+		hints.append(["ESC", "SAIR"])
+	return hints
+
+
+## Faixa de atalhos: chip com a tecla + funcao, quebrando em ate duas linhas.
+func draw_input_hints(g, rect: Rect2, hints: Array, size: int = 13) -> void:
+	if rect.size.x < 80.0 or hints.is_empty():
+		return
+	var face: Font = g.menu_ui_font
+	var row_h: float = float(size) + 10.0
+	var rows: int = 1
+	var x: float = 0.0
+	var widths: Array[float] = []
+	for hint in hints:
+		var w: float = face.get_string_size(String(hint[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, size).x + 12.0 + 5.0 + face.get_string_size(String(hint[1]), HORIZONTAL_ALIGNMENT_LEFT, -1, size).x + 14.0
+		widths.append(w)
+		if x > 0.0 and x + w > rect.size.x:
+			rows += 1
+			x = 0.0
+		x += w
+	if rows > 2:
+		size = maxi(10, size - 2)
+		row_h = float(size) + 8.0
+	var top: float = rect.position.y + maxf(0.0, (rect.size.y - row_h * float(mini(rows, 2))) * 0.5)
+	var cursor := Vector2(rect.position.x, top)
+	var tone: Color = accent()
+	for i in range(hints.size()):
+		var key := String(hints[i][0])
+		var label := String(hints[i][1])
+		var key_w: float = face.get_string_size(key, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x + 12.0
+		var label_w: float = face.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+		var w: float = key_w + 5.0 + label_w + 14.0
+		if cursor.x > rect.position.x and cursor.x + w - 14.0 > rect.end.x:
+			cursor = Vector2(rect.position.x, cursor.y + row_h)
+			if cursor.y + row_h > rect.end.y + row_h * 0.5:
+				return
+		var chip := Rect2(cursor + Vector2(0, 1), Vector2(key_w, row_h - 4.0))
+		var style := _style(Color(tone, 0.16), Color(tone, 0.75), 5)
+		style.set_border_width_all(1)
+		g.draw_style_box(style, chip)
+		var baseline: float = chip.position.y + (chip.size.y + face.get_ascent(size) - face.get_descent(size)) * 0.5
+		g.draw_string(face, Vector2(chip.position.x, baseline), key, HORIZONTAL_ALIGNMENT_CENTER, chip.size.x, size, PAPER)
+		g.draw_string(face, Vector2(chip.end.x + 5.0, baseline), label, HORIZONTAL_ALIGNMENT_LEFT, -1, size, MUTED)
+		cursor.x += w
 
 
 func text(g, value: String, rect: Rect2, size: int, color: Color, centered: bool = false) -> void:
@@ -433,7 +533,7 @@ func card_stat_chips(card_name: String) -> Array:
 			return ["POS-DANO", "CURA 3.2s"]
 		"Egide Hemofaga":
 			return ["OVERHEAL", "+ESCUDO"]
-	return ["MELHORIA"]
+	return ItemStatChips.CHIPS.get(card_name, ["MELHORIA"])
 
 
 func draw_card_stat_chips(g, chips: Array, origin: Vector2, max_width: float, accent: Color, size: = 13) -> float:
@@ -651,30 +751,8 @@ func draw(g, viewport: Vector2) -> void:
 			rect.position = center - rect.size * 0.5
 			if flight > 0.05:
 				draw_card_trail(g, areas.cards[i].get_center(), center, flight, g._card_rarity_color(card))
-		var accent: Color = g._card_rarity_color(card)
 		var alpha: float = clampf(reveal * 1.6, 0.0, 1.0)
-		frame(g, rect, Color(accent if selected else MUTED.darkened(0.3), alpha), selected)
-		var icon: Texture2D = g._card_texture(card)
-		var art := rect.grow(-9)
-		if icon:
-			if action == "burn" and slot == i:
-				_draw_burn(g, icon, art, t)
-			elif reveal < 0.999:
-				draw_art_reveal(g, icon, art, reveal, accent)
-			elif not g._draw_cinzas_shader_card(card, art, icon, 1.0, true):
-				g._draw_texture_contain(icon, art, Color.WHITE)
-			elif not purchase:
-				draw_card_flames(g, rect, card, now)
-		if not purchase and not (action == "burn" and slot == i) and rect.size.x > 80 and reveal > 0.6:
-			var caption := Rect2(rect.position + Vector2(9, rect.size.y * 0.64), Vector2(rect.size.x - 18, rect.size.y * 0.36 - 9))
-			g.draw_rect(caption, Color(0.03, 0.05, 0.06, 0.95))
-			g.draw_line(caption.position, Vector2(caption.end.x, caption.position.y), accent.darkened(0.2), 2)
-			paragraph(g, CardCatalogDefinitions.display_name(card) if card.has("name") else "Vaga vazia", Rect2(caption.position + Vector2(6, 4), Vector2(caption.size.x - 12, 36)), 16 if not small else 13, true)
-			text(g, g._card_rarity_label(card), Rect2(caption.position + Vector2(6, caption.size.y - 24), Vector2(caption.size.x - 12, 20)), 12, accent, true)
-			draw_bargain_banner(g, card, rect, 1.0)
-		var lock_anim: bool = (action == "lock" or action == "unlock") and slot == i
-		if g._shop_slot_locked(i) or lock_anim:
-			draw_lock_overlay(g, rect, t if lock_anim else 1.0, action == "unlock" and slot == i, now)
+		ShopItemSlot.draw(self, g, card, rect, i, selected, alpha, reveal, purchase, t, now, small)
 		if not purchase:
 			draw_bargain_price_tag(g, card, Rect2(price_rect.position.x, price_rect.end.y + (6 if small else 10), price_rect.size.x, 26), selected, 1.0)
 		g.buttons["shop_card_%d" % i] = areas.cards[i]
@@ -734,6 +812,9 @@ func draw(g, viewport: Vector2) -> void:
 	elif g.is_multiplayer:
 		exit_label = "PRONTO"
 	button(g, areas.exit, exit_label, accent(), g._shop_can_exit())
+	var hint_left: float = Rect2(areas.exit).end.x + 14.0
+	var hint_rect := Rect2(hint_left, Rect2(areas.exit).position.y - 4.0, Rect2(areas.buy).position.x - hint_left - 14.0, Rect2(areas.exit).size.y + 8.0)
+	draw_input_hints(g, hint_rect, input_hints(g), 12 if small else 13)
 	g.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if action == "reroll":
 		draw_reroll_scan(g, visor, t)
@@ -869,7 +950,7 @@ func draw_deck_button(g, rect: Rect2, now: float) -> void:
 	if g._shop_purchase_animating():
 		var p: float = 1 - g.shop_purchase_anim_timer / g.SHOP_PURCHASE_ANIM_TIME
 		pulse = clampf(1.0 - absf(p - 0.95) / 0.1, 0.0, 1.0)
-	text(g, ("%d CARTA" if count == 1 else "%d CARTAS") % count, Rect2(rect.position + Vector2(42, rect.size.y * 0.42), Vector2(rect.size.x - 50, rect.size.y * 0.5)), 17 + int(pulse * 4.0), Color(1.0, 0.86 + pulse * 0.14, 0.34 + pulse * 0.5))
+	text(g, ("%d ITEM" if count == 1 else "%d ITENS") % count, Rect2(rect.position + Vector2(42, rect.size.y * 0.42), Vector2(rect.size.x - 50, rect.size.y * 0.5)), 17 + int(pulse * 4.0), Color(1.0, 0.86 + pulse * 0.14, 0.34 + pulse * 0.5))
 
 
 ## Botao de queimar com chamas vivas em cima.
@@ -936,7 +1017,7 @@ func draw_lock_overlay(g, rect: Rect2, t: float, releasing: bool, now: float) ->
 		var strip := Rect2(rect.position.x + 8, cy - 15, rect.size.x - 16, 30)
 		g.draw_rect(strip, Color(0.02, 0.13, 0.16, 0.94 * ring), true)
 		g.draw_line(strip.position, Vector2(strip.end.x, strip.position.y), Color(CYAN, ring), 2)
-		text(g, "RESERVADA", strip.grow(-4), 14, Color(CYAN, ring), true)
+		text(g, "RESERVADO", strip.grow(-4), 14, Color(CYAN, ring), true)
 
 
 ## Arte surgindo/sumindo em linhas de varredura (reroll e entrada do visor).
@@ -1047,14 +1128,14 @@ func draw_legacy(g, viewport: Vector2) -> void:
 		g._draw_glitch_title("LOJA SINCRONIZADA", Vector2(empty_panel.get_center().x, empty_panel.position.y + 50.0), 24, Color(0.0, 1.0, 0.82))
 		var wait_text: = "AGUARDANDO PARCEIRO"
 		if not is_multiplayer:
-			wait_text = "SEM CARTAS DISPONIVEIS"
+			wait_text = "SEM ITENS DISPONIVEIS"
 		g._draw_centered(wait_text, empty_panel.get_center() + Vector2(0, 22), g._readable_text_size(17), Color(1.0, 0.88, 0.32))
 		return
 
 	if portrait:
 		var header = Rect2(viewport.x * 0.06, 24, viewport.x * 0.88, 124)
 		g._draw_holo_panel(header, Color(0.0, 1.0, 0.82), true, 0.76)
-		g._draw_glitch_title("LOJA DE CARTAS", Vector2(viewport.x * 0.5, 60), 30, Color(0.0, 1.0, 0.82))
+		g._draw_glitch_title("LOJA DE ITENS", Vector2(viewport.x * 0.5, 60), 30, Color(0.0, 1.0, 0.82))
 		var header_text = "Pontos %s  |  Custo %s  |  %s" % [g._format_points(score), g._format_points(card_cost), reroll_status]
 		if shop_endurance_discount > 0.0:
 			header_text += "  |  Resistencia -%d%%" % int(round(shop_endurance_discount * 100.0))
@@ -1184,7 +1265,7 @@ func draw_legacy(g, viewport: Vector2) -> void:
 
 	var header = Rect2(viewport.x * 0.05, 16, viewport.x * 0.9, 98)
 	g._draw_holo_panel(header, Color(0.0, 1.0, 0.82), true, 0.76)
-	g._draw_glitch_title("LOJA DE CARTAS", Vector2(viewport.x * 0.5, 46), 26, Color(0.0, 1.0, 0.82))
+	g._draw_glitch_title("LOJA DE ITENS", Vector2(viewport.x * 0.5, 46), 26, Color(0.0, 1.0, 0.82))
 
 
 	var hud_text = "Pontos: %s  |  Custo: %s  |  %s" % [g._format_points(score), g._format_points(card_cost), reroll_status]
@@ -1198,7 +1279,7 @@ func draw_legacy(g, viewport: Vector2) -> void:
 	if purchase_animating and shop_cards.size() > purchase_index:
 		g._draw_centered(g._shop_purchase_stage(purchase_progress), Vector2(viewport.x * 0.5, 124), g._readable_text_size(14), shop_cards[purchase_index]["color"])
 	elif shop_select_pulse_timer > 0.0 and shop_cards.size() > shop_selected:
-		g._draw_centered("CARTA SELECIONADA", Vector2(viewport.x * 0.5, 124), g._readable_text_size(14), shop_cards[shop_selected]["color"])
+		g._draw_centered("ITEM SELECIONADO", Vector2(viewport.x * 0.5, 124), g._readable_text_size(14), shop_cards[shop_selected]["color"])
 
 
 	var w = 150.0
@@ -1444,7 +1525,9 @@ func draw_exit(g, viewport: Vector2) -> void:
 			var rect: Rect2 = areas.cards[i]
 			var p := smoothstep(i * 0.07, 0.82 + i * 0.07, progress)
 			rect.position.y += p * viewport.y
-			var texture: Texture2D = g._card_texture(g.shop_cards[i])
+			var texture: Texture2D = ItemShowcase.texture(g.shop_cards[i])
+			if texture == null:
+				texture = g._card_texture(g.shop_cards[i])
 			if texture:
 				g._draw_texture_contain(texture, rect, Color(1, 1, 1, 1 - p))
 	text(g, "RETORNO EM %d" % maxi(1, ceili(g.shop_return_timer)), Rect2(viewport.x * 0.5 - 130, 32, 260, 40), 20, PAPER, true)

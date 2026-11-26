@@ -89,6 +89,11 @@ func _run() -> void:
 		dimension.counter_armed = true
 		game.player_pos = RTMerchantDimension.MERCHANT_POS
 		dimension.update(0.016)
+		# O balcao abre o menu COMPRAR / PERGUNTAR / NADA AGORA (solo): COMPRAR.
+		if game._dialogue().busy():
+			game._dialogue().revealed = 99999.0
+			game._dialogue().grace = 0.0
+			game._dialogue().choose(0)
 		_check(game.mode == "shop", "phase %d: shop did not open at the counter" % phase)
 		game.shop_controller.finish()
 		dimension.leave(false)

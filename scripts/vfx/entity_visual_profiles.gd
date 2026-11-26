@@ -230,6 +230,7 @@ static func _enemy_texture(game: Node2D, enemy: Dictionary) -> Texture2D:
 		game.ENEMY_CRYSTAL: type_key = "crystal"
 		game.ENEMY_CURATER: type_key = "curater"
 		game.ENEMY_LARAPIO: type_key = "larapio"
+		game.ENEMY_COUT_ATTACK_SPEED: type_key = "rebobinador"
 	if type_key != "":
 		var type_texture: Texture2D = game._texture_frame(type_key, idx)
 		if type_texture != null:

@@ -13,14 +13,19 @@ extends RefCounted
 ## carente de companhia: ha muito tempo so caem coisas mortas ou raivosas na
 ## oficina dele, e a Geovana e a primeira que chega viva, de pe e com dinheiro.
 ##
-## Guarda o que ele ja contou (nao repete historia) e o progresso da missao de
-## estabilizar a fenda: salvar as capsulas da Barganha que a geringonca dele
-## deixa cair na linha do tempo da Geovana.
+## Guarda o que ele ja contou (nao repete historia). A missao de estabilizar a
+## fenda (salvar as capsulas da Barganha) vale SO PARA A RUN: ao morrer ou
+## vencer, a porta volta a tremer e a historia da missao recomeca. Depois de
+## estabilizada, o balcao oferece encomendas (RTMerchantMissionController),
+## unica fonte da carta Moeda Estavel.
 
 const SAVE_PATH := "user://merchant_npc.cfg"
 ## Capsulas da Barganha salvas (sobreviventes ao fim do evento) para estabilizar
 ## a fenda. Antes eram 5 pecas largadas por inimigos extraordinarios.
 const CAPSULES_REQUIRED := 10
+## A partir desta partida (contando as novas, nao as retomadas) o Bussola
+## pula a explicacao de como estabilizar a fenda: so lembra no balao.
+const SKIP_MISSION_TALK_FROM_RUN := 5
 
 var core: Node = null
 var persist := true
@@ -28,20 +33,55 @@ var persist := true
 var seen: Dictionary = {}
 var capsules_saved := 0
 var mission_offered := false
+## Partidas novas ja iniciadas (persistente; retomar partida nao conta).
+var runs_started := 0
 var mission_done := false
 var visits := 0
 var anim_time := 0.0
 ## Fala curta no balao sobre a cabeca dele.
 var bubble := ""
 var bubble_timer := 0.0
+## Encomendas que valem Moeda Estavel (so depois da fenda estabilizada).
+var missions := RTMerchantMissionController.new()
+## Encomenda sorteada no balcao esperando o "aceito".
+var _pending_offer: Dictionary = {}
 
 
 func configure(runtime_core: Node) -> void:
 	core = runtime_core
+	missions.configure(runtime_core)
 	var loop = Engine.get_main_loop()
 	if loop != null and loop.get_script() != null:
 		persist = false
 	_load()
+
+
+## Nova run: a fenda volta a ser instavel e a missao das capsulas recomeca.
+## O que ele ja contou (historia, visitas) continua lembrado.
+func begin_run(new_run: bool = true) -> void:
+	if new_run:
+		runs_started += 1
+	capsules_saved = 0
+	mission_offered = false
+	mission_done = false
+	seen.erase("mission_done")
+	_pending_offer.clear()
+	missions.reset_run()
+	_save()
+
+
+## Estado da run que entra no snapshot da oficina (retomar partida).
+func run_state() -> Dictionary:
+	return {"capsules": capsules_saved, "offered": mission_offered, "done": mission_done, "missions": missions.save_state()}
+
+
+func load_run_state(data: Dictionary) -> void:
+	if data.is_empty():
+		return
+	capsules_saved = int(data.get("capsules", 0))
+	mission_offered = bool(data.get("offered", false))
+	mission_done = bool(data.get("done", false))
+	missions.load_state(Dictionary(data.get("missions", {})))
 
 
 ## "Primeira partida": ele volta a nunca ter visto a Geovana. Apaga a historia
@@ -50,6 +90,7 @@ func configure(runtime_core: Node) -> void:
 func forget_story() -> void:
 	seen.clear()
 	visits = 0
+	runs_started = 0
 	capsules_saved = 0
 	mission_offered = false
 	mission_done = false
@@ -151,6 +192,10 @@ func greet(dimension) -> void:
 	if not mission_offered and visits >= 2:
 		mission_offered = true
 		_save()
+		if runs_started >= SKIP_MISSION_TALK_FROM_RUN:
+			# Veterana: ela ja sabe a historia das capsulas; so o lembrete.
+			say("Cápsulas de novo, querida: %d inteiras e a porta fica no prumo." % CAPSULES_REQUIRED, 4.2)
+			return
 		dialogue.start([
 			{"who": "mercador", "text": "Escuta aqui. Eu andei pensando, e pensar me dá fome, então vai ser rápido."},
 			{"who": "mercador", "text": "Quando a geringonça travou, ela não travou limpa. De vez em quando ela cospe uma cápsula de carga na SUA linha do tempo. Aquelas douradas que caem do céu, sabe?"},
@@ -173,6 +218,10 @@ func greet(dimension) -> void:
 const CHOICE_BUY := "buy"
 const CHOICE_ASK := "ask"
 const CHOICE_LEAVE := "leave"
+const CHOICE_MISSION := "mission"
+const CHOICE_ACCEPT := "accept"
+const CHOICE_DECLINE := "decline"
+const CHOICE_DONATE := "donate"
 const TOPIC_RUPTURE := "rupture"
 const TOPIC_ABOUT := "about"
 const TOPIC_BACK := "back"
@@ -197,17 +246,25 @@ func open_menu(dimension) -> void:
 
 
 func _menu_line(text: String, mood: String = "animado") -> Dictionary:
-	return {"who": "mercador", "text": text, "mood": mood, "choices": [
+	var choices: Array = [
 		{"label": "COMPRAR", "id": CHOICE_BUY},
 		{"label": "PERGUNTAR", "id": CHOICE_ASK},
-		{"label": "NADA AGORA", "id": CHOICE_LEAVE},
-	]}
+	]
+	# Encomendas so com a porta no prumo nesta run.
+	if mission_done:
+		choices.append({"label": "ENTREGAR ENCOMENDA" if missions.ready_to_turn_in() else "ENCOMENDAS", "id": CHOICE_MISSION})
+	choices.append({"label": "NADA AGORA", "id": CHOICE_LEAVE})
+	# Nenhuma conversa com o Mercador gasta o tempo da fenda (menu incluido):
+	# so a loja aberta e andar pela oficina gastam.
+	return {"who": "mercador", "text": text, "mood": mood, "choices": choices}
 
 
 func _on_menu_choice(id: String) -> void:
 	match id:
 		CHOICE_BUY:
 			_buy()
+		CHOICE_MISSION:
+			_mission_talk()
 		CHOICE_ASK:
 			core._dialogue().start([{"who": "mercador", "text": "Pergunta. Velho adora pergunta: é a única hora que alguém escuta a gente inteiro.", "mood": "animado", "choices": [
 				{"label": "IMPULSO, FRAGMENTO E COLAPSO", "id": TOPIC_RUPTURE},
@@ -235,6 +292,80 @@ func _on_topic(id: String) -> void:
 	core._dialogue().start(lines, _on_menu_choice)
 
 
+# ================================================================ encomendas
+func _mission_talk() -> void:
+	var dialogue = core._dialogue()
+	if missions.ready_to_turn_in():
+		missions.turn_in()
+		dialogue.start([
+			{"who": "mercador", "text": "Isso! Exatamente isso. Você é a melhor freguesa de sete camadas.", "mood": "animado"},
+			{"who": "mercador", "text": "Toma. Moeda Estável: com ela a minha tabela não sobe tanto pra você. Coisa que eu não dou pra ninguém, e só dou por serviço prestado."},
+			_menu_line("Mais alguma coisa? Tenho mais encomenda, se você tiver mais fôlego."),
+		], _on_menu_choice)
+		return
+	if missions.active():
+		if missions.kind() == RTMerchantMissionController.KIND_DONATE:
+			var card_name: String = String(missions.mission.get("card_name", ""))
+			var has_card: bool = int(core._card_count_by_id(String(missions.mission.get("card_id", "")))) > 0
+			var choices: Array = []
+			if has_card:
+				choices.append({"label": "DOAR %s" % card_name.to_upper(), "id": CHOICE_DONATE})
+			choices.append({"label": "AINDA NÃO", "id": CHOICE_DECLINE})
+			dialogue.start([{"who": "mercador", "text": "E aquela %s? Eu ainda quero, viu. Coleção é coleção." % card_name, "mood": "animado", "choices": choices}], _on_mission_choice)
+			return
+		dialogue.start([
+			{"who": "mercador", "text": "A encomenda ainda está aberta: %s." % missions.objective_text().to_lower(), "mood": "preocupado"},
+			_menu_line("Enquanto isso, o balcão está aberto."),
+		], _on_menu_choice)
+		return
+	if not missions.reward_available():
+		dialogue.start([
+			{"who": "mercador", "text": "Moeda Estável, querida? Acabou. Você levou o cofre inteiro. Eu estou orgulhoso e falido.", "mood": "triste"},
+			_menu_line("Mas itens eu ainda tenho. Sempre tenho."),
+		], _on_menu_choice)
+		return
+	var world: Vector2 = Vector2(core.WORLD_SIZE)
+	var origin: Vector2 = Vector2(core.player_pos)
+	if _counter_dimension != null and not Dictionary(_counter_dimension.saved).is_empty():
+		world = Vector2(_counter_dimension.saved.get("world", world))
+		origin = Vector2(_counter_dimension.saved.get("player_pos", origin))
+	_pending_offer = missions.offer(world, origin)
+	dialogue.start([{"who": "mercador", "text": _offer_text(_pending_offer), "mood": "animado", "choices": [
+		{"label": "ACEITO", "id": CHOICE_ACCEPT},
+		{"label": "AGORA NÃO", "id": CHOICE_DECLINE},
+	]}], _on_mission_choice)
+
+
+func _offer_text(offered: Dictionary) -> String:
+	match String(offered.get("kind", "")):
+		RTMerchantMissionController.KIND_ZONE:
+			return "Tem um ninho de bicho bem onde a minha porta encosta lá fora. Eu marquei no seu mapa. Derruba %d dentro da marca e eu te pago em Moeda Estável." % int(offered.get("target", 0))
+		RTMerchantMissionController.KIND_DELIVER:
+			return "Os bichos andam engolindo engrenagem do meu teleportador. Quando derrubar um, olha o chão. Me traz %d e eu te pago em Moeda Estável." % int(offered.get("target", 0))
+		RTMerchantMissionController.KIND_DONATE:
+			return "Eu coleciono, sabe? Me falta uma %s. Me dá uma das suas e eu te pago em Moeda Estável. Troca justa, palavra de mercador." % String(offered.get("card_name", ""))
+	return "Tenho um servicinho pra você."
+
+
+func _on_mission_choice(id: String) -> void:
+	match id:
+		CHOICE_ACCEPT:
+			missions.accept(_pending_offer)
+			_pending_offer.clear()
+			if missions.kind() == RTMerchantMissionController.KIND_DONATE:
+				_mission_talk()
+				return
+			core._dialogue().start([_menu_line("Combinado! Eu anoto aqui. Volta quando terminar.")], _on_menu_choice)
+		CHOICE_DONATE:
+			if missions.donate():
+				_mission_talk()
+			else:
+				core._dialogue().start([_menu_line("Ué, cadê? Sem o item não tem troca, querida.", "preocupado")], _on_menu_choice)
+		_:
+			_pending_offer.clear()
+			core._dialogue().start([_menu_line("Sem pressa. A encomenda espera. Eu é que não.")], _on_menu_choice)
+
+
 func _buy() -> void:
 	if _counter_dimension != null and _counter_dimension.has_method("_open_counter"):
 		_counter_dimension._open_counter()
@@ -252,7 +383,7 @@ static func rupture_talk(retold: bool) -> Array:
 	if retold:
 		return [
 			{"who": "mercador", "text": "De novo? Tudo bem, velho repete mesmo. Resumo de feira, presta atenção:", "mood": "animado"},
-			{"who": "mercador", "text": "Derrubou o que segura a dimensão, nasce o Fragmento Instável. Até %d segundos, travessia perfeita: o Impulso sobe e a próxima carta vem melhor." % fast},
+			{"who": "mercador", "text": "Derrubou o que segura a dimensão, nasce o Fragmento Instável. Até %d segundos, travessia perfeita: o Impulso sobe e o próximo item vem melhor." % fast},
 			{"who": "mercador", "text": "Até %d, travessia estável: o Impulso fica e ainda sai um agradinho. Passou disso, colapso: o fragmento enfraquece e o Impulso vai embora." % standard, "mood": "preocupado"},
 			{"who": "mercador", "text": "Aos %d começa a emergência. Você tem %d segundos pra achar uma ruptura, senão a dimensão te cospe onde ela quiser, tonta e sem Impulso." % [total, escape], "mood": "preocupado"},
 			{"who": "geovana", "text": "Rápido é melhor. Já entendi.", "mood": "decidida"},
@@ -268,7 +399,7 @@ static func rupture_talk(retold: bool) -> Array:
 		{"who": "mercador", "text": "Porque você é a única coisa ali dentro que ainda sabe sair. Ele não é seu, nem de ninguém da sua turma. É do grupo inteiro. Não cabe no bolso, nem no meu."},
 		{"who": "mercador", "text": "Agora, a parte que me interessa, que é a parte do lucro.", "mood": "animado"},
 		{"who": "mercador", "text": "Se você atravessa logo, nos primeiros %d segundos, o caco vai junto com a correnteza. Que nem pular num trem andando: o embalo te leva." % fast, "mood": "animado"},
-		{"who": "mercador", "text": "Esse embalo é o Impulso de Ruptura. A próxima dimensão te recebe com ele, e a primeira carta que ela soltar pra você vem melhor. Não vem mais, vem MELHOR.", "mood": "animado"},
+		{"who": "mercador", "text": "Esse embalo é o Impulso de Ruptura. A próxima dimensão te recebe com ele, e o primeiro item que ela soltar pra você vem melhor. Não vem mais, vem MELHOR.", "mood": "animado"},
 		{"who": "mercador", "text": "É feira, querida. Quem chega cedo leva a fruta boa. Quem chega tarde leva a mesma quantidade, só que machucada."},
 		{"who": "geovana", "text": "E se eu fizer isso de novo, e de novo?", "mood": "decidida"},
 		{"who": "mercador", "text": "Aí o embalo empilha. Impulso um, dois, três, quatro. Quatro é o teto: acima disso nem o corpo de vocês nem a minha porta aguentam o tranco.", "mood": "animado"},
@@ -396,6 +527,17 @@ func on_dimension_entered(_confiscated: int) -> void:
 	])
 
 
+## Esbarrao (dela ou de uma caixa chutada) no corpo dele.
+func complain_bump() -> void:
+	var lines: Array[String] = [
+		"Ei! Olha o estoque!",
+		"Devagar, isso aí é mais velho que a sua espécie!",
+		"Quebrou, pagou. Brincadeira. Mais ou menos.",
+		"Opa! Equilíbrio de mercador, querida.",
+	]
+	say(lines[core.rng.randi_range(0, lines.size() - 1)], 2.2)
+
+
 func on_player_expelled() -> void:
 	if not narrative_enabled():
 		return
@@ -409,21 +551,19 @@ func _load() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(SAVE_PATH) != OK:
 		return
-	capsules_saved = int(cfg.get_value("mission", "capsules", 0))
-	mission_offered = bool(cfg.get_value("mission", "offered", false))
-	mission_done = bool(cfg.get_value("mission", "done", false))
+	# Capsulas e fenda estavel valem so para a run (begin_run/run_state).
 	visits = int(cfg.get_value("mission", "visits", 0))
+	runs_started = int(cfg.get_value("mission", "runs", 0))
 	for key in Array(cfg.get_value("story", "seen", [])):
-		seen[String(key)] = true
+		if String(key) != "mission_done":
+			seen[String(key)] = true
 
 
 func _save() -> void:
 	if not persist:
 		return
 	var cfg := ConfigFile.new()
-	cfg.set_value("mission", "capsules", capsules_saved)
-	cfg.set_value("mission", "offered", mission_offered)
-	cfg.set_value("mission", "done", mission_done)
 	cfg.set_value("mission", "visits", visits)
+	cfg.set_value("mission", "runs", runs_started)
 	cfg.set_value("story", "seen", seen.keys())
 	cfg.save(SAVE_PATH)

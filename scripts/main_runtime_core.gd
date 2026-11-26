@@ -52,6 +52,7 @@ func _ensure_runtime_controllers_bound() -> void:
 		henry_colossus_ability_controller.configure(self)
 	if reactive_survival_card_controller.core != self:
 		reactive_survival_card_controller.configure(self)
+	item_owners.configure(self)
 	if roguelike_point_card_controller.core != self:
 		roguelike_point_card_controller.configure(self)
 	if card_power_feedback_controller.core != self:
@@ -539,6 +540,11 @@ func _sanitize_desktop_teleport_mode(value: String) -> String:
 	if normalized in [DESKTOP_TELEPORT_CURSOR, DESKTOP_AIM_HOLD, DESKTOP_AIM_CONFIRM, DESKTOP_TELEPORT_AUTO, DESKTOP_TELEPORT_LAST_DIRECTION]:
 		return normalized
 	return DESKTOP_TELEPORT_CURSOR
+
+
+## Disparo no cursor: o clique esquerdo tambem e "attack" (alem da tecla salva).
+func _desktop_attack_uses_cursor() -> bool:
+	return _sanitize_desktop_attack_aim_mode(desktop_attack_aim_mode) == DESKTOP_ATTACK_AIM_CURSOR
 
 
 func _sanitize_desktop_attack_aim_mode(value: String) -> String:
@@ -1544,6 +1550,10 @@ func _manifest_selection_visible_items(aura_view: bool) -> Array:
 
 func _manifest_selection_slot_for_index(index: int, aura_view: bool) -> int:
 	var visible_indices: Array = _manifest_selection_visible_indices(aura_view)
+	# Slot "aleatorio" no fim do carrossel: vale para o indice sentinela e para
+	# a escolha atual enquanto o foco estiver nele.
+	if _build_random_slot_enabled() and (index == BUILD_RANDOM_INDEX or (_build_random_shown(_build_random_view(aura_view)) and index == (selected_aura if aura_view else selected_manifestation))):
+		return visible_indices.size()
 	var slot: int = visible_indices.find(index)
 	return slot if slot >= 0 else 0
 
@@ -1552,7 +1562,131 @@ func _manifest_selection_index_for_slot(slot: int, aura_view: bool) -> int:
 	var visible_indices: Array = _manifest_selection_visible_indices(aura_view)
 	if visible_indices.is_empty():
 		return 0
+	if _build_random_slot_enabled():
+		var wrapped: int = posmod(slot, visible_indices.size() + 1)
+		return BUILD_RANDOM_INDEX if wrapped == visible_indices.size() else int(visible_indices[wrapped])
 	return int(visible_indices[posmod(slot, visible_indices.size())])
+
+
+## Quantidade de slots do carrossel (cartas visiveis + slot aleatorio no solo).
+func _manifest_selection_slot_count(aura_view: bool) -> int:
+	return _manifest_selection_visible_indices(aura_view).size() + (1 if _build_random_slot_enabled() else 0)
+
+
+# ------------------------------------------------- escolha aleatoria oculta
+## O carrossel de montagem (Geovana: manifestacao/espectro; Henry: mutacao/
+## efeito) ganha um slot "ALEATORIA". Confirmar nele sorteia em silencio e
+## segue: o jogador so descobre o que saiu dentro da partida.
+func _build_random_slot_enabled() -> bool:
+	return mode in ["manifest", "mutation_select", "effect_select"]
+
+
+func _build_random_view(aura_view: bool) -> String:
+	if mode in ["mutation_select", "effect_select"]:
+		return "effect" if aura_view else "mutation"
+	return "aura" if aura_view else "manifest"
+
+
+func _build_random_focused(view: String) -> bool:
+	return bool(build_random_focus.get(view, false))
+
+
+## Foco no slot ou sorteio ja feito e ainda escondido (transicao de etapa).
+func _build_random_shown(view: String) -> bool:
+	return _build_random_focused(view) or bool(build_random_hidden.get(view, false))
+
+
+func _set_build_random_focus(view: String, on: bool) -> void:
+	build_random_focus[view] = on
+	if on:
+		build_random_hidden[view] = false
+
+
+## Sorteia em silencio a escolha da etapa se o foco estiver no slot aleatorio.
+## Retorna false quando nao ha nenhuma opcao desbloqueada para sortear.
+func _resolve_build_random_pick(aura_view: bool) -> bool:
+	var view: String = _build_random_view(aura_view)
+	if not _build_random_slot_enabled() or not _build_random_focused(view):
+		return true
+	var options: Array[int] = []
+	match view:
+		"mutation":
+			for i in range(HENRY_MUTATIONS.size()):
+				options.append(i)
+		"effect":
+			for i in range(HENRY_EFFECTS.size()):
+				options.append(i)
+		_:
+			for value in _manifest_selection_visible_indices(aura_view):
+				var idx: int = int(value)
+				if _manifest_select_item_unlocked(idx, aura_view) and not _manifest_choice_taken(idx, aura_view):
+					options.append(idx)
+	if options.is_empty():
+		return false
+	var pick: int = options[rng.randi_range(0, options.size() - 1)]
+	match view:
+		"mutation":
+			selected_mutation = pick
+		"effect":
+			selected_effect = pick
+		"aura":
+			selected_aura = pick
+		_:
+			selected_manifestation = pick
+	build_random_focus[view] = false
+	build_random_hidden[view] = true
+	return true
+
+
+## Desliga o sorteio oculto (volta de etapa, nova run, menu).
+func _clear_build_random(view: String = "") -> void:
+	if view == "":
+		build_random_focus.clear()
+		build_random_hidden.clear()
+		return
+	build_random_focus[view] = false
+	build_random_hidden[view] = false
+
+
+## Henry solo: anda pelas placas e pelo slot aleatorio (ultimo). Na sala
+## multiplayer mantem o giro antigo, sem slot aleatorio.
+func _step_henry_build_selection(effect_step: bool, direction: int) -> void:
+	var count: int = HENRY_EFFECTS.size() if effect_step else HENRY_MUTATIONS.size()
+	var view: String = "effect" if effect_step else "mutation"
+	var current: int = selected_effect if effect_step else selected_mutation
+	var next: int
+	if _build_random_slot_enabled():
+		var slot: int = count if _build_random_focused(view) else current
+		next = posmod(slot + direction, count + 1)
+		_set_build_random_focus(view, next == count)
+		if next == count:
+			next = current
+	else:
+		next = posmod(current + direction, count)
+	if effect_step:
+		selected_effect = next
+		aura_scroll_pos = float(next)
+	else:
+		selected_mutation = next
+		manifest_scroll_pos = float(next)
+
+
+func _restore_henry_random_mutation_focus() -> void:
+	_clear_build_random("effect")
+	if bool(build_random_hidden.get("mutation", false)):
+		_set_build_random_focus("mutation", true)
+
+
+## Anda um slot no carrossel da Geovana (inclui o slot aleatorio no solo).
+func _step_manifest_build_selection(aura_view: bool, direction: int) -> void:
+	var current: int = selected_aura if aura_view else selected_manifestation
+	var next_index: int = _manifest_selection_index_for_slot(_manifest_selection_slot_for_index(current, aura_view) + direction, aura_view)
+	if aura_view:
+		_set_selected_aura(next_index, true)
+		aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
+	else:
+		_set_selected_manifestation(next_index, true)
+		manifest_scroll_pos = float(_manifest_selection_slot_for_index(selected_manifestation, false))
 
 
 func _manifestation_key(index: int) -> String:
@@ -1848,6 +1982,9 @@ func _card_unlocked(card: Dictionary) -> bool:
 
 func _card_available_for_reward(card: Dictionary, include_rare: = true, require_drop_texture: = false) -> bool:
 	if card.is_empty() or _card_at_max(card) or not _card_unlocked(card):
+		return false
+	# Fontes exclusivas: Cinzas (chefes), Moeda Estavel (Mercador); Petro virou a Rede de DNA.
+	if SHOP_EXCLUDED_CARD_IDS.has(_card_id(card)):
 		return false
 	# The Drop journey has no shop, so its dedicated pool may award legendary
 	# cards after the same phase/luck gate. Other reward paths stay shop-only.
@@ -3083,7 +3220,7 @@ func _cards_report_rows() -> Array:
 func _cards_detailed_report_text() -> String:
 	var rows: = _cards_report_rows()
 	if rows.is_empty():
-		return "Nenhuma carta comprada."
+		return "Nenhum item comprado."
 	var parts: = []
 	for row in rows:
 		parts.append("%s x%d [%s] - %s" % [String(row["name"]), int(row["count"]), String(row["rarity"]), String(row["effect"])])
@@ -3147,7 +3284,7 @@ func _run_balance_flags() -> Array:
 	if player_damage > max(1.0, run_start_damage) * 8.0:
 		flags.append("Dano final acima de 8x o dano inicial")
 	if _deck_total_cards() > 0 and enemies_killed <= 0:
-		flags.append("Cartas compradas sem abates registrados")
+		flags.append("Itens comprados sem abates registrados")
 	if run_points_spent > run_points_earned + 500:
 		flags.append("Gasto de pontos acima do ganho esperado")
 	if _total_boss_damage_report() > 0 and boss_active and not bool(run_boss_reached.get(current_phase, false)):
@@ -5199,6 +5336,7 @@ func _online_menu_available() -> bool:
 
 func _load_config() -> void :
 	save_controller._load_config()
+	ColorVisionFilterScript.apply(self)
 
 
 func _save_config() -> void :
@@ -5331,7 +5469,7 @@ func _keyboard_action_title(action: String) -> String:
 
 func _keyboard_action_subtitle(action: String) -> String:
 	match action:
-		"attack": return "Ataca com teclado ou mouse; clique esquerdo continua como padrao"
+		"attack": return "Ataque basico; no disparo no cursor o clique esquerdo tambem ataca"
 		"skill": return "Mira no cursor quando a skill usa area"
 		"secondary": return "Ultimate no cursor; pode usar teclado ou mouse"
 		"dash": return "Teleporte para o cursor apenas no botao vinculado"
@@ -5359,6 +5497,7 @@ func _load_keyboard_bindings(coords: PackedStringArray) -> void :
 			keyboard_bindings[action] = INPUT_BIND_NONE
 		else:
 			keyboard_bindings[action] = _normalize_input_binding(keyboard_bindings[action])
+	keyboard_bindings = KeyboardBindingDefaultsScript.migrate_legacy(keyboard_bindings)
 
 
 func _serialize_keyboard_bindings() -> String:
@@ -5438,6 +5577,8 @@ func _compact_key_binding_name(action: String) -> String:
 
 
 func _event_matches_keyboard_action(event: InputEvent, action: String) -> bool:
+	if action == "attack" and _desktop_attack_uses_cursor() and KeyboardBindingDefaultsScript.cursor_attack_event(event):
+		return true
 	var expected: = _normalize_input_binding(keyboard_bindings.get(action, INPUT_BIND_NONE))
 	if expected == INPUT_BIND_NONE:
 		return false
@@ -5458,6 +5599,8 @@ func _is_escape_or_pause_key(event: InputEvent) -> bool:
 
 
 func _is_keyboard_binding_pressed(action: String) -> bool:
+	if action == "attack" and _desktop_attack_uses_cursor() and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		return true
 	var bind_str: = String(keyboard_bindings.get(action, INPUT_BIND_NONE))
 	if bind_str.begins_with(INPUT_BIND_KEY_PREFIX):
 		var key_code: = int(bind_str.trim_prefix(INPUT_BIND_KEY_PREFIX))
@@ -5747,6 +5890,7 @@ func _load_textures() -> void :
 	textures["crystal"] = [_safe_load(base + "cristalizador1.png"), _safe_load(base + "cristalizador2.png")]
 	textures["curater"] = [_safe_load(base + "curater1.png"), _safe_load(base + "curater2.png")]
 	textures["larapio"] = [_safe_load(base + "larapio1.png"), _safe_load(base + "larapio2.png")]
+	textures["rebobinador"] = [_safe_load(base + "rebobinador1.png"), _safe_load(base + "rebobinador2.png")]
 	textures["arauto"] = [_safe_load(base + "arauto1.png"), _safe_load(base + "arauto2.png")]
 	textures["aguilhao"] = [_safe_load(base + "aguilhao1.png"), _safe_load(base + "aguilhao2.png")]
 	textures["coin"] = _safe_load(base + "moeda.png")
@@ -6791,6 +6935,7 @@ func _play_phase3_music_random() -> void :
 
 func _go_to_menu() -> void :
 	_save_interrupted_run(true)
+	_clear_build_random()
 	_clear_boss_reward_reveal()
 	_stop_qa_streaming("menu")
 	_stop_battle_music_for_screen_transition()
@@ -6993,6 +7138,7 @@ func _reset_card_counts() -> void :
 func _reset_card_proc_state() -> void :
 	shop_controller.reset()
 	reactive_survival_card_controller.reset()
+	item_owners.reset()
 	card_power_feedback_controller.reset()
 	fratura_cronal_cooldown = 0.0
 	fratura_cronal_armed = false
@@ -7115,6 +7261,11 @@ func _reset_card_proc_state() -> void :
 
 func _start_game(clear_interrupted_save: = true) -> void :
 	var perf_start_ms: = Time.get_ticks_msec()
+	_clear_build_random()
+	# Fenda estabilizada e encomendas do Bussola valem so para a run.
+	_merchant_npc().begin_run(clear_interrupted_save)
+	_merchant_dimension().dna.reset_run()
+	prophetic_rewind.reset(self)
 	_ensure_runtime_controllers_bound()
 	player_shove.reset()
 	fossil_pustule_tether.reset()
@@ -9937,7 +10088,7 @@ func _update_manifest_selection_flow(delta: float) -> void :
 		else:
 			var selected_index: int = selected_aura if aura_view else selected_manifestation
 			target = float(_manifest_selection_slot_for_index(selected_index, aura_view))
-			count = _manifest_selection_visible_indices(aura_view).size()
+			count = _manifest_selection_slot_count(aura_view)
 		if count <= 0:
 			return
 		var scroll_value = aura_scroll_pos if manifest_select_stage == MANIFEST_STAGE_AURA else manifest_scroll_pos
@@ -9971,6 +10122,9 @@ func _update_game(delta: float) -> void :
 	if _boss3_miasma_qte_active():
 		_update_boss3_miasma_qte(delta)
 		return
+	# Profecia: na volta no tempo o mundo para (RTPropheticRewind).
+	if prophetic_rewind.blocks_world(delta):
+		return
 	_sync_touch_state()
 	if _spectator_controls_locked():
 		_clear_spectator_local_combat_state()
@@ -9981,7 +10135,10 @@ func _update_game(delta: float) -> void :
 	time_alive += delta
 	elapsed_unpaused += delta
 	_umbra_phase_observer().update(delta)
-	experimental_phase_controller.update(delta)
+	# Oficina do Mercador = sala segura: guarda unico (RTMerchantDimension).
+	var sealed: bool = _merchant_dimension().seals_phase_world()
+	if not sealed:
+		experimental_phase_controller.update(delta)
 	RTFrameProfiler.mark("u_prelude")
 	if mode != "game":
 		return
@@ -9991,10 +10148,11 @@ func _update_game(delta: float) -> void :
 	# Dentro da oficina do Mercador a fase inteira fica suspensa: evento,
 	# miniboss, artefato, capsula e pulso de terreno nasceriam com as
 	# coordenadas da fase num mundo que nao e mais o dela.
-	if not _merchant_dimension().active:
+	if not sealed:
 		runtime_event_director.update(delta, runtime_event_director.context_from_game(self), _is_world_authority())
 		point_boost_pickup_controller.update(delta, _is_world_authority())
 		_field_artifacts().update(delta)
+		_merchant_npc().missions.update(delta)
 		phase3_ritual_pulse_controller.update(delta, _is_world_authority())
 		phase4_instability_pulse_controller.update(delta, _is_world_authority())
 		_update_bargain_capsule(delta)
@@ -10017,7 +10175,8 @@ func _update_game(delta: float) -> void :
 			boss10_controller.update_replica(delta)
 			boss10_controller.update_death(delta)
 	_story().update(delta)
-	_umbra_intro().tick_trigger(delta)
+	if not sealed:
+		_umbra_intro().tick_trigger(delta)
 	_run_choice().update(delta)
 	_boss_pacts().update(delta)
 	_parasitica().update(delta)
@@ -10054,11 +10213,13 @@ func _update_game(delta: float) -> void :
 	_update_manifest_evolution_effects(delta)
 	RTFrameProfiler.mark("u_timers_cards_tp")
 	_update_aura(delta)
+	_merchant_dimension().dna.update(delta)
 	RTFrameProfiler.mark("u_aura")
-	_update_boss2_environment(delta)
-	_update_phase2_fire_walls(delta)
-	_update_phase7_ember_patches(delta)
-	_update_phase3_environment(delta)
+	if not sealed:
+		_update_boss2_environment(delta)
+		_update_phase2_fire_walls(delta)
+		_update_phase7_ember_patches(delta)
+		_update_phase3_environment(delta)
 	RTFrameProfiler.mark("u_environment")
 	if not boss_ready and time_alive >= BOSS_READY_TIME and not _tutorial_blocks_normal_spawn():
 		boss_ready = true
@@ -10093,8 +10254,9 @@ func _update_game(delta: float) -> void :
 	if pustule_slow_was_active and pustule_spit_slow_timer <= 0.0:
 		pustule_spit_slow_grace_timer = maxf(pustule_spit_slow_grace_timer, PUSTULE_SPIT_SLOW_GRACE)
 	pustule_spit_slow_grace_timer = maxf(0.0, pustule_spit_slow_grace_timer - delta)
-	_update_phase6_pustule_pheromones(delta)
-	_update_sanguessuga_parasite(delta)
+	if not sealed:
+		_update_phase6_pustule_pheromones(delta)
+		_update_sanguessuga_parasite(delta)
 	boss_tp_stun_timer = max(0.0, boss_tp_stun_timer - delta)
 	boss6_heal_cut_timer = max(0.0, boss6_heal_cut_timer - delta)
 	_update_frost(delta)
@@ -10102,7 +10264,8 @@ func _update_game(delta: float) -> void :
 	player_shove.update(self, delta)
 	if fossil_pustule_tether.core != self:
 		fossil_pustule_tether.configure(self)
-	fossil_pustule_tether.update(delta)
+	if not sealed:
+		fossil_pustule_tether.update(delta)
 	if not _local_player_movement_locked():
 		if player_stun_timer <= 0.0 and not player_locked:
 			_update_apolo_phase5_exhibition(delta)
@@ -10163,20 +10326,19 @@ func _update_game(delta: float) -> void :
 	if run_leader_notice_timer > 0.0:
 		run_leader_notice_timer = maxf(0.0, run_leader_notice_timer - delta)
 	# Entrando/saindo da fenda do Mercador a horda congela (ver RTMerchantRiftTransition).
-	if rift_transition == null or not rift_transition.freezes_enemies():
+	if not sealed and (rift_transition == null or not rift_transition.freezes_enemies()):
 		enemy_manager.update(delta)
 	RTFrameProfiler.mark("u_enemy_manager")
 	_update_event_alerts(delta)
 	_update_team_revival(delta)
-	if _is_world_authority():
+	if _is_world_authority() and not sealed:
 		_update_agglomeration(delta)
 		if not _tutorial_blocks_normal_spawn():
 			_try_spawn_larapio()
 			_try_spawn_arauto()
-
-	_update_phase_fragment(delta)
-
-	if _is_world_authority():
+	if not sealed:
+		_update_phase_fragment(delta)
+	if _is_world_authority() and not sealed:
 		_update_arauto(delta)
 	RTFrameProfiler.mark("u_alerts_revival")
 	_update_bullets(delta)
@@ -10184,23 +10346,25 @@ func _update_game(delta: float) -> void :
 	_update_eletrica_waves(delta)
 	_update_eletrica_chains(delta)
 	_update_remote_bullets(delta)
-	_update_parasite_spit_zones(delta)
 	_update_prisms(delta)
-	_update_phase6_pustule_pools(delta)
+	if not sealed:
+		_update_parasite_spit_zones(delta)
+		_update_phase6_pustule_pools(delta)
 	RTFrameProfiler.mark("u_skill_zones")
 	# Entrando/saindo da fenda do Mercador a horda congela no lugar: e isso que
 	# garante que os inimigos empurrados continuem onde ficaram na volta.
-	if rift_transition == null or not rift_transition.freezes_enemies():
+	if not sealed and (rift_transition == null or not rift_transition.freezes_enemies()):
 		_update_enemies(delta, true)
 		RTFrameProfiler.mark("u_enemies")
 		_apply_entity_separation(delta, true)
 	RTFrameProfiler.mark("u_separation")
-	_update_enemy_bullets(delta)
+	if not sealed:
+		_update_enemy_bullets(delta)
+		_update_phase4_environment(delta)
+		_update_larapio_coin_drops(delta)
+		_update_arauto_card_drops(delta)
+		_update_arauto_evolution_fragment(delta)
 	RTFrameProfiler.mark("u_enemy_bullets")
-	_update_phase4_environment(delta)
-	_update_larapio_coin_drops(delta)
-	_update_arauto_card_drops(delta)
-	_update_arauto_evolution_fragment(delta)
 	_update_orbitals(delta)
 	_gravitante().update(delta)
 	_lacerante_exec().update(delta)
@@ -10214,10 +10378,10 @@ func _update_game(delta: float) -> void :
 	RTFrameProfiler.mark("u_heal_orbs")
 	_update_effects(delta)
 	RTFrameProfiler.mark("u_effects")
-	if _is_world_authority() and boss_active:
+	if _is_world_authority() and boss_active and not sealed:
 		_update_boss(delta * AuraSystem.world_multiplier(aura_state))
 		_update_boss_poison(delta)
-	elif _is_world_replica() and current_phase == 2 and boss2_ultimate_wind_active > 0.0:
+	elif _is_world_replica() and current_phase == 2 and boss2_ultimate_wind_active > 0.0 and not sealed:
 		boss2_ultimate_wind_active = max(0.0, boss2_ultimate_wind_active - delta)
 		_apply_boss2_wind_force(delta)
 	# Resolve Pai-Rato presentation after authority/replica motion has advanced,
@@ -10229,11 +10393,14 @@ func _update_game(delta: float) -> void :
 	if not active_lacerante.is_empty():
 		player_pos = Vector2(active_lacerante.get("center", player_pos))
 	RTFrameProfiler.mark("u_boss")
-	_update_environment_weather(delta)
+	if not sealed:
+		_update_environment_weather(delta)
 	if player_hp <= 0:
 		_handle_player_down()
-	if mode == "game" and boss_active and current_phase == 1 and boss_entry_timer <= 0.0:
+	if mode == "game" and boss_active and current_phase == 1 and boss_entry_timer <= 0.0 and not sealed:
 		_record_boss1_rewind_history(delta)
+	prophetic_rewind.update(delta)
+	_merchant_dimension().enforce_seal()
 	RTFrameProfiler.mark("u_tail")
 
 func _update_aura(delta: float) -> void :
@@ -10258,6 +10425,7 @@ func _update_aura(delta: float) -> void :
 		"enemies": enemies,
 		"boss_active": boss_active and boss_hp > 0.0,
 		"boss_pos": boss_pos,
+		"rational_analysis_paused": _merchant_dimension().active and not _merchant_dimension().clock_running(),
 	}))
 
 
@@ -11033,6 +11201,10 @@ func _apolo_phase5_laser_danger_at(pos: Vector2, hazard: Dictionary, forecast: f
 
 func _read_move() -> Vector2:
 	_ensure_runtime_controllers_bound()
+	# Conversa RPG aberta: teclas/analogico de movimento nao dao direcao
+	# (nem anda, nem vira o sprite, nem anima passo).
+	if dialogue_controller != null and dialogue_controller.busy():
+		return Vector2.ZERO
 	return player_control_controller.read_move()
 
 
@@ -11658,9 +11830,8 @@ func _use_skill(target_world = null) -> void :
 		return
 	if active_character_key == CHARACTER_HENRY:
 		var henry_cooldown := _skill_cooldown()
-		if time_alive - last_skill_time < henry_cooldown:
-			var henry_remaining: float = henry_cooldown - (time_alive - last_skill_time)
-			_add_text("%.1fs" % henry_remaining, player_pos + Vector2(0, -86), Color(1.0, 0.72, 0.28), 0.45, 18)
+		if time_alive - last_skill_time < henry_cooldown and momentum_items_controller.hab1_charges <= 0:
+			_add_text("%.1fs" % (henry_cooldown - (time_alive - last_skill_time)), player_pos + Vector2(0, -86), Color(1.0, 0.72, 0.28), 0.45, 18)
 			return
 		var henry_skill_started := false
 		match mutation_key:
@@ -11668,16 +11839,19 @@ func _use_skill(target_world = null) -> void :
 			"colosso": henry_skill_started = henry_colossus_ability_controller.begin_skill(target_world)
 			_: henry_skill_started = henry_incendiary_ability_controller.begin_skill(target_world)
 		if henry_skill_started:
-			last_skill_time = time_alive
+			if time_alive - last_skill_time < henry_cooldown:
+				momentum_items_controller.use_stored_hab1()
+			else:
+				last_skill_time = time_alive
 			_register_manual_skill_use("skill_q", henry_cooldown)
 			_tutorial_note_action("skill")
 		return
 	var cooldown = _skill_cooldown()
-	if time_alive - last_skill_time < cooldown:
-		var remaining = cooldown - (time_alive - last_skill_time)
-		_add_text("%.1fs" % remaining, player_pos + Vector2(0, -86), Color(0.72, 0.92, 1.0), 0.45, 18)
+	if time_alive - last_skill_time >= cooldown:
+		last_skill_time = time_alive
+	elif not momentum_items_controller.use_stored_hab1():
+		_add_text("%.1fs" % (cooldown - (time_alive - last_skill_time)), player_pos + Vector2(0, -86), Color(0.72, 0.92, 1.0), 0.45, 18)
 		return
-	last_skill_time = time_alive
 	var skill_power: float = _register_manual_skill_use("skill_q", cooldown)
 	var visual_origin: Vector2 = player_pos
 	var visual_target: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos + _ability_aim_direction() * 220.0
@@ -12071,7 +12245,9 @@ func _boss_trapped_by_gravitante() -> bool:
 func _player_invulnerable() -> bool:
 	if rift_transition != null and rift_transition.invulnerable():
 		return true
-	var tp_invulnerable: = tp_effects.any( func(effect): return String(effect.get("kind", "")) in ["lacerante", "eletrica"] and float(effect.get("life", 0.0)) > 0.0)
+	# Teleporte nao da imunidade: so a execucao da Lacerante protege enquanto
+	# corta alvos atravessados (a Descarga da Eletrica deixou de proteger).
+	var tp_invulnerable: = tp_effects.any( func(effect): return float(effect.get("life", 0.0)) > 0.0 and String(effect.get("kind", "")) == "lacerante" and not (effect.get("targets", []) as Array).is_empty())
 	return run_retry_invulnerability_timer > 0.0 or trembo_invulnerability > 0.0 or mandamento_invulnerability > 0.0 or henry_incendiary_ability_controller.is_spin_invulnerable() or henry_colossus_ability_controller.is_leap_invulnerable() or _boss3_miasma_qte_active() or not _active_lacerante_secondary().is_empty() or not _active_prismatica_secondary().is_empty() or tp_invulnerable or lacerante_execution.is_protected()
 
 
@@ -12817,6 +12993,7 @@ func _update_advanced_manifestation_state(delta: float) -> void :
 	henry_barometric_ability_controller.update(delta)
 	henry_colossus_ability_controller.update(delta)
 	reactive_survival_card_controller.update(delta)
+	item_owners.update(delta)
 
 
 func _trigger_screen_shake(strength: float, duration: float) -> void:
@@ -13010,6 +13187,8 @@ func _update_tp_electric(effect: Dictionary, delta: float) -> void :
 	for enemy in enemies:
 		if _distance_to_segment(Vector2(enemy["pos"]), a, b) <= _enemy_radius(enemy) + 28.0:
 			_damage_enemy(enemy, float(enemy.get("max_hp", 1.0)) * TP_ELECTRIC_MAX_HP_RATE, "eletrica", true, true, a, "teleport")
+			if _is_world_authority():
+				enemy["stun"] = maxf(float(enemy.get("stun", 0.0)), TP_ELECTRIC_STUN)
 	if boss_active and boss_hp > 0.0 and _distance_to_segment(boss_pos, a, b) <= 82.0:
 		_damage_boss(boss_hp_max * TP_ELECTRIC_MAX_HP_RATE, "eletrica", true, true, "teleport", a)
 	if _arauto_active() and _distance_to_segment(Vector2(arauto["pos"]), a, b) <= 72.0:
@@ -13281,7 +13460,7 @@ func _choose_phase2_enemy_type() -> String:
 	var elapsed: = _phase_elapsed_time()
 	if elapsed < _phase2_kamikaze_unlock_time():
 		return ENEMY_COMMON
-	if elapsed >= _phase2_pyro_unlock_time() and _enemy_type_count(ENEMY_PYRO_PENGUIN) < PHASE2_PYRO_LIMIT:
+	if elapsed >= _phase2_pyro_unlock_time():
 		if rng.randf() < 0.18:
 			return ENEMY_PYRO_PENGUIN
 	if _enemy_type_count(ENEMY_KAMIKAZE) < PHASE2_KAMIKAZE_LIMIT and rng.randf() < 0.28:
@@ -14375,16 +14554,12 @@ func _finish_arauto() -> void :
 	var pos: = Vector2(arauto.get("pos", player_pos))
 	var was_aguilhao: = _arauto_is_aguilhao()
 	_player_run_level_controller().grant_confirmed_miniboss()
-	var point_reward := maxi(1, int(round(float(card_cost) * ARAUTO_POINT_REWARD_CARD_COST_RATIO)))
-	_apply_score_delta(point_reward, true, _next_score_event_id())
+	RTSupremeEnemyRewards.grant(self, "aguilhao" if was_aguilhao else "arauto", pos, _next_score_event_id())
 	for enemy in enemies.duplicate():
 		if bool(enemy.get("eco_vinculado", false)) or bool(enemy.get("aguilhao_nodule", false)) or bool(enemy.get("aguilhao_spawned", false)):
 			_spawn_enemy_desfragmentation(Vector2(enemy.get("pos", pos)), _enemy_shard_color(enemy), 12)
 			enemies.erase(enemy)
-	_spawn_arauto_card_rewards(pos)
 	_add_text("AGUILHAO DESFEITO" if was_aguilhao else "ARAUTO DESFEITO", pos + Vector2(-138 if was_aguilhao else -118, -108), Color(0.72, 1.0, 0.38) if was_aguilhao else Color(0.82, 0.94, 1.0), 2.1, 30)
-	_add_text("+%s PONTOS" % _format_points(point_reward), pos + Vector2(-82, -174), Color(1.0, 0.84, 0.28), 2.1, 22)
-	_add_text("+4 CARTAS NO MAPA", pos + Vector2(-116, -146), Color(1.0, 0.86, 0.24), 2.1, 22)
 	_spawn_radial_particles(pos, Color(0.58, 1.0, 0.2) if was_aguilhao else Color(0.72, 0.64, 1.0), 60)
 	shockwaves.append({"pos": pos, "radius": 22.0, "max": 520.0, "life": 0.85, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(0.54, 1.0, 0.18) if was_aguilhao else Color(0.72, 0.64, 1.0)})
 	arauto.clear()
@@ -14442,21 +14617,6 @@ func _spawn_arauto_evolution_fragment(pos: Vector2, source: String = "") -> void
 	_add_text("FRAGMENTO DE EVOLUCAO", pos + Vector2(-120, -182), _manifestation_color(), 2.1, 22)
 
 
-func _spawn_arauto_card_rewards(pos: Vector2) -> void :
-	for peer_id in _reward_peer_ids():
-		var pool: Array = _available_card_drop_pool()
-		for i in range(ARAUTO_CARD_REWARD_COUNT):
-			if pool.is_empty():
-				pool = _available_card_drop_pool()
-				if pool.is_empty():
-					return
-			var index: = rng.randi_range(0, pool.size() - 1)
-			var card: Dictionary = pool[index]
-			pool.remove_at(index)
-			var angle: = TAU * float(i) / float(ARAUTO_CARD_REWARD_COUNT) + rng.randf_range(-0.24, 0.24)
-			_append_owned_card_drop(card, pos, angle, peer_id, 18.0, 42.0, 76.0, 80.0, 132.0)
-
-
 func _spawn_random_card_drops(pos: Vector2, count: int, rare_slots: int) -> void :
 	for peer_id in _reward_peer_ids():
 		var peer_rare_slots: = rare_slots
@@ -14477,6 +14637,20 @@ func _spawn_random_card_drops(pos: Vector2, count: int, rare_slots: int) -> void
 				return
 			var angle: = TAU * float(i) / float(max(1, count)) + rng.randf_range(-0.34, 0.34)
 			_append_owned_card_drop(card, pos, angle, peer_id, 20.0, 54.0, 92.0, 84.0, 146.0)
+
+
+## Chefes derrotados (anomalias com muita energia) deixam uma Cinzas da
+## Escolha para cada jogador. Os Inimigos Supremos pagam so pontos desde a
+## Rede do Petro (RTSupremeEnemyRewards).
+func _spawn_supreme_cinzas_drop(pos: Vector2) -> void:
+	if _is_drop_game_mode() or not _is_world_authority():
+		return
+	var card: Dictionary = _find_card_by_id(CARD_CINZAS_ID)
+	if card.is_empty():
+		return
+	for peer_id in _reward_peer_ids():
+		_append_owned_card_drop(card, pos, -PI * 0.5 + rng.randf_range(-0.3, 0.3), peer_id, 30.0, 24.0, 48.0, 28.0, 52.0, {"no_rupture_token": true, "supreme_cinzas": true})
+	_add_text("CINZAS DA ESCOLHA", pos + Vector2(-96, -206), Color(1.0, 0.58, 0.28), 2.0, 20)
 
 
 func _reward_peer_ids() -> Array[int]:
@@ -14561,7 +14735,7 @@ func _update_arauto_card_drops(delta: float) -> void :
 					rpc_id(1, "_rpc_request_card_drop_collect", drop_id, _mp_unique_id())
 			var card_color: Color = card.get("color", Color(1.0, 0.86, 0.24))
 			_spawn_radial_particles(Vector2(drop["pos"]), card_color, 22)
-			_add_text(("FICHA ? %s" % _card_rarity_label(card)) if mystery else ("CARTA: %s" % String(card.get("nick", card.get("name", "???")))), player_pos + Vector2(-80, -88), card_color, 1.25, 20)
+			_add_text(("FICHA ? %s" % _card_rarity_label(card)) if mystery else ("ITEM: %s" % String(card.get("nick", card.get("name", "???")))), player_pos + Vector2(-80, -88), card_color, 1.25, 20)
 	arauto_card_drops = arauto_card_drops.filter( func(drop): return float(drop.get("life", 0.0)) > 0.0)
 
 
@@ -14609,8 +14783,6 @@ func _spawn_enemy(kind: String, pos: Vector2) -> void :
 	# rede) ainda tentaria nascer aqui com as coordenadas da fase.
 	if _merchant_dimension().active:
 		return
-	if kind == ENEMY_PYRO_PENGUIN and _has_enemy_type(ENEMY_PYRO_PENGUIN):
-		return
 	if kind == ENEMY_CURATER and _enemy_type_count(ENEMY_CURATER) >= _curater_limit():
 		return
 	if kind == ENEMY_CHRONAL_LEECH:
@@ -14649,7 +14821,7 @@ func _spawn_enemy(kind: String, pos: Vector2) -> void :
 			points = 109
 		ENEMY_CURATER:
 			hp_mult = 2.4
-			speed *= 0.45
+			speed *= 0.675 # +50% (antes 0.45)
 			points = 135
 		ENEMY_LARAPIO:
 			hp_mult = LARAPIO_BASE_HP_MULT * (1.0 + _phase_elapsed_time() * LARAPIO_HP_TIME_SCALE + enemies_killed * LARAPIO_HP_KILL_SCALE)
@@ -15214,7 +15386,7 @@ func _combat_targets() -> Array:
 		return _bargain_capsule_combat_targets()
 	var targets: Array = []
 	if _local_player_targetable():
-		targets.append({"peer_id": _mp_unique_id(), "pos": player_pos, "local": true, "hp": player_hp, "hp_max": player_hp_max})
+		targets.append({"peer_id": _mp_unique_id(), "pos": skirmish_items_controller.target_pos(player_pos), "local": true, "hp": player_hp, "hp_max": player_hp_max})
 	for peer_id in _targetable_remote_peer_ids():
 		var state: Dictionary = net_players_by_peer.get(peer_id, {})
 		targets.append({"peer_id": peer_id, "pos": Vector2(state.get("pos", net_player_pos)), "local": false, "hp": float(state.get("hp", 0.0)), "hp_max": float(state.get("hp_max", 1.0))})
@@ -16794,7 +16966,11 @@ func _move_enemy(enemy: Dictionary, delta: float, lacerante_secondary_override: 
 			dir = (dir * 0.55 + edge_push * push_weight + edge_push.orthogonal() * float(enemy.get("strafe", 1.0)) * 0.28).normalized()
 	elif enemy["type"] == ENEMY_CURATER and not is_disco:
 		dir = _curater_move_dir(enemy, target_pos, delta)
-	var speed_mult = 1.0
+	var speed_mult = float(enemy.get("stalker_close_mult", 1.0))
+	# So quem voltou de fato pelo Rebobinador; reconstituted_once tambem marca
+	# Suturador/Sineiro como "nao reconstituir" e nao pode dar o bonus.
+	if bool(enemy.get("rewinder_returned", false)):
+		speed_mult *= COUT_AS_RECONSTITUTE_EXTRA_SPEED
 	if float(enemy.get("parasite_slow_time", 0.0)) > 0.0:
 		speed_mult *= 0.8
 	if float(enemy.get("evolution_slow", 0.0)) > 0.0:
@@ -16915,16 +17091,32 @@ func _stalker_profile() -> Dictionary:
 	}
 
 
+## Espreitador camuflado: nao recebe dano (disparo, habilidade, area ou DoT)
+## e a mira automatica o ignora ate ele se revelar.
+func _stalker_camouflaged(enemy: Dictionary) -> bool:
+	return bool(enemy.get("invisible", false)) and String(enemy.get("type", "")) == ENEMY_STALKER
+
+
 func _update_stalker(enemy: Dictionary, delta: float) -> void :
 	var t_pos = _get_enemy_target_pos(enemy)
 	var dist = enemy["pos"].distance_to(t_pos)
 	var profile = _stalker_profile()
-	if dist > 300.0:
+	# Camuflagem: longe do alvo ele some (imune a dano e fora da mira). Ao se
+	# revelar, so volta a camuflar depois de STALKER_CAMO_COOLDOWN segundos.
+	var was_camouflaged: bool = bool(enemy.get("invisible", false))
+	var camo_ready: bool = time_alive >= float(enemy.get("camo_ready_at", 0.0))
+	enemy["stalker_close_mult"] = lerpf(STALKER_CLOSE_SPEED_MULT, 1.0, clampf(dist / STALKER_PROXIMITY_RAMP_DISTANCE, 0.0, 1.0))
+	if dist > STALKER_CAMO_REVEAL_DISTANCE and (was_camouflaged or camo_ready):
 		enemy["invisible"] = true
-		enemy["alpha"] = (0.32 + (sin(time_alive * 6.0 + float(enemy["phase"])) + 1.0) * 0.2) * STALKER_OPACITY_MULT
+		enemy["untargetable"] = true
+		enemy["alpha"] = (STALKER_CAMO_ALPHA_MIN + (sin(time_alive * 6.0 + float(enemy["phase"])) + 1.0) * 0.5 * STALKER_CAMO_ALPHA_PULSE) * STALKER_OPACITY_MULT
 		enemy["speed"] = enemy_speed_base * float(profile["furtivo"])
 	else:
+		if was_camouflaged:
+			enemy["camo_ready_at"] = time_alive + STALKER_CAMO_COOLDOWN
+			_spawn_radial_particles(enemy["pos"], Color(0.65, 0.95, 1.0), 6)
 		enemy["invisible"] = false
+		enemy["untargetable"] = false
 		enemy["alpha"] = STALKER_OPACITY_MULT
 		if not bool(enemy.get("sprint_active", false)) and time_alive - float(enemy.get("sprint_timer", 0.0)) > float(profile["cooldown"]):
 			enemy["sprint_active"] = true
@@ -17001,9 +17193,9 @@ func _update_projector(enemy: Dictionary, delta: float) -> void :
 	enemy["shoot_cd"] = float(enemy.get("shoot_cd", 1.0)) - delta
 	if float(enemy["shoot_cd"]) > 0.0:
 		return
-	enemy["shoot_cd"] = 2.5
+	enemy["shoot_cd"] = PROJECTOR_SHOOT_INTERVAL
 	var dir = (t_pos - enemy["pos"]).normalized()
-	enemy_bullets.append({"pos": enemy["pos"], "dir": dir, "life": 3.2, "damage": (player_hp_max * 0.05) + enemy_far_damage, "phase": 0.0})
+	enemy_bullets.append({"pos": enemy["pos"], "dir": dir, "life": PROJECTOR_BULLET_LIFE, "speed_mult": PROJECTOR_BULLET_SPEED_MULT, "damage": (player_hp_max * 0.05) + enemy_far_damage, "phase": 0.0})
 
 
 func _update_atirador(enemy: Dictionary, delta: float) -> void :
@@ -17367,10 +17559,6 @@ func _larapio_desperate(enemy: Dictionary) -> bool:
 	if int(enemy.get("stolen", 0)) > 0:
 		return false
 	return float(enemy.get("hp", 0.0)) <= float(enemy.get("max_hp", 1.0)) * LARAPIO_DESPERATE_HP_RATIO
-
-
-func _larapio_card_drop_count(clean_kill: bool) -> int:
-	return LARAPIO_CARD_DROP_CLEAN if clean_kill else LARAPIO_CARD_DROP_BASE
 
 
 func _update_larapio_laughs(enemy: Dictionary, delta: float, has_loot: bool) -> void :
@@ -17830,7 +18018,7 @@ func _update_bullets(delta: float) -> void :
 
 		for enemy_index in enemy_manager.nearby_entity_indices(Vector2(bullet["pos"]), 64.0):
 			var enemy: Dictionary = enemy_manager.spatial_entities[enemy_index]
-			if float(enemy.get("hp", 0.0)) <= 0.0:
+			if float(enemy.get("hp", 0.0)) <= 0.0 or _stalker_camouflaged(enemy):
 				continue
 			if not RangedAttackRange.can_hit_position(bullet, Vector2(enemy["pos"])):
 				continue
@@ -18183,7 +18371,7 @@ func _bullet_critical_damage(bullet: Dictionary) -> Dictionary:
 
 
 func _critical_damage(base: float, always_crit: = false, bonus_crit_chance: float = 0.0) -> Dictionary:
-	var effective_crit: float = player_crit_chance + maxf(0.0, bonus_crit_chance)
+	var effective_crit: float = player_crit_chance + maxf(0.0, bonus_crit_chance) + skirmish_items_controller.crit_bonus()
 	var crit_chance: float = clampf(effective_crit, 0.0, 1.0)
 	var crit_overcap: float = maxf(0.0, effective_crit - 1.0)
 	if always_crit or rng.randf() < crit_chance:
@@ -18229,6 +18417,8 @@ func _element_from_source(source: String) -> String:
 
 
 func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: = true, apply_aura_multiplier: = true, attack_origin: = Vector2.ZERO, source_category: = "", source_peer_id: int = 0, source_manifestation: String = "", critical_hit: bool = false, damage_text_label: String = "") -> bool:
+	if _stalker_camouflaged(enemy):
+		return false
 	if RTLaceranteExecutionController.blocks_damage(enemy, source):
 		return false
 	if current_phase == 3 and enemy.has("phase3_ritual_role"):
@@ -18257,6 +18447,8 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 		if show_text and float(enemy.get("reconstitute_time", 0.0)) <= 0.0:
 			_add_text("IMUNE", Vector2(enemy.get("pos", player_pos)) + Vector2(0, -42), Color(1.0, 0.64, 0.18), 0.35, _damage_text_size(14))
 		return false
+	if bool(enemy.get("rewinder_returned", false)):
+		amount *= 1.0 - COUT_AS_RECONSTITUTE_ARMOR
 	if apply_aura_multiplier and not source.begins_with("aura_"):
 		amount *= AuraSystem.damage_multiplier(aura_state)
 	if _is_direct_player_damage_source(source, effective_source_category):
@@ -18346,12 +18538,13 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 	enemy["last_damage_time"] = time_alive
 	enemy["last_damage_amount"] = incoming_damage
 	if execute_threshold > 0.0 and float(enemy["hp"]) > 0.0 and float(enemy["hp"]) / float(enemy["max_hp"]) <= execute_threshold:
+		coletora_scythe_fx.on_execute(enemy)
 		enemy["hp"] = 0.0
 		collector_hud_pulse = 0.85
 		_add_text("COLETORA", enemy["pos"] + Vector2(0, -62), Color(0.95, 0.08, 0.24), 0.75, _damage_text_size(18))
-		_spawn_radial_particles(Vector2(enemy["pos"]), Color(1.0, 0.08, 0.24), 18)
 	var actual_damage: float = hp_before - max(0.0, float(enemy["hp"]))
 	card_power_feedback_controller.on_damage_confirmed(enemy, actual_damage, critical_hit, effective_source_category)
+	skirmish_items_controller.on_enemy_hit(enemy, actual_damage, critical_hit, source, effective_source_category, source_peer_id)
 	_register_paradox_confirmed_damage(actual_damage, source, effective_source_category, "enemy", int(enemy.get("uid", 0)), Vector2(enemy.get("pos", damage_origin)))
 	if actual_damage > 0.0:
 		_apply_henry_burn_from_damage(enemy, source, amount, source_peer_id, false)
@@ -18457,6 +18650,21 @@ func _voraz_boss_feed_allowed(damage: float, source: String, source_category: = 
 	return category in ["basic_attack", "skill_q", "skill_e", "manifestation_secondary", "teleport"] or source_category == ""
 
 
+## Chefe ainda entrando em cena (fases 1-7 pelo boss_entry_timer; 8-10 pelo
+## modo "entry" do controller proprio).
+func _boss_in_entry_animation() -> bool:
+	if boss_entry_timer > 0.0:
+		return true
+	match int(current_phase):
+		RTSertaoController.PHASE:
+			return boss8_controller.mode == "entry"
+		RTCriptaController.PHASE:
+			return boss9_controller.mode == "entry"
+		RTBaileController.PHASE:
+			return boss10_controller.mode == "entry"
+	return false
+
+
 func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, release_boss_feed: = true, source_category: = "", attack_origin: = Vector2.ZERO, source_peer_id: int = 0, source_manifestation: String = "", critical_hit: bool = false, damage_text_label: String = "") -> void :
 	var boss5_siphon_absorbed_pending: float = 0.0
 	if _is_player_calcified():
@@ -18465,6 +18673,9 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 	if effective_source_category == "" and _damage_source_category(source) == "basic_attack":
 		effective_source_category = "manifestation_secondary"
 	if _boss_absorb_time_stop_active() and source != "parasite_feast":
+		return
+	# Animacao de entrada: nenhum chefe toma dano antes de poder revidar.
+	if _boss_in_entry_animation():
 		return
 	if is_multiplayer and not _is_world_authority():
 		amount = _outgoing_damage_amount(amount, source)
@@ -18616,6 +18827,7 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		AuraSystem.on_boss_hit(aura_state, boss_pos, boss_hp_before - boss_hp)
 	var actual_boss_damage: float = boss_hp_before - boss_hp
 	_register_paradox_confirmed_damage(actual_boss_damage, source, effective_source_category, "boss", 0, boss_pos)
+	skirmish_items_controller.on_boss_hit(actual_boss_damage, critical_hit, source, effective_source_category, source_peer_id)
 	if actual_boss_damage > 0.0:
 		_apply_henry_burn_from_damage({}, source, amount, source_peer_id, true)
 		if _is_direct_player_damage_source(source, effective_source_category):
@@ -18681,6 +18893,7 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		boss_hp = 0.0
 		collector_hud_pulse = 1.2
 		_add_text("COLETORA", boss_pos + Vector2(0, -116), Color(0.95, 0.08, 0.24), 1.4, 26)
+		coletora_scythe_fx.on_execute_boss()
 	if boss_hp <= 0.0 and not boss_dead:
 		_player_run_level_controller().grant_confirmed_boss()
 		if current_phase == 1:
@@ -18705,6 +18918,8 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		if current_phase == 3 and _boss3_miasma_active():
 			_end_boss3_miasma(true)
 		_finish_boss_timer(current_phase)
+		_merchant_dimension().dna.on_boss_defeated(current_phase, boss_pos)
+		_spawn_supreme_cinzas_drop(boss_pos)
 		boss_dead = true
 		boss_active = false
 		_play_phase_music()
@@ -18996,6 +19211,7 @@ func _try_reconstitute_enemy(enemy: Dictionary) -> bool:
 	enemy["reconstitute_immunity"] = COUT_AS_RECONSTITUTE_TIME + COUT_AS_RECONSTITUTE_IMMUNITY_TIME
 	enemy["reconstituted_by"] = int(caster.get("uid", 0))
 	enemy["reconstituted_once"] = true
+	enemy["rewinder_returned"] = true
 	enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.22)
 	caster["reconstitute_pulse"] = 0.55
 	_add_text("RECONSTITUIDO", Vector2(enemy["pos"]) + Vector2(-68, -72), Color(1.0, 0.54, 0.12), 0.9, 17)
@@ -19074,12 +19290,15 @@ func _kill_enemy(enemy: Dictionary) -> void :
 	if baile_controller.owns_kind(String(enemy.get("type", ""))):
 		baile_controller.on_enemy_defeated(enemy)
 	enemies.erase(enemy)
+	_merchant_npc().missions.on_enemy_killed(enemy, kill_pos)
 	_tutorial_enemy_was_killed(enemy)
 	_apply_shared_kill_progress(enemies_killed + 1)
 	_player_run_level_controller().grant_confirmed_enemy(enemy)
 	_maybe_grant_enemy_spectral_core(enemy, kill_pos)
 	_add_card_unlock_progress("enemy_kills", 1.0, int(enemy.get("killed_by_peer_id", _mp_unique_id())))
 	shop_rift_controller.on_enemy_killed(enemy)
+	_merchant_dimension().dna.on_enemy_killed()
+	item_owners.on_enemy_killed(enemy)
 	henry_incendiary_ability_controller.on_enemy_killed(enemy)
 	var gain = _points_for_enemy(enemy)
 	if manifestation_key == "lacerante" and _is_uncommon_enemy(enemy):
@@ -19123,17 +19342,10 @@ func _kill_enemy(enemy: Dictionary) -> void :
 	if enemy["type"] == ENEMY_LARAPIO:
 		_play_sfx("Larapio-Dead.mp3", 0.025, 0.82, 1.0)
 		var clean_kill: = int(enemy.get("stolen", 0)) <= 0
-		var drop_count: = _larapio_card_drop_count(clean_kill)
-		var rare_slots: = 0
-		if rng.randf() < LARAPIO_CARD_RARE_CHANCE:
-			rare_slots += 1
-		if clean_kill and rng.randf() < LARAPIO_CARD_RARE_CHANCE:
-			rare_slots += 1
-		_spawn_random_card_drops(kill_pos, drop_count, rare_slots)
+		RTSupremeEnemyRewards.grant(self, "larapio_clean" if clean_kill else "larapio", kill_pos, _next_score_event_id())
 		_schedule_next_larapio_spawn()
-		_add_text("%d CARTAS" % drop_count, kill_pos + Vector2(0, -132), Color(1.0, 0.86, 0.24), 1.25, 22)
 		if clean_kill:
-			_add_text("SEM ROUBO: DROP MELHOR", kill_pos + Vector2(0, -164), Color(0.58, 1.0, 0.82), 1.25, 18)
+			_add_text("SEM ROUBO: MAIS PONTOS", kill_pos + Vector2(0, -164), Color(0.58, 1.0, 0.82), 1.25, 18)
 		_spawn_heal_orb(kill_pos, 0.08)
 		var returned = int(round(float(enemy.get("stolen", 0)) * (LARAPIO_LOOT_RETURN_RATIO + LARAPIO_LOOT_BONUS_RATIO)))
 		if returned > 0:
@@ -22803,9 +23015,11 @@ func _move_umbra(delta: float) -> void :
 			if fase_str == "caminhando":
 				boss5_target = experimental_phase_controller.boss_encounter_center()
 				var to_target: Vector2 = boss5_target - boss_pos
-				var max_spd: float = 240.0
+				var max_spd: float = BOSS5_OVERLOAD_LASER_DASH_SPEED
 				var desired_vel: Vector2 = to_target.normalized() * max_spd if to_target.length() > 8.0 else Vector2.ZERO
-				boss5_velocity = boss5_velocity.lerp(desired_vel, clampf(delta * 8.0, 0.0, 1.0))
+				boss5_velocity = boss5_velocity.lerp(desired_vel, clampf(delta * 14.0, 0.0, 1.0))
+				if to_target.length() > 8.0 and rng.randf() < delta * 20.0:
+					_spawn_radial_particles(boss_pos, Color(1.0, 0.3, 0.12), 3)
 				boss_pos = (boss_pos + boss5_velocity * delta).clamp(Vector2(80, 80), WORLD_SIZE - Vector2(80, 80))
 				return
 			else:
@@ -26175,6 +26389,10 @@ func _umbra_intro() -> RTUmbraIntro:
 	return umbra_intro_controller
 
 
+## Profecia do espectro Profetica (owner: RTPropheticRewind).
+var prophetic_rewind := RTPropheticRewind.new()
+
+
 func _merchant_dimension() -> RTMerchantDimension:
 	if merchant_dimension == null:
 		merchant_dimension = RTMerchantDimension.new()
@@ -28072,6 +28290,13 @@ func _boss_tide_line(attack: Dictionary) -> float:
 func _boss_call_can_start(show_message: = true) -> bool:
 	if not boss_ready or boss_active or boss_dead or boss_call_timer >= 0.0:
 		return false
+	# Na oficina do Mercador (ou atravessando a fenda) a horda da fase esta
+	# guardada fora de `enemies`: chamar o boss ali limpava a lista vazia e a
+	# horda voltava inteira na saida, no meio da luta.
+	if _merchant_dimension().active or _rift_transition().busy():
+		if show_message:
+			_add_text("SAIA DA OFICINA PARA CHAMAR O BOSS", player_pos + Vector2(0, -110), Color(1.0, 0.72, 0.2), 1.2, 20)
+		return false
 	if not experimental_phase_controller.boss_call_allowed():
 		if show_message:
 			_add_text("ENCONTRE O ALTAR DE INVOCACAO", player_pos + Vector2(0, -110), Color(0.34, 0.94, 1.0), 1.2, 20)
@@ -28386,6 +28611,9 @@ func _accept_boss_mp_request() -> void :
 func _update_shop(delta: float) -> void :
 	# Escolher carta tambem gasta o tempo da fenda: sao 20 s por carta.
 	if _merchant_dimension().active:
+		# Na oficina o mundo continua rodando com a loja aberta: a aura (ex.:
+		# Racional parada pontuando e a Dilatacao segurando o relogio) tambem.
+		_update_aura(delta)
 		_merchant_dimension().update(delta)
 		if mode != "shop":
 			# O colapso fechou a loja no meio do quadro.
@@ -28505,8 +28733,8 @@ func _make_empty_shop_slot(label: = "Vaga Vazia") -> Dictionary:
 	return {
 		"empty_slot": true,
 		"name": label,
-		"nick": "Sem Carta",
-		"desc": "Nenhuma carta ocupando este espaco.",
+		"nick": "Sem Item",
+		"desc": "Nenhum item ocupando este espaco.",
 		"color": Color(0.4, 0.46, 0.52)
 	}
 
@@ -28641,6 +28869,8 @@ func _shop_unlocked_slot_indices() -> Array:
 
 func _shop_card_eligible_for_roll(card: Dictionary, excluded_ids: Dictionary) -> bool:
 	if card.is_empty() or _card_at_max(card) or not _card_unlocked(card):
+		return false
+	if SHOP_EXCLUDED_CARD_IDS.has(_card_id(card)):
 		return false
 	return not excluded_ids.has(_card_id(card))
 
@@ -28873,13 +29103,15 @@ func _roll_shop_cards_v2(generation_type: = "open") -> Array:
 	return picks
 
 
-func _refill_shop_slot_after_purchase(index: int) -> void :
+func _refill_shop_slot_after_purchase(index: int, extra_excluded_ids: Array = []) -> void :
 	if not SHOP_FAIRNESS_V2:
 		shop_cards = _roll_shop_cards_legacy()
 		return
 	_ensure_shop_slot_intents()
 	shop_generation_index += 1
 	var excluded_ids: = _shop_locked_card_ids(index)
+	for extra_id in extra_excluded_ids:
+		excluded_ids[String(extra_id)] = true
 	for i in range(shop_cards.size()):
 		if i == index:
 			continue
@@ -29226,6 +29458,11 @@ func _is_common_card(card: Dictionary) -> bool:
 	return _progression().is_common_card(card)
 
 
+## Cinzas queimam comuns e os incomuns que o catalogo marca como queimaveis.
+func _cinzas_accepts(card: Dictionary) -> bool:
+	return _is_common_card(card) or (_is_uncommon_card(card) and CardCatalogDefinitions.is_burn_eligible(_card_id(card)))
+
+
 func _card_texture(card: Dictionary) -> Texture2D:
 	var key: = "card_" + String(card.get("name", ""))
 	if card.has("frame_2") and _get_texture(key + "_2") != null:
@@ -29260,7 +29497,7 @@ func _card_drop_texture_loaded(card: Dictionary) -> bool:
 
 func _cinzas_bonus_stacks(card_id: String) -> int:
 	var card: Dictionary = _find_card_by_id(card_id)
-	if card.is_empty() or not _is_common_card(card) or not CardCatalogDefinitions.is_burn_eligible(card_id):
+	if card.is_empty() or not _cinzas_accepts(card) or not CardCatalogDefinitions.is_burn_eligible(card_id):
 		return 0
 	return maxi(0, int(cinzas_card_bonuses.get(card_id, 0)))
 
@@ -29271,13 +29508,13 @@ func _sanitize_legacy_cinzas_rarity_state() -> void:
 		var mark: Dictionary = Dictionary(mark_value)
 		var mark_card_id: String = String(mark.get("card_id", ""))
 		var marked_card: Dictionary = _find_card_by_id(mark_card_id)
-		if not marked_card.is_empty() and _is_common_card(marked_card) and CardCatalogDefinitions.is_burn_eligible(mark_card_id):
+		if not marked_card.is_empty() and _cinzas_accepts(marked_card) and CardCatalogDefinitions.is_burn_eligible(mark_card_id):
 			kept_marks.append(mark)
 	cinzas_burn_marks = kept_marks
 	for card_id_value in cinzas_card_bonuses.keys():
 		var bonus_card_id: String = String(card_id_value)
 		var bonus_card: Dictionary = _find_card_by_id(bonus_card_id)
-		if bonus_card.is_empty() or not _is_common_card(bonus_card) or not CardCatalogDefinitions.is_burn_eligible(bonus_card_id):
+		if bonus_card.is_empty() or not _cinzas_accepts(bonus_card) or not CardCatalogDefinitions.is_burn_eligible(bonus_card_id):
 			cinzas_card_bonuses.erase(card_id_value)
 
 
@@ -29351,6 +29588,8 @@ func _is_carta_zero_scalable(card_id: String, stat_id: = "") -> bool:
 			return stat_id in ["points_on_damage"]
 		"fratura_cronal":
 			return stat_id in ["damage_bonus"]
+		"estoque_ganancia", "espectro_eletrico", "eco_ruina":
+			return stat_id == "power"
 		"pulso_desestabilizador":
 			return stat_id in ["damage", "radius"]
 		"pressao_cerco":
@@ -29594,6 +29833,7 @@ func _limiar_ruina_applies(hp_before: float, max_hp: float, source: String, sour
 
 
 func _apply_limiar_ruina_damage(amount: float, hp_before: float, max_hp: float, source: String, source_category: String, pos: Vector2) -> float:
+	amount = momentum_items_controller.apply_outgoing(amount, source)
 	if not _limiar_ruina_applies(hp_before, max_hp, source, source_category):
 		return amount
 	var bonus: = _limiar_ruina_bonus()
@@ -29931,7 +30171,7 @@ func _new_common_speed_multiplier() -> float:
 		mult += _folego_max_speed_bonus() * clampf(folego_charge, 0.0, 1.0)
 	if ressonancia_speed_timer > 0.0:
 		mult += ressonancia_speed_bonus
-	return mult
+	return mult + item_owners.movement_speed_bonus()
 
 
 func _interrupt_folego() -> void :
@@ -30402,7 +30642,7 @@ func _cinzas_mark_stacks(card_id: String) -> int:
 
 func _cinzas_card_eligible_for_return(card_id: String) -> bool:
 	var card: = _find_card_by_id(card_id)
-	if card.is_empty() or not _is_common_card(card) or _card_at_max(card):
+	if card.is_empty() or not _cinzas_accepts(card) or _card_at_max(card):
 		return false
 	return not _shop_locked_card_ids().has(card_id)
 
@@ -30446,7 +30686,7 @@ func _can_burn_shop_card(card: Dictionary) -> bool:
 		return false
 	if _support_card_count(CARD_CINZAS_ID) <= 0 or _shop_purchase_animating() or _is_empty_shop_slot(card):
 		return false
-	if not _is_common_card(card) or _card_at_max(card):
+	if not _cinzas_accepts(card) or _card_at_max(card):
 		return false
 	var card_id: = _card_id(card)
 	if not CardCatalogDefinitions.is_burn_eligible(card_id):
@@ -30495,6 +30735,9 @@ func _burn_shop_card(index: int) -> bool:
 	shop_controller.begin("burn", shop_cards, index)
 	shop_locked_slots.erase(_shop_locked_key(index))
 	shop_cards[index] = _make_burned_shop_slot(card)
+	# A vaga queimada nao fica vazia: nasce outra carta aleatoria no lugar
+	# (nunca a propria carta queimada). A animacao usa a carta anterior.
+	_refill_shop_slot_after_purchase(index, [card_id])
 	shop_selected = clamp(index, 0, max(0, shop_cards.size() - 1))
 	shop_select_pulse_index = shop_selected
 	shop_select_pulse_timer = 0.28
@@ -30509,7 +30752,7 @@ func _update_burned_card_marks_after_shop(picks: Array) -> void :
 	var visible_marked_ids: = {}
 	for i in range(picks.size()):
 		var card: Dictionary = picks[i]
-		if _is_common_card(card):
+		if _cinzas_accepts(card):
 			var mark_index: = _cinzas_mark_index(_card_id(card))
 			if mark_index >= 0 and bool(cinzas_burn_marks[mark_index].get("return_buff", false)):
 				var buffed: = card.duplicate(true)
@@ -30517,7 +30760,7 @@ func _update_burned_card_marks_after_shop(picks: Array) -> void :
 				buffed["cinzas_buff_stacks"] = _cinzas_mark_stacks(_card_id(card))
 				buffed["cinzas_bonus_summary"] = _cinzas_return_bonus_summary(buffed)
 				buffed["cinzas_burn_seed"] = int(cinzas_burn_marks[mark_index].get("holes_seed", abs(_card_id(card).hash())))
-				buffed["desc"] = String(card.get("desc", "")) + "\nRetorno das Cinzas x%d: bonus destacado em chamas. Se voce rolar ou comprar outra carta, a brasa permanece ate esta carta ser comprada." % int(buffed["cinzas_buff_stacks"])
+				buffed["desc"] = String(card.get("desc", "")) + "\nRetorno das Cinzas x%d: bonus destacado em chamas. Se voce rolar ou comprar outro item, a brasa permanece ate este item ser comprado." % int(buffed["cinzas_buff_stacks"])
 				picks[i] = buffed
 				cinzas_burn_marks[mark_index]["eligible_misses"] = 0
 				cinzas_burn_marks[mark_index]["last_seen_visit"] = shop_visit_index
@@ -31492,6 +31735,7 @@ func _register_manual_skill_use(skill_type: String, cooldown_total: float) -> fl
 	_add_card_unlock_progress("abilities_used", 1.0)
 	_record_telemetry_ability_use(skill_type, cooldown_total)
 	_grant_manto_impulso_shield()
+	skirmish_items_controller.on_skill_used(skill_type)
 	var action: String = ""
 	if skill_type == "skill_q":
 		action = "Q"
@@ -32405,7 +32649,7 @@ func _card_category(card_name: String) -> String:
 		"Desvio de Probabilidade": return "RISCO E CONTRAGOLPE"
 		"Ponto Cego": return "ATAQUE PELAS COSTAS"
 		"Mandamento da Ruptura": return "LEI DE HABILIDADES"
-		"Carta Zero": return "ESCALA DE CARTAS COMUNS"
+		"Carta Zero": return "ESCALA DE ITENS COMUNS"
 		"Necrocronismo": return "ECO QUE RICOCHETEIA"
 		"Coração de Antimatéria": return "CARGA DE IMPLOSAO"
 		"Cofre do Excesso": return "OVERKILL ARMAZENADO"
@@ -32421,7 +32665,7 @@ func _card_category(card_name: String) -> String:
 		"Tributo da Dor": return "ECONOMIA DE SOBREVIVENCIA"
 		"Estilhaço Prismático": return "ECONOMIA DE ABATES"
 		"Crítico Absoluto": return "AMPLIFICACAO CRITICA"
-		"Arquivo do Impossível": return "DUPLICACAO DE CARTAS"
+		"Arquivo do Impossível": return "DUPLICACAO DE ITENS"
 	return "MELHORIA"
 
 
@@ -32444,7 +32688,7 @@ func _card_lore(card_name: String) -> String:
 		"Devorador de Destinos": return "O destino mais pesado vira ancora. Quando ele cai, os futuros proximos se partem e Geovana veste os restos."
 		"Escolha Adiada": return "Uma decisao recusada hoje fica presa ao mesmo preco ate Geovana aceitar pagar ou soltar a linha."
 		"Trégua Regenerativa": return "Quando a linha para de ferir, o corpo lembra o caminho de volta."
-		"Cinzas da Escolha": return "Uma carta sacrificada nao desaparece; ela volta chamuscada, mais forte uma unica vez, ate que Geovana aceite comprar o que restou dela."
+		"Cinzas da Escolha": return "Brasa que so anomalias carregadas de energia conseguem gerar: nenhuma loja vende. Um item sacrificado nao desaparece; outro nasce no lugar, e o queimado volta chamuscado, mais forte uma unica vez, ate que Geovana aceite comprar o que restou dele."
 		"Reserva de Pulso": return "A cura que sobraria fica guardada como uma batida extra para o pior instante."
 		"Casulo Reativo": return "Depois de muitos impactos, a defesa fecha por instinto e ensina a rajada a esperar."
 		"Passagem Intangível": return "O salto nao termina no destino; por um instante, Geovana ainda nao voltou totalmente ao mundo."
@@ -32466,7 +32710,7 @@ func _card_lore(card_name: String) -> String:
 		"Desvio de Probabilidade": return "O golpe que quase aconteceu deixa uma sobra de chance pronta para ser cobrada."
 		"Ponto Cego": return "O destino tem costas. Quem ataca por elas encontra uma defesa que ainda nao virou o rosto."
 		"Mandamento da Ruptura": return "A terceira ordem nao pede permissao: ela atravessa cooldown, impacto e risco por pura autoridade temporal."
-		"Carta Zero": return "A origem reescreve os numeros pequenos. Toda carta comum passa a lembrar que veio depois dela."
+		"Carta Zero": return "A origem reescreve os numeros pequenos. Todo item comum passa a lembrar que veio depois dela."
 		"Necrocronismo": return "A morte rebobina: o inimigo volta como Eco, atravessa a horda em investidas e implode quando o tempo acaba."
 		"Coração de Antimatéria": return "Dano limpo comprime o vazio ate o proximo impacto direto transformar o alvo em centro de implosao."
 		"Cofre do Excesso": return "Nada se perde no excesso. O dano que sobraria e guardado para cobrar elites e chefes."
@@ -32499,7 +32743,7 @@ func _card_effect_snapshot(card: Dictionary, count: int) -> String:
 		CARD_ABSOLUTE_CRIT_ID:
 			return "dano critico final x%.1f (+100%% por copia)" % roguelike_point_card_controller.critical_damage_multiplier(safe_count)
 		CARD_IMPOSSIBLE_ARCHIVE_ID:
-			return "cada carta nao lendaria adquirida concede +%d copia(s) gratuita(s)" % safe_count
+			return "cada item nao lendario adquirido concede +%d copia(s) gratuita(s)" % safe_count
 		CARD_PARADOX_ID:
 			return "apos 18 acertos, habilidade abre eco por %.2fs causando %.0f%% do dano confirmado" % [_paradox_active_duration(safe_count), _paradox_echo_ratio(safe_count) * 100.0]
 		"Speed Boost":
@@ -32525,7 +32769,7 @@ func _card_effect_snapshot(card: Dictionary, count: int) -> String:
 		"Sorte":
 			return "efeito de probabilidade oculto"
 		"cinzas_escolha":
-			return "%d queima(s) consumivel(eis); carta que volta recebe bonus unico" % safe_count
+			return "%d queima(s) consumivel(eis); item que volta recebe bonus unico" % safe_count
 		"Poison":
 			return "veneno base %.2f%% + escala por compra" % ((0.05 + 0.009 * safe_count) * 100.0 if safe_count > 0 else 0.0)
 		"Coletora":
@@ -32537,7 +32781,7 @@ func _card_effect_snapshot(card: Dictionary, count: int) -> String:
 		"Trembo":
 			return "%d carga(s) de reversao temporal" % min(2, safe_count)
 		"carta_zero":
-			return "cartas comuns multiplicadas em %.1f%%" % ((1.0 + 0.06 * sqrt(float(safe_count))) * 100.0 if safe_count > 0 else 100.0)
+			return "itens comuns multiplicados em %.1f%%" % ((1.0 + 0.06 * sqrt(float(safe_count))) * 100.0 if safe_count > 0 else 100.0)
 		"necrocronismo":
 			return "Ecos: investida %.0f%% do dano, ate %d ativos" % [(_necro_total_power() * 100.0 if safe_count > 0 else 0.0), _necrocronism().alive_cap()]
 		"coracao_antimateria":
@@ -32708,7 +32952,7 @@ func _catalog_detail_description(item: Dictionary) -> String:
 	if kind == "card":
 		var card: = _catalog_card_source(item)
 		if _catalog_card_locked(item):
-			return "Registro lacrado. O catalogo ainda nao permite revelar o nome, a imagem ou o efeito desta carta."
+			return "Registro lacrado. O catalogo ainda nao permite revelar o nome, a imagem ou o efeito deste item."
 		var lines: = [String(card.get("desc", ""))]
 		for line in _card_projection_lines(card):
 			lines.append(String(line))
@@ -32730,7 +32974,7 @@ func _catalog_detail_lore(item: Dictionary) -> String:
 	var kind: = _catalog_item_kind(item)
 	if kind == "card":
 		if _catalog_card_locked(item):
-			return "Arquivo preservado sob sigilo temporal. Complete o objetivo para abrir a ficha completa da carta."
+			return "Arquivo preservado sob sigilo temporal. Complete o objetivo para abrir a ficha completa do item."
 		var card: = _catalog_card_source(item)
 		var book: Dictionary = RTCatalogLore.DATA.get(String(card.get("id", item.get("id", ""))), {})
 		if String(book.get("h", "")) != "":
@@ -33144,7 +33388,8 @@ func _warn_if_damage_visual_missing(source: String) -> void :
 
 
 func _damage_player(amount: int, source: String, silent_hit_sfx: bool = false) -> void :
-	if is_dead:
+	# Oficina do Mercador: sala segura, nenhum dano entra (ver seals_phase_world).
+	if is_dead or _merchant_dimension().seals_phase_world():
 		return
 	if not source.begins_with("pact_"):
 		amount = maxi(1, int(round(float(amount) * _boss_pacts().m("dmg_taken")))) if amount > 0 else amount
@@ -33168,6 +33413,8 @@ func _damage_player(amount: int, source: String, silent_hit_sfx: bool = false) -
 	if not boss_ultimate_damage and _passagem_blocks_contact_damage(source):
 		if rng.randf() < 0.25:
 			_spawn_radial_particles(player_pos, Color(0.72, 0.9, 1.0), 2)
+		return
+	if prophetic_rewind.intercept_hit(source) or skirmish_items_controller.veil_blocks(source):
 		return
 	if current_phase == 2:
 		if source == "boss2_flash_freeze":
@@ -33232,6 +33479,9 @@ func _damage_player(amount: int, source: String, silent_hit_sfx: bool = false) -
 	if final > 0 and _recusa_blocks_damage():
 		return
 	final += _quantum_chips().on_player_hit(final)
+	final = _merchant_dimension().dna.on_player_hit(final)
+	final = momentum_items_controller.on_player_hit(final)
+	if final <= 0: return
 	_track_player_damage(final, source)
 	run_last_damage_source = source
 	_add_card_unlock_progress("damage_taken_events", 1.0)
@@ -33241,6 +33491,7 @@ func _damage_player(amount: int, source: String, silent_hit_sfx: bool = false) -
 	card_power_feedback_controller.on_player_hit(float(amount), float(actual_hp_damage), source)
 	_queue_sutura_gradual(float(actual_hp_damage))
 	reactive_survival_card_controller.on_player_damaged(float(actual_hp_damage))
+	skirmish_items_controller.on_player_damaged(float(actual_hp_damage))
 	roguelike_point_card_controller.on_player_damaged(float(actual_hp_damage))
 	henry_incendiary_ability_controller.on_player_damaged(actual_hp_damage)
 	estase_reparadora_pause = max(estase_reparadora_pause, 0.5)
@@ -33507,7 +33758,7 @@ func _queue_unlock_card_notification(card: Dictionary, challenge_text: String) -
 	if card.is_empty():
 		return
 	var accent: Color = Color(0.12, 0.82, 1.0)
-	_queue_unlock_notification("CARTA DESBLOQUEADA", String(card.get("name", "Carta")).to_upper(), challenge_text, _card_texture(card), accent)
+	_queue_unlock_notification("ITEM DESBLOQUEADO", String(card.get("name", "Item")).to_upper(), challenge_text, _card_texture(card), accent)
 
 
 func _queue_unlock_manifestation_notification(manifestation: Dictionary, challenge_text: String) -> void :
@@ -33899,6 +34150,9 @@ func _draw() -> void :
 		"corruptor_shop":
 			_draw_game(viewport)
 			_corruptor_shop().draw(self, viewport)
+		"dna_fusion":
+			_draw_game(viewport)
+			_merchant_dimension().fusion_screen.draw(self, viewport)
 		"story_comic":
 			RTStoryComicPresentation.draw(self, viewport)
 		"umbra_intro":
@@ -33947,7 +34201,7 @@ func _draw() -> void :
 func _should_show_os_mouse() -> bool:
 	if not _uses_desktop_ui():
 		return true
-	if mode in ["menu", "nick_setup", "progress_profile", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "multiplayer_menu", "online_create_room", "online_find_room", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "catalog", "character_select", "mutation_select", "effect_select", "mutation_select_mp", "effect_select_mp", "manifest", "manifest_mp", "manifest_evolution", "manifest_evolution_waiting", "run_choice", "corruptor_shop", "story_comic", "shop", "paused", "pause_deck", "edit_layout", "specter_upgrade", "death_slow", "retry_return", "game_over", "victory"]:
+	if mode in ["menu", "nick_setup", "progress_profile", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "multiplayer_menu", "online_create_room", "online_find_room", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "catalog", "character_select", "mutation_select", "effect_select", "mutation_select_mp", "effect_select_mp", "manifest", "manifest_mp", "manifest_evolution", "manifest_evolution_waiting", "run_choice", "corruptor_shop", "dna_fusion", "story_comic", "shop", "paused", "pause_deck", "edit_layout", "specter_upgrade", "death_slow", "retry_return", "game_over", "victory"]:
 		return true
 	if _shop_mp_request_visible() or _boss_mp_request_visible() or _phase_mp_request_visible() or _pause_mp_request_visible() or app_update_popup_visible:
 		return true
@@ -34294,18 +34548,9 @@ func _keyboard_settings_rects(viewport: Vector2) -> Dictionary:
 
 
 func _reset_keyboard_bindings() -> void :
-	keyboard_bindings = {
-		"attack": _mouse_input_binding(MOUSE_BUTTON_LEFT),
-		"skill": _mouse_input_binding(MOUSE_BUTTON_RIGHT),
-		"secondary": _key_input_binding(KEY_Q),
-		"dash": _key_input_binding(KEY_SHIFT),
-		"lacerante_empower": _key_input_binding(KEY_R),
-		"dance": _key_input_binding(KEY_O),
-		"interact": _key_input_binding(KEY_E),
-		"pause": _key_input_binding(KEY_ESCAPE),
-		"shop": _key_input_binding(KEY_P),
-		"boss": _key_input_binding(KEY_B)
-	}
+	keyboard_bindings = KeyboardBindingDefaultsScript.defaults()
+	if _desktop_attack_uses_cursor():
+		KeyboardBindingDefaultsScript.release_cursor_button(keyboard_bindings)
 	keyboard_mapping_action = ""
 
 func _draw_gameplay_settings(viewport: Vector2) -> void :
@@ -34579,12 +34824,16 @@ func _gameplay_preferences_rects(viewport: Vector2) -> Dictionary:
 
 
 func _gameplay_preference_keys() -> Array:
-	var keys: = ["analog", "target_priority", "damage_text", "interface_text", "geovana_bark", "fps", "tutorial", "gameplay_cheat", "haptics"]
+	# Analogico e vibracao so existem no toque; no desktop nao fazem nada.
+	var keys: Array = ["target_priority", "damage_text", "interface_text", "dialogue_text", "color_vision", "fps", "tutorial", "gameplay_cheat"]
 	if _uses_desktop_ui():
-		keys.insert(2, "desktop_aim")
-		keys.insert(3, "desktop_teleport")
-		keys.insert(4, "desktop_attack_aim")
-		keys.insert(5, "desktop_hud_scale")
+		keys.insert(1, "desktop_aim")
+		keys.insert(2, "desktop_teleport")
+		keys.insert(3, "desktop_attack_aim")
+		keys.insert(4, "desktop_hud_scale")
+	else:
+		keys.push_front("analog")
+		keys.append("haptics")
 	if ui_platform_override_unlocked:
 		keys.append("ui_platform_profile")
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked:
@@ -34894,7 +35143,7 @@ func _catalog_tab_label(index: int) -> String:
 		5:
 			return "ESPECTROS"
 		_:
-			return "CARTAS"
+			return "ITENS"
 
 
 func _catalog_tab_key() -> String:
@@ -34977,7 +35226,7 @@ func _catalog_short_text(item: Dictionary) -> String:
 
 func _catalog_detail_title(kind: String) -> String:
 	match kind:
-		"card": return "CARTA"
+		"card": return "ITEM"
 		"manifestation": return "MANIFESTACAO"
 		"spectrum": return "ESPECTRO"
 		"enemy": return "INIMIGO"
@@ -35013,7 +35262,7 @@ func _catalog_enemy_items() -> Array:
 		{"kind": "enemy", "name": "Lodario", "summary": "O peso mole da Chaga.", "desc": "O Lodario se arrasta como lama com vontade propria. Onde ele passa, a fase parece ficar mais espessa e menos generosa com erro.", "lore": "Ele e uma mistura de sedimento, memoria e carne cansada. A Matriarca nao o comanda como soldado; ela o derrama pelo mapa.", "mechanics": "Funciona como corpo de bloqueio: mais resistente e lento, bom para fechar caminhos e tornar a fuga menos limpa.", "color": Color(0.86, 0.7, 0.46), "texture": "enemy_phase_6_lodario"},
 		{"kind": "enemy", "name": "Pustula Fossil", "summary": "Uma ferida antiga que ainda pulsa.", "desc": "A Pustula Fossil parece parada demais para ser urgente, ate a arena obrigar Geovana a encostar naquilo que devia ter sido enterrado.", "lore": "A sexta ruptura conserva suas dores como reliquias. Cada Pustula e um fragmento fossilizado da Chaga tentando voltar a ser carne.", "mechanics": "Inimigo pesado de area e prioridade. Deve ser lido como obstaculo vivo que aumenta o custo de limpar a fase sem planejamento.", "color": Color(1.0, 0.62, 0.32), "texture": "enemy_phase_6_pustula_fossil"},
 		{"kind": "enemy", "name": "Sanguessuga Cronal", "summary": "Bebe segundos antes de beber sangue.", "desc": "Ela nao caca como um perseguidor comum. Cai longe do alvo, arma o bote por alguns segundos e so entao salta para grudar no presente de Geovana.", "lore": "A Sanguessuga Cronal e parasita de instante: gruda no presente e tenta tornar todo futuro curto demais para escapar.", "mechanics": "Armadilha viva da fase 6. Avisa a queda distante, permanece quase imperceptivel por 2s antes de armar o ataque e evita dividir o proprio raio de bote com outra sanguessuga.", "color": Color(0.92, 0.42, 0.72), "texture": "enemy_phase_6_sanguessuga_cronal"},
-		{"kind": "enemy", "name": "Suturador de Ambar", "summary": "Uma cicatriz que escolhe por onde a arena pode respirar.", "desc": "Ele circula o alvo enquanto costura a Chaga, dispara agulhas e usa um arpao para puxar, punir e roubar uma carta visivel.", "lore": "O Suturador e uma cicatriz que ainda trabalha. Seu ambar vivo segura a carne da fase 6 como se o futuro precisasse de costura.", "mechanics": "Encontro recorrente com quatro ataques: suturas de rota, leque mirado, arpao de puxao e coroa radial. O arpao pode roubar uma carta e mostra qual foi levada; ao morrer, entrega cartas e devolve as roubadas como espolios.", "color": Color(1.0, 0.66, 0.18), "texture": "enemy_phase_6_suturador_ambar"}
+		{"kind": "enemy", "name": "Suturador de Ambar", "summary": "Uma cicatriz que escolhe por onde a arena pode respirar.", "desc": "Ele circula o alvo enquanto costura a Chaga, dispara agulhas e usa um arpao para puxar, punir e roubar um item visivel.", "lore": "O Suturador e uma cicatriz que ainda trabalha. Seu ambar vivo segura a carne da fase 6 como se o futuro precisasse de costura.", "mechanics": "Encontro recorrente com quatro ataques: suturas de rota, leque mirado, arpao de puxao e coroa radial. O arpao pode roubar um item e mostra qual foi levado; ao morrer, entrega itens e devolve os roubados como espolios.", "color": Color(1.0, 0.66, 0.18), "texture": "enemy_phase_6_suturador_ambar"}
 	]
 
 
@@ -35030,8 +35279,8 @@ func _catalog_boss_items() -> Array:
 
 func _catalog_fraction_items() -> Array:
 	return [
-		{"kind": "fraction", "name": "Ruptura", "summary": "A força que reescreve fase, corpo e regra.", "desc": "A Ruptura nao e apenas inimiga. E uma condicao do mundo: cada fase mostra um jeito diferente dela tentar explicar que o tempo perdeu obediencia.", "lore": "Alguns arquivos dizem que ela comecou como acidente. Outros dizem que acidente e apenas o nome humano para algo que chegou cedo demais.", "mechanics": "Escala fases, manifesta inimigos, altera mapas, chama Arauto, oferece cartas e força Geovana a escolher como vai quebrar de volta.", "color": Color(1.0, 0.08, 0.78), "texture": "map_phase_1"},
-		{"kind": "fraction", "name": "Geovana", "summary": "A pessoa no centro da anomalia.", "desc": "Geovana nao recebe poderes limpos; recebe formas de sobreviver a um mundo que insiste em desmontar. Cada manifestacao e uma resposta emocional e mecanica.", "lore": "O catalogo evita chamar Geovana de arma. Ela e testemunha, erro, chave e alguem tentando atravessar tudo isso ainda sendo alguem.", "mechanics": "O jogador escolhe Manifestacao, Espectro e cartas para transformar uma run em estilo proprio.", "color": Color(0.72, 0.92, 1.0), "texture": "player_idle"},
+		{"kind": "fraction", "name": "Ruptura", "summary": "A força que reescreve fase, corpo e regra.", "desc": "A Ruptura nao e apenas inimiga. E uma condicao do mundo: cada fase mostra um jeito diferente dela tentar explicar que o tempo perdeu obediencia.", "lore": "Alguns arquivos dizem que ela comecou como acidente. Outros dizem que acidente e apenas o nome humano para algo que chegou cedo demais.", "mechanics": "Escala fases, manifesta inimigos, altera mapas, chama Arauto, oferece itens e força Geovana a escolher como vai quebrar de volta.", "color": Color(1.0, 0.08, 0.78), "texture": "map_phase_1"},
+		{"kind": "fraction", "name": "Geovana", "summary": "A pessoa no centro da anomalia.", "desc": "Geovana nao recebe poderes limpos; recebe formas de sobreviver a um mundo que insiste em desmontar. Cada manifestacao e uma resposta emocional e mecanica.", "lore": "O catalogo evita chamar Geovana de arma. Ela e testemunha, erro, chave e alguem tentando atravessar tudo isso ainda sendo alguem.", "mechanics": "O jogador escolhe Manifestacao, Espectro e itens para transformar uma run em estilo proprio.", "color": Color(0.72, 0.92, 1.0), "texture": "player_idle"},
 		{"kind": "fraction", "name": "Arauto", "summary": "O mensageiro que interrompe a run.", "desc": "Ele aparece como aviso vivo: a Ruptura percebeu que Geovana esta crescendo e envia uma prova entre fase e chefe.", "lore": "O Arauto carrega fragmentos de evolucao. Mata-lo nao encerra uma ameaca; abre uma escolha.", "mechanics": "Entrega fragmento de evolucao de manifestacao. O jogador escolhe entre opcoes que mudam o comportamento da manifestacao.", "color": Color(0.78, 0.52, 1.0), "texture": "arauto"}
 	]
 
@@ -37658,8 +37907,12 @@ func _draw_corner_limbo(camera: Vector2, viewport: Vector2) -> void:
 
 
 func _clamp_player_world(pos: Vector2) -> Vector2:
+	var clamped: Vector2 = pos.clamp(PLAYER_WORLD_MARGIN, WORLD_SIZE - PLAYER_WORLD_MARGIN)
+	# Oficina do Mercador: moveis solidos, miudezas chutaveis e o proprio Mercador.
+	if merchant_dimension != null and merchant_dimension.active and merchant_dimension.physics.is_ready():
+		return merchant_dimension.physics.push_player(clamped, player_pos).clamp(PLAYER_WORLD_MARGIN, WORLD_SIZE - PLAYER_WORLD_MARGIN)
 	# Objetos solidos pintados no chao (cacto, pedra, cerca): empurra e desliza pela borda.
-	return RTMapPropColliders.push_player(self, pos.clamp(PLAYER_WORLD_MARGIN, WORLD_SIZE - PLAYER_WORLD_MARGIN))
+	return RTMapPropColliders.push_player(self, clamped)
 
 
 func _distance_to_rect(point: Vector2, rect: Rect2) -> float:
@@ -37797,6 +38050,8 @@ func _unhandled_input(event: InputEvent) -> void :
 		_umbra_intro().handle_input(event, viewport)
 		return
 	if mode == RTCorruptorShop.MODE and _corruptor_shop().handle_input(event, viewport):
+		return
+	if mode == RTBossDnaFusionScreen.MODE and _merchant_dimension().fusion_screen.handle_input(event):
 		return
 	if (mode == "manifest" or (mode == "lobby_online_host" and (RTQuantumChipUI.open or (event is InputEventKey and event.pressed and event.keycode == KEY_C)))) and _handle_quantum_chip_input(event):
 		return
@@ -38679,208 +38934,8 @@ func _handle_key(event: InputEventKey) -> void :
 			mode = "settings"
 		elif event.keycode in [KEY_ENTER, KEY_SPACE] and player_identity_auth_token == "":
 			_submit_player_progress_recovery()
-	elif mode == "settings":
-		if _is_escape_or_pause_key(event):
-			_return_from_settings()
-		elif event.keycode == KEY_UP or event.keycode == KEY_W:
-			settings_selected = (settings_selected - 1 + _settings_option_count()) % _settings_option_count()
-		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
-			settings_selected = (settings_selected + 1) % _settings_option_count()
-		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
-			_activate_settings_option(settings_selected, get_viewport_rect().size)
-	elif mode == "settings_gamepad":
-		if event.keycode == KEY_ESCAPE:
-			gamepad_mapping_action = ""
-			mode = "settings"
-		elif event.keycode == KEY_UP or event.keycode == KEY_W:
-			settings_selected = (settings_selected - 1 + _gamepad_action_order().size() + 1) % (_gamepad_action_order().size() + 1)
-		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
-			settings_selected = (settings_selected + 1) % (_gamepad_action_order().size() + 1)
-		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
-			var actions = _gamepad_action_order()
-			if settings_selected == actions.size():
-				gamepad_mapping_action = ""
-				mode = "settings"
-			else:
-				gamepad_mapping_action = actions[settings_selected]
-	elif mode == "settings_keys":
-		var actions = _keyboard_action_order()
-		var option_count: = actions.size() + 2
-		if event.keycode == KEY_ESCAPE:
-			keyboard_mapping_action = ""
-			_save_config()
-			mode = "settings"
-		elif event.keycode == KEY_UP or event.keycode == KEY_W:
-			settings_selected = (settings_selected - 1 + option_count) % option_count
-		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
-			settings_selected = (settings_selected + 1) % option_count
-		elif event.keycode == KEY_BACKSPACE or event.keycode == KEY_DELETE:
-			if settings_selected >= 0 and settings_selected < actions.size():
-				keyboard_bindings[String(actions[settings_selected])] = INPUT_BIND_NONE
-				_save_config()
-		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
-			if settings_selected < actions.size():
-				keyboard_mapping_action = String(actions[settings_selected])
-			elif settings_selected == actions.size():
-				_reset_keyboard_bindings()
-				_save_config()
-			else:
-				_save_config()
-				mode = "settings"
-	elif mode == "settings_gameplay":
-		if gameplay_cheat_focused:
-			if event.keycode == KEY_ESCAPE:
-				_close_gameplay_cheat_popup()
-			elif event.keycode == KEY_BACKSPACE:
-				if cheat_edit == null:
-					if gameplay_cheat_text.length() > 0:
-						gameplay_cheat_text = gameplay_cheat_text.substr(0, gameplay_cheat_text.length() - 1)
-			elif event.keycode == KEY_ENTER:
-				_submit_gameplay_cheat()
-			elif cheat_edit == null and event.unicode >= 32 and gameplay_cheat_text.length() < 24:
-				gameplay_cheat_text += char(event.unicode)
-		elif event.keycode == KEY_ESCAPE:
-			_save_config()
-			mode = "settings"
-		elif event.keycode == KEY_UP or event.keycode == KEY_W:
-			var gameplay_count: = _gameplay_preference_count()
-			settings_selected = (settings_selected - 1 + gameplay_count) % gameplay_count
-		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
-			settings_selected = (settings_selected + 1) % _gameplay_preference_count()
-		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
-			match _gameplay_selected_key():
-				"analog": analog_fixed = not analog_fixed
-				"target_priority": _cycle_target_priority()
-				"desktop_aim": _cycle_desktop_aim_mode()
-				"desktop_teleport": _cycle_desktop_teleport_mode()
-				"desktop_attack_aim": _cycle_desktop_attack_aim_mode()
-				"desktop_hud_scale": _cycle_desktop_hud_scale()
-				"fps": show_fps_counter = not show_fps_counter
-				"tutorial": _set_run_tutorial_enabled(not run_tutorial_enabled, false)
-				"haptics": haptics_enabled = not haptics_enabled
-				"ui_platform_profile": _cycle_ui_platform_override()
-				"qa_stream_quality": _cycle_qa_stream_quality_mode()
-				"back":
-					_save_config()
-					mode = "settings"
-			_save_config()
-		elif event.keycode == KEY_LEFT or event.keycode == KEY_A:
-			match _gameplay_selected_key():
-				"target_priority": _cycle_target_priority(-1)
-				"damage_text": _adjust_damage_text_scale(-1)
-				"interface_text": interface_text_scale = max(0.5, interface_text_scale - 0.25)
-				"geovana_bark": geovana_bark_scale = max(0.5, snapped(geovana_bark_scale - 0.1, 0.1))
-				"desktop_aim": _cycle_desktop_aim_mode(-1)
-				"desktop_teleport": _cycle_desktop_teleport_mode(-1)
-				"desktop_attack_aim": _cycle_desktop_attack_aim_mode(-1)
-				"desktop_hud_scale": _cycle_desktop_hud_scale(-1)
-				"tutorial": _set_run_tutorial_enabled(false, false)
-				"ui_platform_profile": _cycle_ui_platform_override(-1)
-				"qa_stream_quality": _cycle_qa_stream_quality_mode(-1)
-			_save_config()
-		elif event.keycode == KEY_RIGHT or event.keycode == KEY_D:
-			match _gameplay_selected_key():
-				"target_priority": _cycle_target_priority(1)
-				"damage_text": _adjust_damage_text_scale(1)
-				"interface_text": interface_text_scale = min(2.0, interface_text_scale + 0.25)
-				"geovana_bark": geovana_bark_scale = min(1.5, snapped(geovana_bark_scale + 0.1, 0.1))
-				"desktop_aim": _cycle_desktop_aim_mode(1)
-				"desktop_teleport": _cycle_desktop_teleport_mode(1)
-				"desktop_attack_aim": _cycle_desktop_attack_aim_mode(1)
-				"desktop_hud_scale": _cycle_desktop_hud_scale(1)
-				"tutorial": _set_run_tutorial_enabled(true, false)
-				"ui_platform_profile": _cycle_ui_platform_override(1)
-				"qa_stream_quality": _cycle_qa_stream_quality_mode(1)
-			_save_config()
-	elif mode == "settings_audio":
-		if event.keycode == KEY_ESCAPE:
-			_save_config()
-			mode = "settings"
-		elif event.keycode == KEY_UP or event.keycode == KEY_W:
-			settings_selected = (settings_selected - 1 + 5) % 5
-		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
-			settings_selected = (settings_selected + 1) % 5
-		elif event.keycode == KEY_LEFT or event.keycode == KEY_A:
-			match settings_selected:
-				0: _set_audio_volume_index(0, vol_master - 0.1)
-				1: _set_audio_volume_index(1, vol_music - 0.1)
-				2: _set_audio_volume_index(2, vol_sfx - 0.1)
-				3: _set_audio_volume_index(3, vol_shots - 0.1)
-			_save_config()
-		elif event.keycode == KEY_RIGHT or event.keycode == KEY_D:
-			match settings_selected:
-				0: _set_audio_volume_index(0, vol_master + 0.1)
-				1: _set_audio_volume_index(1, vol_music + 0.1)
-				2: _set_audio_volume_index(2, vol_sfx + 0.1)
-				3: _set_audio_volume_index(3, vol_shots + 0.1)
-			_save_config()
-		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
-			if settings_selected == 4:
-				_save_config()
-				mode = "settings"
-	elif mode == "settings_graphics":
-		var graphics_keys: = _graphics_setting_keys()
-		var graphics_count: = graphics_keys.size()
-		if event.keycode == KEY_ESCAPE:
-			_save_config()
-			mode = "settings"
-		elif event.keycode == KEY_UP or event.keycode == KEY_W:
-			settings_selected = (settings_selected - 1 + graphics_count) % graphics_count
-		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
-			settings_selected = (settings_selected + 1) % graphics_count
-		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
-			settings_selected = clampi(settings_selected, 0, graphics_count - 1)
-			_activate_graphics_setting(String(graphics_keys[settings_selected]))
-		elif event.keycode == KEY_LEFT or event.keycode == KEY_A:
-			var selected_graphics_key: String = String(graphics_keys[clampi(settings_selected, 0, graphics_count - 1)])
-			if selected_graphics_key == "range_color":
-				RangedAttackRange.cycle_indicator_color(self, -1)
-				_save_config()
-			elif selected_graphics_key == "range_opacity":
-				auto_attack_range_opacity = RangedAttackRange.sanitize_indicator_opacity(auto_attack_range_opacity - 0.1)
-				_save_config()
-			elif selected_graphics_key == "window_mode":
-				_cycle_desktop_window_mode(-1)
-				_apply_graphics_settings()
-				_save_config()
-			elif selected_graphics_key == "fps_limit":
-				_cycle_graphics_fps_limit(-1)
-				_apply_graphics_settings()
-				_save_config()
-		elif event.keycode == KEY_RIGHT or event.keycode == KEY_D:
-			var selected_graphics_key: String = String(graphics_keys[clampi(settings_selected, 0, graphics_count - 1)])
-			if selected_graphics_key == "range_color":
-				RangedAttackRange.cycle_indicator_color(self, 1)
-				_save_config()
-			elif selected_graphics_key == "range_opacity":
-				auto_attack_range_opacity = RangedAttackRange.sanitize_indicator_opacity(auto_attack_range_opacity + 0.1)
-				_save_config()
-			elif selected_graphics_key == "window_mode":
-				_cycle_desktop_window_mode(1)
-				_apply_graphics_settings()
-				_save_config()
-			elif selected_graphics_key == "fps_limit":
-				_cycle_graphics_fps_limit(1)
-				_apply_graphics_settings()
-				_save_config()
-	elif mode == "settings_data":
-		if event.keycode == KEY_ESCAPE:
-			mode = "settings"
-			_update_webhook_input_visibility()
-		elif event.keycode == KEY_UP or event.keycode == KEY_W:
-			settings_selected = (settings_selected - 1 + 3) % 3
-		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
-			settings_selected = (settings_selected + 1) % 3
-		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
-			if webhook_edit != null and webhook_edit.has_focus():
-				_save_webhook_from_input()
-			else:
-				match settings_selected:
-					0: _save_webhook_from_input()
-					1: _clear_webhook_input()
-					2:
-						mode = "settings"
-						_update_webhook_input_visibility()
+	elif mode in SettingsController.KEY_MODES:
+		SettingsController.handle_key(self, event)
 	elif mode == "multiplayer_menu":
 		if event.keycode == KEY_ESCAPE:
 			_go_to_menu()
@@ -39023,27 +39078,26 @@ func _handle_key(event: InputEventKey) -> void :
 				_go_to_menu()
 		elif event.keycode == KEY_RIGHT or event.keycode == KEY_D:
 			if manifest_select_stage == MANIFEST_STAGE_AURA:
-				_set_selected_aura(selected_aura + 1, true)
-				aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
+				_step_manifest_build_selection(true, 1)
 				if mode == "manifest_mp":
 					_sync_manifest_mp_selection()
 				return
-			_set_selected_manifestation(selected_manifestation + 1, true)
-			manifest_scroll_pos = float(_manifest_selection_slot_for_index(selected_manifestation, false))
+			_step_manifest_build_selection(false, 1)
 			if mode == "manifest_mp":
 				_sync_manifest_mp_selection()
 		elif event.keycode == KEY_LEFT or event.keycode == KEY_A:
 			if manifest_select_stage == MANIFEST_STAGE_AURA:
-				_set_selected_aura(selected_aura - 1, true)
-				aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
+				_step_manifest_build_selection(true, -1)
 				if mode == "manifest_mp":
 					_sync_manifest_mp_selection()
 				return
-			_set_selected_manifestation(selected_manifestation - 1, true)
-			manifest_scroll_pos = float(_manifest_selection_slot_for_index(selected_manifestation, false))
+			_step_manifest_build_selection(false, -1)
 			if mode == "manifest_mp":
 				_sync_manifest_mp_selection()
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
+			if not _resolve_build_random_pick(manifest_select_stage == MANIFEST_STAGE_AURA):
+				_play_sfx("ui_error")
+				return
 			if manifest_select_stage == MANIFEST_STAGE_AURA:
 				if not _spectrum_unlocked(selected_aura):
 					_play_sfx("ui_error")
@@ -39099,6 +39153,8 @@ func _handle_key(event: InputEventKey) -> void :
 			_open_deck("shop")
 		elif event.keycode == KEY_B:
 			_burn_shop_card(shop_selected)
+		elif event.keycode == KEY_R:
+			_reserve_shop_card(shop_selected)
 		elif event.keycode == KEY_ESCAPE:
 			if _shop_can_exit():
 				_request_shop_exit_or_finish()
@@ -39319,9 +39375,6 @@ func _handle_press(pos: Vector2, viewport: Vector2) -> void :
 	if buttons["pause"].has_point(pos):
 		_start_pause_countdown()
 		return
-	if buttons["boss"].has_point(pos):
-		_start_boss_call()
-		return
 	_try_start_move_touch(-2, pos, viewport)
 
 
@@ -39432,20 +39485,19 @@ func _handle_character_selection_key(event: InputEventKey) -> bool:
 		return true
 	if mode in ["mutation_select", "mutation_select_mp"]:
 		if event.keycode in [KEY_LEFT, KEY_A, KEY_UP, KEY_W]:
-			selected_mutation = posmod(selected_mutation - 1, HENRY_MUTATIONS.size())
-			manifest_scroll_pos = float(selected_mutation)
+			_step_henry_build_selection(false, -1)
 			_play_sfx("ui_manifest_switch", 0.01, 0.24, 0.92)
 			_vibrate(22, 0.12)
 			if mode.ends_with("_mp"):
 				_sync_manifest_mp_selection()
 		elif event.keycode in [KEY_RIGHT, KEY_D, KEY_DOWN, KEY_S]:
-			selected_mutation = posmod(selected_mutation + 1, HENRY_MUTATIONS.size())
-			manifest_scroll_pos = float(selected_mutation)
+			_step_henry_build_selection(false, 1)
 			_play_sfx("ui_manifest_switch", 0.01, 0.24, 1.06)
 			_vibrate(22, 0.12)
 			if mode.ends_with("_mp"):
 				_sync_manifest_mp_selection()
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
+			_resolve_build_random_pick(false)
 			mode = "effect_select_mp" if mode.ends_with("_mp") else "effect_select"
 			if mode.ends_with("_mp"):
 				manifest_select_stage = MANIFEST_STAGE_AURA
@@ -39459,15 +39511,13 @@ func _handle_character_selection_key(event: InputEventKey) -> bool:
 		return true
 	if mode in ["effect_select", "effect_select_mp"]:
 		if event.keycode in [KEY_LEFT, KEY_A, KEY_UP, KEY_W] and not (mode.ends_with("_mp") and mp_local_ready):
-			selected_effect = posmod(selected_effect - 1, HENRY_EFFECTS.size())
-			aura_scroll_pos = float(selected_effect)
+			_step_henry_build_selection(true, -1)
 			_play_sfx("ui_manifest_switch", 0.01, 0.24, 0.92)
 			_vibrate(22, 0.12)
 			if mode.ends_with("_mp"):
 				_sync_manifest_mp_selection()
 		elif event.keycode in [KEY_RIGHT, KEY_D, KEY_DOWN, KEY_S] and not (mode.ends_with("_mp") and mp_local_ready):
-			selected_effect = posmod(selected_effect + 1, HENRY_EFFECTS.size())
-			aura_scroll_pos = float(selected_effect)
+			_step_henry_build_selection(true, 1)
 			_play_sfx("ui_manifest_switch", 0.01, 0.24, 1.06)
 			_vibrate(22, 0.12)
 			if mode.ends_with("_mp"):
@@ -39476,12 +39526,14 @@ func _handle_character_selection_key(event: InputEventKey) -> bool:
 			if mode.ends_with("_mp"):
 				_toggle_henry_multiplayer_ready()
 			else:
+				_resolve_build_random_pick(true)
 				_start_game()
 		elif event.keycode == KEY_ESCAPE:
 			if mode.ends_with("_mp") and mp_local_ready:
 				_cancel_manifest_mp_ready()
 			else:
 				mode = "mutation_select_mp" if mode.ends_with("_mp") else "mutation_select"
+				_restore_henry_random_mutation_focus()
 				if mode.ends_with("_mp"):
 					manifest_select_stage = MANIFEST_STAGE_MANIFESTATION
 					manifest_scroll_pos = float(selected_mutation)
@@ -39510,6 +39562,13 @@ func _handle_character_selection_touch(pos: Vector2) -> bool:
 			_request_manifest_mp_start()
 			return true
 		var henry_choices: Array = HENRY_MUTATIONS if mode.begins_with("mutation_select") else HENRY_EFFECTS
+		if _build_random_slot_enabled() and buttons.get("henry_choice_%d" % BUILD_RANDOM_INDEX, Rect2()).has_point(pos):
+			var random_view: String = _build_random_view(mode.begins_with("effect_select"))
+			if not _build_random_focused(random_view):
+				_set_build_random_focus(random_view, true)
+				_play_sfx("ui_manifest_switch", 0.01, 0.24, 1.12)
+				_vibrate(24, 0.13)
+			return true
 		if not (mode == "effect_select_mp" and mp_local_ready):
 			for i in range(henry_choices.size()):
 				if not buttons.get("henry_choice_%d" % i, Rect2()).has_point(pos):
@@ -39517,9 +39576,11 @@ func _handle_character_selection_touch(pos: Vector2) -> bool:
 				if mode.begins_with("mutation_select"):
 					selected_mutation = i
 					manifest_scroll_pos = float(selected_mutation)
+					_set_build_random_focus("mutation", false)
 				else:
 					selected_effect = i
 					aura_scroll_pos = float(selected_effect)
+					_set_build_random_focus("effect", false)
 				_play_sfx("ui_manifest_switch", 0.01, 0.24, 1.02)
 				_vibrate(24, 0.13)
 				if mode.ends_with("_mp"):
@@ -39531,6 +39592,7 @@ func _handle_character_selection_touch(pos: Vector2) -> bool:
 					_cancel_manifest_mp_ready()
 				else:
 					mode = "mutation_select_mp" if mode.ends_with("_mp") else "mutation_select"
+					_restore_henry_random_mutation_focus()
 					if mode.ends_with("_mp"):
 						manifest_select_stage = MANIFEST_STAGE_MANIFESTATION
 						manifest_scroll_pos = float(selected_mutation)
@@ -39541,6 +39603,7 @@ func _handle_character_selection_touch(pos: Vector2) -> bool:
 				_open_character_select(character_select_destination)
 		elif buttons.get("henry_continue", Rect2()).has_point(pos):
 			if mode.begins_with("mutation_select"):
+				_resolve_build_random_pick(false)
 				mode = "effect_select_mp" if mode.ends_with("_mp") else "effect_select"
 				if mode.ends_with("_mp"):
 					manifest_select_stage = MANIFEST_STAGE_AURA
@@ -39549,6 +39612,7 @@ func _handle_character_selection_touch(pos: Vector2) -> bool:
 			elif mode.ends_with("_mp"):
 				_toggle_henry_multiplayer_ready()
 			else:
+				_resolve_build_random_pick(true)
 				_start_game()
 		return true
 	return false
@@ -39570,6 +39634,10 @@ func _toggle_henry_multiplayer_ready() -> void:
 
 
 func _reset_manifest_selection_stage() -> void :
+	# Voltou do espectro: a manifestacao sorteada continua oculta no slot aleatorio.
+	if bool(build_random_hidden.get("manifest", false)):
+		_set_build_random_focus("manifest", true)
+	_clear_build_random("aura")
 	manifest_select_stage = MANIFEST_STAGE_MANIFESTATION
 	manifest_transition_elapsed = 0.0
 	manifest_transition_seed = 0
@@ -39611,11 +39679,11 @@ func _start_spectrum_reveal() -> void :
 
 
 func _wrap_manifest_scroll(value: float) -> float:
-	return fposmod(value, float(maxi(1, _manifest_selection_visible_indices(false).size())))
+	return fposmod(value, float(maxi(1, _manifest_selection_slot_count(false))))
 
 
 func _nearest_manifest_index(value: float) -> int:
-	var count: int = _manifest_selection_visible_indices(false).size()
+	var count: int = _manifest_selection_slot_count(false)
 	if count <= 0:
 		return 0
 	var idx = int(round(_wrap_manifest_scroll(value))) % count
@@ -39626,6 +39694,14 @@ func _set_selected_manifestation(index: int, vibrate: = true) -> void :
 	var count = MANIFESTATIONS.size()
 	if count <= 0:
 		return
+	if index == BUILD_RANDOM_INDEX:
+		if _build_random_slot_enabled() and not _build_random_focused("manifest"):
+			_set_build_random_focus("manifest", true)
+			if vibrate:
+				_vibrate(36, 0.18)
+				_play_sfx("ui_manifest_switch", 0.015, 0.48, 1.12)
+		return
+	_set_build_random_focus("manifest", false)
 	var next_index = posmod(index, count)
 	var guard: = 0
 	while (not _manifest_selection_index_visible(next_index, false) or _manifest_choice_taken(next_index, false)) and guard < count:
@@ -39678,7 +39754,8 @@ func _try_apply_initial_phase_cheat(cheat: String) -> bool:
 	if not normalized.begins_with("FASE"):
 		return false
 	var suffix: = normalized.substr(4)
-	if suffix.length() != 1 or not suffix.is_valid_int():
+	# FASE1..FASE9 e FASE10 (Bailao): um ou dois digitos.
+	if suffix.length() < 1 or suffix.length() > 2 or not suffix.is_valid_int():
 		return false
 	var phase: = _sanitize_forced_initial_phase(int(suffix))
 	if phase == 0:
@@ -39709,7 +39786,7 @@ func _try_apply_collection_unlock_cheat(cheat: String) -> bool:
 				unlocked_card_ids[card_id] = true
 		gameplay_cheat_text = ""
 		_save_card_unlocks()
-		_add_text("TODAS AS CARTAS LIBERADAS", player_pos + Vector2(0, -100), Color(1.0, 0.72, 0.22), 1.4, 24)
+		_add_text("TODOS OS ITENS LIBERADOS", player_pos + Vector2(0, -100), Color(1.0, 0.72, 0.22), 1.4, 24)
 		_play_sfx("ui_spectrum_switch", 0.01, 0.6, 1.08)
 		_vibrate(80, 0.32)
 		return true
@@ -39833,11 +39910,11 @@ func _handle_pause_mp_overlay_press(pos: Vector2, viewport: Vector2 = Vector2.ZE
 
 
 func _wrap_aura_scroll(value: float) -> float:
-	return fposmod(value, float(maxi(1, _manifest_selection_visible_indices(true).size())))
+	return fposmod(value, float(maxi(1, _manifest_selection_slot_count(true))))
 
 
 func _nearest_aura_index(value: float) -> int:
-	var count: int = _manifest_selection_visible_indices(true).size()
+	var count: int = _manifest_selection_slot_count(true)
 	if count <= 0:
 		return 0
 	var idx = int(round(_wrap_aura_scroll(value))) % count
@@ -39857,6 +39934,14 @@ func _set_selected_aura(index: int, vibrate: = true) -> void :
 	var count = AURAS.size()
 	if count <= 0:
 		return
+	if index == BUILD_RANDOM_INDEX:
+		if _build_random_slot_enabled() and not _build_random_focused("aura"):
+			_set_build_random_focus("aura", true)
+			if vibrate:
+				_vibrate(36, 0.2)
+				_play_sfx("ui_spectrum_switch", 0.018, 0.5, 1.12)
+		return
+	_set_build_random_focus("aura", false)
 	var next_index = posmod(index, count)
 	var direction: = 1 if index >= selected_aura else -1
 	var guard: = 0
@@ -40239,15 +40324,19 @@ func _handle_manifest_touch(pos: Vector2, viewport: Vector2) -> void :
 			if not String(key).begins_with("build_pick_") or not Rect2(buttons[key]).has_point(pos):
 				continue
 			var picked: int = int(String(key).substr(11))
-			if aura_pick and picked != selected_aura:
+			if aura_pick and (picked != selected_aura or _build_random_focused("aura")):
 				_set_selected_aura(picked, true)
 				aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
 				return
-			if not aura_pick and picked != selected_manifestation:
+			if not aura_pick and (picked != selected_manifestation or _build_random_focused("manifest")):
 				_set_selected_manifestation(picked, true)
 				manifest_scroll_pos = float(_manifest_selection_slot_for_index(selected_manifestation, false))
 				return
 	if buttons.has("manifest_start") and buttons["manifest_start"].has_point(pos):
+		if not _resolve_build_random_pick(manifest_select_stage == MANIFEST_STAGE_AURA):
+			_play_sfx("ui_error")
+			_vibrate(30, 0.16)
+			return
 		if manifest_select_stage == MANIFEST_STAGE_AURA:
 			if not _spectrum_unlocked(selected_aura):
 				_play_sfx("ui_error")
@@ -40562,7 +40651,7 @@ func _skill_cooldown_base() -> float:
 
 
 func _skill_cooldown() -> float:
-	return _intervalo_apply_to_hab1(_skill_cooldown_base())
+	return _intervalo_apply_to_hab1(_skill_cooldown_base()) * skirmish_items_controller.hab1_cooldown_multiplier()
 
 
 func _manifestation_color() -> Color:
@@ -45592,6 +45681,8 @@ func _cycle_desktop_attack_aim_mode(direction: = 1) -> void :
 	if current < 0:
 		current = 0
 	desktop_attack_aim_mode = String(modes[(current + direction + modes.size()) % modes.size()])
+	if desktop_attack_aim_mode == DESKTOP_ATTACK_AIM_CURSOR:
+		KeyboardBindingDefaultsScript.release_cursor_button(keyboard_bindings)
 	# Sem mouse no ataque, o teleporte nao pode depender do cursor.
 	desktop_teleport_mode = _effective_desktop_teleport_mode()
 	_clear_desktop_aim_state()

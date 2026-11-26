@@ -1151,6 +1151,72 @@ Dever multiplayer:
 - Devido (transporte real): host+1 cliente; host+2 clientes; reconnect durante `unstable` (relógio não reinicia, sem recompensa repetida); reconnect durante `emergency` (mesmo `dst`); um peer dentro e outro fora do portal (todos acompanham a transição do grupo); peer derrubado durante a emergência (é carregado, não bloqueia, piso de 50% de vida não o revive); pacote duplicado e atraso artificial (sem 2º token, Impulso, cura ou transição); host encerrando a dimensão no último segundo (corrida entre consenso de travessia e ejeção); duas travessias rápidas seguidas (Impulso II e token consumido uma vez pelo grupo); ejeção completa sem dividir o grupo (sala P2P e sala dedicada).
 - Risco conhecido: snapshot atrasado de uma run anterior chegando depois do primeiro snapshot da run nova seria aceito (o `run_id` difere); depende da ordenação do pacote de mundo. Em sala dedicada, o caminho da ejeção pelo snapshot depende do envio de pacotes de mundo enquanto o host está em `phase_transition`.
 
+## 2026-11-18 — Lote: escolha aleatória, loja, Cinzas, Mercador, Espreitador, UMBRA (só solo validado)
+
+- **Escolha aleatória no carrossel** (`_build_random_slot_enabled`, `BUILD_RANDOM_INDEX`): só nas telas solo (`manifest`, `mutation_select`, `effect_select`). `manifest_mp`, `mutation_select_mp` e `effect_select_mp` continuam sem o slot e com o giro antigo; o botão ALEATÓRIO antigo do rodapé segue valendo só nesses modos.
+- **Cinzas da Escolha** (`_spawn_supreme_cinzas_drop`): só a autoridade gera, uma por peer (`_reward_peer_ids`), pelo mesmo `arauto_card_drops` dos outros prêmios; marcada `no_rupture_token`. Fontes: Larápio, Sineiro, Suturador, Arauto/Aguilhão. Cinzas e Moeda Estável saíram de `_shop_card_eligible_for_roll` e `_card_available_for_reward` (loja e sorteios de prêmio de todos os peers).
+- **Vaga queimada reabastecida**: loja é local de cada jogador; nenhum pacote novo.
+- **Mercador**: fenda estável e encomendas valem por run (`RTMerchantNpc.begin_run` em `_start_game`; estado em `merchant_dimension_state.npc_run`). Encomendas só existem no balcão narrativo (solo). Física da oficina (`RTMerchantWorkshopPhysics`) é local e cosmética (+ colisão do jogador local); não vai para a rede.
+- **Espreitador camuflado**: `_damage_enemy` recusa dano e a mira automática ignora enquanto `invisible` (já replicado no pacote de inimigos). Recarga `camo_ready_at` só na autoridade.
+- **Racional na oficina**: `_update_shop` passa a rodar `_update_aura` quando a oficina está ativa; o relógio da fenda usa `AuraSystem.world_multiplier` de cada cliente (relógio já era local por cliente, com o maior orçamento da sala).
+- **UMBRA**: arrancada ao centro e giro do laser na autoridade (o hazard já é replicado); desenho do feixe usa o tamanho do mapa local.
+- Evidência solo: `tests/gameplay_batch_nov18_smoke.gd`, `tests/gameplay_batch_nov18_capture.gd` (capturas em `.codex/nov18/`), `tests/boss_farm_balance_smoke.gd`, `tests/umbra_intro_smoke.gd`, `tests/support_cards_smoke.gd`.
+
+Dever multiplayer:
+1. Host e cliente derrotam um Larápio/Arauto: cada um vê e pega só a própria Cinzas; nenhuma Cinzas/Moeda aparece em loja nem em drop de prêmio.
+2. Cliente acerta um Espreitador camuflado com disparo e habilidade: nenhum dano chega ao host; o alvo automático do cliente não o escolhe até revelar.
+3. Cliente Racional dentro da oficina com a loja aberta: Dilatação segura o relógio local sem dessincronizar a saída coletiva.
+4. Laser da UMBRA no cliente: arrancada e giro idênticos ao host, feixe atravessando o mapa inteiro.
+5. Sala com `manifest_mp`/`mutation_select_mp`: confirmar que o carrossel não mostra o slot ALEATÓRIA nem quebra o giro.
+
+## 2026-11-19 — Lote: Lagartona e fenda, atalhos, modo de cor, Espreitador, teleporte, Curater, Rebobinador (só solo validado)
+
+- **Lagartona do Paredão** (`scripts/systems/phase10/baile_lagartona.gd`): Trenzinho 720 px/s e 420 px além do alvo. Com a Fenda do Mercador aberta (`opening`/`open`, sem mergulho), ela deixa de atacar, anda até a fenda a 1,6x e, se a cabeça encostar (`ENTER_RADIUS + SEGMENT_RADIUS`), chama `collapse(false)`: fenda fecha sem fragmento e volta pela cadência normal (`RETRY_AFTER_COLLAPSE`). Tudo dentro de `update_enemy` (autoridade); a fenda colapsada já viaja no snapshot `shop_rift`. Textos "FAREJOU/ENGOLIU A FENDA" são `_add_text` locais do host.
+- **Espreitador**: `stalker_close_mult` calculado na autoridade e aplicado em `_move_enemy`; réplicas só recebem posição.
+- **Rebobinador**: armadura leve (15%) em `_damage_enemy` depois do ramo de pedido do cliente (só a autoridade aplica); +35% de movimento em `_move_enemy` pela flag `reconstituted_once` (autoridade).
+- **Curater**: velocidade de spawn 0,675x (antes 0,45x), autoridade.
+- **Teleporte**: `_player_invulnerable` local; Lacerante sem alvo atravessado não fica imune e a Descarga da Elétrica deixou de dar imunidade.
+- **Atalhos/M1 no cursor, padrão da primeira instalação, modo de cor**: só cliente local, sem rede.
+- Evidência solo: `tests/gameplay_batch_nov19_smoke.gd`.
+
+Dever multiplayer:
+1. Fase 10 com host+cliente: Lagartona viva e fenda aberta — ambos veem ela ir até a fenda e a fenda fechar; nenhum peer entra numa fenda já engolida; ninguém ganha fragmento.
+2. Cliente acerta reconstituído do Rebobinador: o dano que chega ao host sai 15% menor uma única vez (sem dupla redução no cliente).
+3. Cliente Lacerante (sem alvo) ou Elétrica teleporta perto de inimigos do host: o dano de contato chega normalmente.
+4. Espreitador/Curater/reconstituído no cliente: movimento interpolado sem trancos com as velocidades novas.
+
+## 2026-11-19 — Rede do Petro (fusão de DNA dos chefes) e Inimigos Supremos só com pontos (só solo validado)
+
+- **DNA**: `RTBossDnaController.on_boss_defeated` roda onde `_damage_boss` mata o chefe (autoridade). Clientes ainda NÃO recebem DNA por rede: falta replicar a morte do chefe para o banco de cada peer (um DNA por jogador vivo).
+- **Habilidades**: efeitos no mundo (dano, lentidão, congelamento, puxão, onda, zona, órbita, rewind dos inimigos) só rodam se `_is_world_authority()`; efeitos pessoais (cura, escudo, guarda, invulnerabilidade, rewind da própria posição/vida) rodam no dono. Habilidades de cliente hoje só aplicam a parte pessoal; falta pedido ao host (RPC) para a parte de mundo.
+- **Máquina/tela**: em sala multiplayer não há fala; encostar abre a tela direto (`dna_fusion` pausa só o mundo local). Falta validar a saída coletiva da oficina com alguém na tela de fusão.
+- **Supremos**: `RTSupremeEnemyRewards.grant` usa `_apply_score_delta(..., broadcast=true)` na autoridade; Cinzas agora cai do chefe por `_spawn_supreme_cinzas_drop` (já por peer).
+- Evidência solo: `tests/boss_dna_fusion_smoke.gd`, capturas `tests/boss_dna_capture.gd`.
+
+Dever multiplayer:
+1. Host+cliente matam o chefe 1: cada um recebe 1 DNA (hoje só o host) e uma Cinzas.
+2. Cliente com Maré Cósmica: todos os inimigos do host desaceleram 15 s.
+3. Cliente com Distorção do Relógio leva golpe letal: não morre, volta 10 s localmente, inimigos do host não teleportam de forma inconsistente.
+4. Cliente na tela de fusão enquanto o host toca a saída da oficina: a saída espera ou fecha a tela sem perder a fusão paga.
+5. Arauto/Sineiro/Suturador/Larápio mortos por cliente: pontos creditados uma vez para a sala.
+
+## 2026-11-24 — Lote: oficina sala segura, Racional, conversa sem tempo, fonte, UMBRA manual, Corruptor só no Drop, Profecia (só solo validado)
+
+- **Oficina = sala segura** (`RTMerchantDimension.seals_phase_world`): com a oficina ativa a autoridade não atualiza horda, spawns, Arauto/Larápio, chefe, projéteis inimigos, hazards, clima, fragmento nem altar; `enforce_seal` limpa e conta qualquer inimigo/projétil que apareça; `_damage_player` não aplica dano. Réplicas recebem a horda vazia do host (todos entram juntos).
+- **Conversa com o Mercador**: o relógio local da fenda não corre em nenhuma fala (menu incluído); continua local por cliente com o maior orçamento da sala.
+- **Racional**: Análise parada soma 10x no placar interno (+7 visíveis) e congela quando o relógio da oficina está parado; pontos via `_apply_score_delta` (réplica pede à autoridade).
+- **Corruptor Mercantil**: só liga no modo Drop; `prepare_team_config` (host) filtra pelo modo; `on_run_started` também filtra no cliente.
+- **Profecia** (`RTPropheticRewind`): DESLIGADA em multiplayer (`available()` exige solo). Voltar o mundo de uma sala exige autoridade + snapshot replicado.
+- **Fonte das conversas / UMBRA manual**: só cliente local.
+- Evidência solo: `tests/gameplay_batch_nov24_smoke.gd` (fases 1-10 na oficina, Racional, relógio, fonte, chip, Profecia).
+
+Dever multiplayer:
+1. Host+cliente na oficina por 30 s em cada fase (1-10): nenhum inimigo/projétil aparece para nenhum dos dois; ao sair, a horda volta igual nos dois.
+2. Cliente conversando com o Mercador enquanto o host anda: relógios locais coerentes e saída coletiva intacta.
+3. Cliente Racional parado na oficina com a loja aberta: pontos creditados uma vez pela autoridade.
+4. Lobby em modo Loja com Corruptor marcado no host: ninguém recebe fichas "?"; em modo Drop todos recebem.
+5. Profecia em sala: decidir regra (só buff local sem rewind, ou rewind autoritativo da sala) antes de liberar.
+
 ## 2026-11-22 — Fechamento público da 2.1.3
 
 - Fonte e sala dedicada sincronizadas a partir da árvore 2.1.3; backup anterior em
@@ -1191,3 +1257,32 @@ Dever multiplayer:
   não a Roda, Teor, holofote, anel e colisão do palco em combate cooperativo.
   O soak headless não substitui uma run longa com dois dispositivos nem prova
   Windows executado ou Android físico.
+
+## 2026-11-26 — Itens comuns novos: Retorno Voluntário, Estoque da Ganância, Espectro Elétrico, Eco da Ruína (só solo validado)
+
+Owner: `scripts/systems/cards/momentum_items_controller.gd` (estado local do jogador).
+
+**Pendente em sala real:**
+- **Retorno Voluntário:** os usos guardados da HAB1 são locais. Conferir se o host aceita a HAB1 lançada com a recarga ainda correndo, ou se a autoridade da habilidade a rejeita.
+- **Estoque da Ganância:** só conta abate com `killed_by_peer_id` igual ao jogador local. O bônus entra em `_apply_limiar_ruina_damage`, que não recebe o peer. Conferir se o dano de outro jogador, aplicado no host, não usa os acúmulos do host.
+- **Espectro Elétrico:** os orbes não são replicados. Cada cliente vê e pega só os seus.
+- **Eco da Ruína:** os golpes parcelados mexem direto em `player_hp`, como a Margem de Erro. Conferir a reconciliação de vida no cliente e a morte no último golpe.
+
+## 2026-11-26 — 10 itens incomuns (Fé Emaculada … Botas de Veludo) (só solo validado)
+
+Owner: `scripts/systems/cards/skirmish_items_controller.gd`. Os ganchos filtram o peer: só abate e acerto do jogador local contam.
+
+**Pendente em sala real:**
+- **Véu Entrópico:** troca a posição do jogador local em `_combat_targets()` pela posição onde ele sumiu (chamariz). O cliente precisa replicar isso para o host, provavelmente via `stealthed` no estado leve, que hoje só existe para remotos.
+- **Pulso da Conversão:** cura só o jogador local. A cura de aliados próximos exige RPC.
+- **Sangramento dos Espinhos:**
+  - os ticks só causam dano na autoridade (`_is_world_authority`);
+  - a marcação `item_bleed` acontece no acerto local;
+  - conferir a replicação dos acúmulos para o host.
+- **Tornozeleira de Chumbo:** a lentidão em inimigo comum é `evolution_slow`, escrita localmente. Conferir no host.
+- **Sangue Coagulado:** mexe em `player_hp_max` local. Conferir a reconciliação no snapshot do cliente.
+- **Fé Emaculada:** pacote de munição local, sem réplica.
+
+## 2026-11-26 — Foice da Coletora e sprite do Rebobinador (só solo validado)
+- **Foice da Coletora:** a animação (`coletora_scythe_fx`) nasce no `_damage_enemy`/`_damage_boss` de quem executou. Em sala real, conferir se a réplica também vê a foice. Se a execução só roda no host, o cliente precisa de um evento de execução no snapshot.
+- **Rebobinador:** a troca de sprite é só visual (`textures["rebobinador"]`), sem impacto de rede.

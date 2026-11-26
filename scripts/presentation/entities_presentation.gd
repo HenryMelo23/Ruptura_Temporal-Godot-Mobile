@@ -145,7 +145,7 @@ static func _draw_enemies_body(game: Node2D, camera: Vector2) -> void :
 		var size: Vector2 = sizes[kind]
 		var uid: int = int(enemy.get("uid", -1))
 		var alpha: float = float(enemy.get("alpha", 1.0))
-		var modulate_color: Color = ENEMY_TINTS.get(kind, Color.WHITE)
+		var modulate_color: Color = ENEMY_TINTS.get(kind, Color.WHITE) if not (kind == game.ENEMY_COUT_ATTACK_SPEED and game._texture_frame("rebobinador", 0) != null) else Color.WHITE
 		modulate_color.a *= alpha
 		var rolling := false
 		if kind == kind_kamikaze:
@@ -567,7 +567,7 @@ static func _draw_player(game: Node2D, camera: Vector2) -> void :
 			game.draw_texture_rect(tex, Rect2(pos, draw_size), false, shadow_color)
 		game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
-	var player_modulate = Color.WHITE
+	var player_modulate = Color(1.0, 1.0, 1.0, game.skirmish_items_controller.player_alpha())
 	if bool(profile.get("preserve_height", false)):
 		game._draw_entity_by_height_rotated(tex, center + profile["offset"], float(profile.get("height", game.PLAYER_DRAW_LACERAR_HEIGHT)), rotation, player_modulate, flip_h)
 	else:

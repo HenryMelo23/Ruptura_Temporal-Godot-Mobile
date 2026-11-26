@@ -125,7 +125,7 @@ static func aura_details(name: String) -> Dictionary:
 				"funcao": "Pontos guardados viram Lastro: defesa e resistencia a impacto em troca de peso.", 
 				"disparo": "Quanto mais pontos em relacao ao custo da loja, maior o Lastro.", 
 				"habilidade": "Rompimento do Cofre", 
-				"desc_hab": "Ao comprar carta, suspende o peso, concede velocidade e escudo.", 
+				"desc_hab": "Ao comprar item, suspende o peso, concede velocidade e escudo.", 
 				"traco": "Economia defensiva, timing de compra e explosao curta apos gastar.", 
 				"risco": "Guardar muito pesa a movimentacao; fragmentos de TP nao dao pontos."
 			}
@@ -136,7 +136,7 @@ static func aura_details(name: String) -> Dictionary:
 				"habilidade": "Golpe de Oportunidade", 
 				"desc_hab": "O proximo dano direto recebe bonus, atrasa o inimigo e recupera parte de Q ou E.", 
 				"traco": "Precisao, leitura de telegraph e punicao de ataques inimigos.", 
-				"risco": "Dano de cartas, areas persistentes e aliados nao carregam Aberturas."
+				"risco": "Dano de itens, areas persistentes e aliados nao carregam Aberturas."
 			}
 	return {
 		"funcao": "Estado espectral em leitura.", 

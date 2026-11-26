@@ -69,10 +69,16 @@ const HenryIncendiaryAbilityControllerScript = preload("res://scripts/systems/ab
 const HenryBarometricAbilityControllerScript = preload("res://scripts/systems/abilities/henry_barometric_ability_controller.gd")
 const HenryColossusAbilityControllerScript = preload("res://scripts/systems/abilities/henry_colossus_ability_controller.gd")
 const ReactiveSurvivalCardControllerScript = preload("res://scripts/systems/cards/reactive_survival_card_controller.gd")
+const MomentumItemsControllerScript = preload("res://scripts/systems/cards/momentum_items_controller.gd")
+const SkirmishItemsControllerScript = preload("res://scripts/systems/cards/skirmish_items_controller.gd")
+const ItemOwnersScript = preload("res://scripts/systems/cards/item_owners.gd")
+const ColetoraScytheFxScript = preload("res://scripts/presentation/coletora_scythe_fx.gd")
 const RoguelikePointCardControllerScript = preload("res://scripts/systems/cards/roguelike_point_card_controller.gd")
 const CardPowerFeedbackControllerScript = preload("res://scripts/systems/cards/card_power_feedback_controller.gd")
 const PointBoostPickupControllerScript = preload("res://scripts/systems/progression/point_boost_pickup_controller.gd")
 const MerchantRiftControllerScript = preload("res://scripts/systems/shop/merchant_rift_controller.gd")
+const ColorVisionFilterScript = preload("res://scripts/presentation/color_vision_filter.gd")
+const KeyboardBindingDefaultsScript = preload("res://scripts/systems/player/keyboard_binding_defaults.gd")
 const RuntimeEventDirectorScript = preload("res://scripts/systems/events/runtime_event_director.gd")
 const Phase3RitualPulseControllerScript = preload("res://scripts/systems/events/phase3_ritual_pulse_controller.gd")
 const Phase4InstabilityPulseControllerScript = preload("res://scripts/systems/events/phase4_instability_pulse_controller.gd")
@@ -93,8 +99,8 @@ const RuntimeSpriteBatchRendererScript = preload("res://scripts/presentation/run
 
 const DEFAULT_WORLD_SIZE := Vector2(1600, 900)
 var WORLD_SIZE := DEFAULT_WORLD_SIZE
-const GAME_VERSION: = "2.1.3"
-const GAME_VERSION_CODE: = 27300
+const GAME_VERSION: = "2.1.4"
+const GAME_VERSION_CODE: = 27400
 const RUN_MODE_SHOP := "shop"
 const RUN_MODE_DROP := "drop"
 const ContentPackState = preload("res://scripts/systems/content_pack_state.gd")
@@ -342,7 +348,7 @@ const TUTORIAL_STEP_TEXTS: = {
 	},
 	TUTORIAL_STATE_SHOP: {
 		"title": "LOJA TEMPORAL",
-		"body": "A loja pausa a run e oferece cartas para mudar sua build. Ela so abre pela Fenda do Mercador: siga a nevoa ate a fenda quando ela surgir.",
+		"body": "A loja pausa a run e oferece itens para mudar sua build. Ela so abre pela Fenda do Mercador: siga a nevoa ate a fenda quando ela surgir.",
 		"hint": "Compras e rerolls pagos ainda gastam pontos normalmente."
 	},
 	TUTORIAL_STATE_BOSS_CALL: {
@@ -576,7 +582,6 @@ const ARAUTO_GAZE_HIT_RADIUS: = 42.0
 const ARAUTO_SPEED: = 87.0
 const ARAUTO_DISTANCE_MIN: = 230.0
 const ARAUTO_DISTANCE_MAX: = 390.0
-const ARAUTO_CARD_REWARD_COUNT: = 4
 const AGUILHAO_SIZE: = Vector2(154, 96)
 const AGUILHAO_NODE_COUNT: = 2
 const AGUILHAO_NODE_DAMAGE_REDUCTION: = 0.2
@@ -809,6 +814,9 @@ const TP_ELECTRIC_DURATION: = 3.0
 const TP_ELECTRIC_DASH_COOLDOWN: = 4.0
 const TP_ELECTRIC_TICK: = 0.3
 const TP_ELECTRIC_MAX_HP_RATE: = 0.005
+## Choquinho da corrente: cada tique (0,3 s) prende o inimigo por 0,12 s.
+## So inimigos comuns/especiais; chefe e Arauto nao sao atordoados.
+const TP_ELECTRIC_STUN: float = 0.12
 const SECONDARY_PRISMATICA_DURATION: = 10.0
 const SECONDARY_PRISMATICA_BEAM_RANGE: = 350.0
 const SECONDARY_PRISMATICA_BEAM_WIDTH: = 24.0
@@ -850,8 +858,10 @@ const BOSS_HP_DURABILITY_BY_PHASE: Dictionary = {
 	8: 9.5,
 	9: 10.0
 }
-const BOSS_TIME_HP_GROWTH_RATE: = 0.06
-const BOSS_TIME_HP_GROWTH_EXPONENT: = 0.85
+# 2026-11-18: curva super-linear (expoente > 1) — cada minuto a mais pesa mais
+# que o anterior. 10 min ~x1.9, 25 min ~x3.4, 60 min ~x7.3 (antes x1.4/x1.9/x2.9).
+const BOSS_TIME_HP_GROWTH_RATE: = 0.07
+const BOSS_TIME_HP_GROWTH_EXPONENT: = 1.1
 const BOSS_ARMOR: = 0.528
 const BOSS_ARMOR_TIME_PER_MIN: = 0.00055
 const BOSS_ARMOR_KILL_RATE: = 0.000025
@@ -1005,7 +1015,6 @@ const MERCENARY_CONTRACT_BASE_POINTS: = 35
 const MERCENARY_CONTRACT_POINTS_PER_COPY: = 50
 const MERCENARY_BONUS_CAP: = 750
 const LARAPIO_BASE_POINTS: = 240
-const ARAUTO_POINT_REWARD_CARD_COST_RATIO: = 1.0
 const BOSS_ATTACK_BASE_COOLDOWN: = 3.8
 const BOSS1_STAGE_APPROACH_SPEED: = 260.0
 const BOSS2_ENTRY_TIME: = 2.5
@@ -1132,9 +1141,6 @@ const LARAPIO_MONEY_LAUGH_INTERVAL: = 5.0
 const LARAPIO_COOLDOWN_STEP_TIME: = 180.0
 const LARAPIO_COOLDOWN_STEP_BONUS: = 18.0
 const LARAPIO_COOLDOWN_MAX_BONUS: = 150.0
-const LARAPIO_CARD_DROP_BASE: = 2
-const LARAPIO_CARD_DROP_CLEAN: = 3
-const LARAPIO_CARD_RARE_CHANCE: = 0.3
 const VORAZ_BITE_RADIUS: = 100.0
 const VORAZ_BOSS_BITE_RADIUS: = 152.0
 const VORAZ_BITE_INTERVAL: = 0.95
@@ -1149,7 +1155,23 @@ const ENEMY_STALKER: = "espreitador"
 const ENEMY_PROJECTOR: = "projetador"
 const ENEMY_CRYSTAL: = "cristalizador"
 const STALKER_OPACITY_MULT: = 0.75
+## Camuflagem do Espreitador: distancia em que se revela, recarga apos se
+## revelar e transparencia (antes 0.32..0.72 de alfa base; agora mais sumido).
+## Antes 300 px: agora so se revela bem mais perto.
+const STALKER_CAMO_REVEAL_DISTANCE: float = 200.0
+## Aproximacao: quanto mais perto do alvo, mais rapido (1.0x a partir desta
+## distancia ate STALKER_CLOSE_SPEED_MULT colado no jogador).
+const STALKER_PROXIMITY_RAMP_DISTANCE: float = 520.0
+const STALKER_CLOSE_SPEED_MULT: float = 1.6
+const STALKER_CAMO_COOLDOWN: float = 5.0
+const STALKER_CAMO_ALPHA_MIN: float = 0.14
+const STALKER_CAMO_ALPHA_PULSE: float = 0.22
 const PROJECTOR_ATTACK_RANGE: = 420.0
+## Cadencia e velocidade do disparo do Projetador (antes 2.5 s e 210 u/s).
+const PROJECTOR_SHOOT_INTERVAL: float = 1.6
+const PROJECTOR_BULLET_SPEED_MULT: float = 1.5
+## Mantem o alcance do projetil (~670 u) com a velocidade maior.
+const PROJECTOR_BULLET_LIFE: float = 3.2 / PROJECTOR_BULLET_SPEED_MULT
 const CRYSTAL_DAMAGE_TAKEN_MULT: = 0.50
 const ENEMY_CURATER: = "curater"
 const ENEMY_LARAPIO: = "larapio"
@@ -1587,8 +1609,13 @@ const BOSS5_MIASMA_DURATION: = 4.5
 const BOSS5_DISCHARGE_WARNING: = 0.85
 const BOSS5_DISCHARGE_DURATION: = 1.25
 const BOSS5_THORNS_DURATION: = 3.4
-const BOSS5_OVERLOAD_LASER_ROTATION_FAST: = PI * 0.25
-const BOSS5_OVERLOAD_LASER_ROTATION_SLOW: = PI * 0.10
+# 2026-11-18: giro mais rapido (antes PI*0.25 / PI*0.10).
+const BOSS5_OVERLOAD_LASER_ROTATION_FAST: = PI * 0.40
+const BOSS5_OVERLOAD_LASER_ROTATION_SLOW: = PI * 0.17
+## Arrancada da UMBRA ate o centro ao iniciar a Rajada/Overdrive (antes 240 u/s).
+const BOSS5_OVERLOAD_LASER_DASH_SPEED: float = 680.0
+## Margem extra para o feixe desenhado passar da borda do mapa em qualquer angulo.
+const BOSS5_OVERLOAD_LASER_LENGTH_MARGIN: float = 400.0
 const BOSS5_RAT_DURATION: = 8.0
 const BOSS5_RAT_SPEED: = 212.0
 const BOSS5_RAT_DAMAGE: = 24
@@ -1639,6 +1666,9 @@ const COUT_AS_RECONSTITUTE_HP_RATIO: = 0.25
 const COUT_AS_RECONSTITUTE_SPEED_MULT: = 1.9
 const COUT_AS_RECONSTITUTE_TIME: = 1.5
 const COUT_AS_RECONSTITUTE_IMMUNITY_TIME: = 1.0
+## Quem volta pelo Rebobinador: +35% de velocidade de movimento e armadura leve.
+const COUT_AS_RECONSTITUTE_EXTRA_SPEED: float = 1.35
+const COUT_AS_RECONSTITUTE_ARMOR: float = 0.15
 const COUT_AS_RAPID_INTERVAL: = 0.46
 const COUT_AS_STACK_TIME: = 2.4
 const COUT_AS_MAX_STACKS: = 5
@@ -1757,19 +1787,19 @@ const CARDS: = [
 	{"name": "Defesa", "nick": "Escudo Sinérgico", "desc": "+5 de resistencia, ate 50.", "icon": "Deck/carta_defesa1.png", "frame_2": "Deck/carta_defesa2.png", "color": Color(0.7, 0.88, 1.0)},
 	{"name": "Sorte", "nick": "Convergência de Oportunidades", "desc": "As probabilidades se dobram a seu favor, mas a anomalia nao revela seus calculos.", "icon": "Deck/carta_sorte1.png", "frame_2": "Deck/carta_sorte2.png", "color": Color(1.0, 0.66, 0.8)},
 	{"name": "Poison", "nick": "Cuspe Sagrado", "desc": "Projeteis envenenam inimigos e boss com dano por tempo.", "icon": "Deck/carta_poison1.png", "frame_2": "Deck/carta_poison2.png", "color": Color(0.68, 1.0, 0.2)},
-	{"name": "Coletora", "nick": "Foice do Tempo", "desc": "Executa comuns abaixo do limite. Cada carta aumenta mais o limite comum e soma execucao extra contra boss.", "icon": "Deck/carta_estalo1.png", "frame_2": "Deck/carta_estalo2.png", "color": Color(0.95, 0.08, 0.24)},
+	{"name": "Coletora", "nick": "Foice do Tempo", "desc": "Executa comuns abaixo do limite. Cada item aumenta mais o limite comum e soma execucao extra contra boss.", "icon": "Deck/carta_estalo1.png", "frame_2": "Deck/carta_estalo2.png", "color": Color(0.95, 0.08, 0.24)},
 	{"name": "Mercenaria", "nick": "Contrato de Guerra", "desc": "Cada abate paga +2 pontos por copia desde o primeiro. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.", "icon": "Deck/carta_mercenaria1.png", "frame_2": "Deck/carta_mercenaria2.png", "color": Color(1.0, 0.62, 0.16)},
 	{"id": "devorador_destinos", "name": "Devorador de Destinos", "nick": "Devorador de Destinos", "desc": "Marca o inimigo mais poderoso. Sua queda devora destinos ao redor, amedronta sobreviventes e protege Geovana.", "icon": "Deck/carta-Devorador_de_Destinos1.png", "frame_2": "Deck/carta-Devorador_de_Destinos2.png", "color": Color(0.92, 0.1, 0.72)},
 	{"id": "tregua_regenerativa", "name": "Trégua Regenerativa", "nick": "Paz Tecidual", "rarity": CARD_RARITY_RARE, "desc": "Sem receber dano, regenera vida passivamente.", "icon": "Deck/carta-Tr_guaRegenerativa1.png", "frame_2": "Deck/carta-Tr_guaRegenerativa2.png", "color": Color(0.38, 1.0, 0.72)},
-	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "rarity": CARD_RARITY_UNCOMMON, "desc": "Consumivel incomum. Queima uma carta comum da loja. Quando essa carta voltar, ela vem chamuscada fortalecendo os atributos proprios daquela carta de forma acumulavel; o bonus se consolida ao compra-la.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)},
+	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "rarity": CARD_RARITY_UNCOMMON, "desc": "Item raro de energia: nao aparece na loja. So anomalias com muita energia a geram: todo chefe derrotado deixa uma para cada jogador. Queima um item comum da loja (ou um incomum que aceite Cinzas) e outro item aleatorio nasce no lugar. Quando o queimado voltar, vem chamuscado fortalecendo os atributos proprios dele de forma acumulavel; o bonus se consolida ao compra-lo.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)},
 	{"id": "reserva_pulso", "name": "Reserva de Pulso", "nick": "Cura Guardada", "desc": "Guarda cura excedente e a libera em situacao critica.", "icon": "Deck/carta-ReservadePulso1.png", "frame_2": "Deck/carta-ReservadePulso2.png", "color": Color(0.44, 0.92, 1.0)},
 	{"id": "casulo_reativo", "name": "Casulo Reativo", "nick": "Defesa de Rajada", "desc": "Ao sofrer rajada de dano, forma um casulo protetor.", "icon": "Deck/carta-CasuloReativo1.png", "frame_2": "Deck/carta-CasuloReativo2.png", "color": Color(0.54, 1.0, 0.86)},
 	{"id": "passagem_intangivel", "name": "Passagem Intangível", "nick": "Fase Fantasma", "desc": "Apos o teleporte, atravesse inimigos sem sofrer contato.", "icon": "Deck/carta-PassagemIntang_vel1.png", "frame_2": "Deck/carta-PassagemIntang_vel2.png", "color": Color(0.72, 0.9, 1.0)},
 	{"id": "ancora_vital", "name": "Âncora Vital", "nick": "Selo de Retorno", "desc": "Ao sofrer dano, cria uma ancora que devolve parte da vida.", "icon": "Deck/carta-ncoraVital1.png", "frame_2": "Deck/carta-ncoraVital2.png", "color": Color(0.34, 1.0, 0.66)},
 	{"id": "inercia_cronal", "name": "Inercia Cronal", "nick": "Corpo Ancorado", "desc": "Reduz empurroes e controles hostis sofridos pelo jogador.", "icon": "Deck/carta-InerciaCronal1.png", "frame_2": "Deck/carta-InerciaCronal2.png", "color": Color(0.56, 0.74, 1.0)},
 	{"id": "moeda_estavel", "name": "Moeda Estavel", "nick": "Economia Fixa", "rarity": CARD_RARITY_UNCOMMON, "desc": "Reduz o aumento de preco das proximas compras da loja.", "icon": "Deck/carta-MoedaEstavel1.png", "frame_2": "Deck/carta-MoedaEstavel2.png", "color": Color(1.0, 0.72, 0.18)},
-	{"id": "orbita_coletora", "name": "Orbita Coletora", "nick": "Alcance Neutro", "desc": "Aumenta o raio que atrai pontos, moedas, cartas soltas e orbes neutros. Recursos atraidos perseguem o jogador ate serem absorvidos.", "icon": "Deck/carta-OrbitaColetora1.png", "frame_2": "Deck/carta-OrbitaColetora2.png", "color": Color(0.42, 1.0, 0.68)},
-	{"id": "pacto_possibilidades", "name": "Pacto das Possibilidades", "nick": "Primeira Oferta", "rarity": CARD_RARITY_UNCOMMON, "desc": "Cartas comuns ainda nao compradas ficam mais baratas na loja.", "icon": "Deck/carta-Pacto_das_Possibilidades1.png", "frame_2": "Deck/carta-Pacto_das_Possibilidades2.png", "color": Color(0.96, 0.5, 1.0)},
+	{"id": "orbita_coletora", "name": "Orbita Coletora", "nick": "Alcance Neutro", "desc": "Aumenta o raio que atrai pontos, moedas, itens soltos e orbes neutros. Recursos atraidos perseguem o jogador ate serem absorvidos.", "icon": "Deck/carta-OrbitaColetora1.png", "frame_2": "Deck/carta-OrbitaColetora2.png", "color": Color(0.42, 1.0, 0.68)},
+	{"id": "pacto_possibilidades", "name": "Pacto das Possibilidades", "nick": "Primeira Oferta", "rarity": CARD_RARITY_UNCOMMON, "desc": "Itens comuns ainda nao comprados ficam mais baratos na loja.", "icon": "Deck/carta-Pacto_das_Possibilidades1.png", "frame_2": "Deck/carta-Pacto_das_Possibilidades2.png", "color": Color(0.96, 0.5, 1.0)},
 	{"id": "tributo_da_dor", "name": "Tributo da Dor", "nick": "Ferida Rentável", "rarity": CARD_RARITY_UNCOMMON, "desc": "Sempre que perder vida, recebe pontos. A recompensa cresce cada vez mais por cópia, sem limite.", "icon": "Deck/carta-Tributo_da_Dor1.png", "frame_2": "Deck/carta-Tributo_da_Dor2.png", "color": Color(1.0, 0.58, 0.18)},
 	{"id": "horizonte_ruptura", "name": "Horizonte de Ruptura", "nick": "Linha Limite", "rarity": CARD_RARITY_UNCOMMON, "desc": "+45 px de alcance e +2.5% de dano nos ataques basicos a distancia por copia, sem limite. Na Prismatica, os +45 px viram +3% de critico nos ricochetes.", "icon": "Deck/carta-Horizonte_de_Ruptura1.png", "frame_2": "Deck/carta-Horizonte_de_Ruptura2.png", "color": Color(0.22, 0.68, 1.0)},
 	{"id": "fragmentacao_reativa", "name": "Fragmentacao Reativa", "nick": "Estilhaco de Revide", "rarity": CARD_RARITY_UNCOMMON, "desc": "Ao perder vida para um impacto, dispara fragmentos contra ate 4 inimigos em 150 px. Copias aumentam o raio em 30 px e o dano, sem limite.", "icon": "Deck/carta-Fragmentacao_Reativa1.png", "frame_2": "Deck/carta-Fragmentacao_Reativa2.png", "color": Color(0.92, 0.14, 0.3)},
@@ -1797,17 +1827,31 @@ const CARDS: = [
 	{"id": "pressao_cerco", "name": "Pressao de Cerco", "nick": "Alvo Cercado", "desc": "+dano em alvos cercados por 3 inimigos proximos.", "icon": "Deck/carta-Press_o_de_Cerco1.png", "frame_2": "Deck/carta-Press_o_de_Cerco2.png", "color": Color(1.0, 0.78, 0.28)},
 	{"id": "choque_fontes", "name": "Choque de Fontes", "nick": "Interferencia Temporal", "desc": "Fontes diferentes de dano no mesmo alvo provocam uma descarga.", "icon": "Deck/carta-Choque_de_Fontes1.png", "frame_2": "Deck/carta-Choque_de_Fontes2.png", "color": Color(0.72, 0.96, 1.0)},
 	{"id": "ferrolho_ruptura", "name": "Ferrolho de Ruptura", "nick": "Prego Espacial", "rarity": CARD_RARITY_UNCOMMON, "desc": "O proximo acerto direto a cada 8s fixa o alvo no espaco; elites e chefes sofrem controle reforcado.", "icon": "Deck/carta-Ferrolho_de_Ruptura1.png", "frame_2": "Deck/carta-Ferrolho_de_Ruptura2.png", "color": Color(0.28, 0.58, 1.0)},
+	{"id": "fe_emaculada", "name": "Fé Emaculada", "nick": "Pacote de Munição", "rarity": CARD_RARITY_UNCOMMON, "desc": "18% de chance (+10% por cópia) de um abate zerar na hora a recarga da HAB1, da ULT e do teleporte.", "icon": "Cartas_back.png", "color": Color(1.0, 0.86, 0.45)},
+	{"id": "tornozeleira_chumbo", "name": "Tornozeleira de Chumbo", "nick": "Passo Pesado", "rarity": CARD_RARITY_UNCOMMON, "desc": "Acertar um inimigo deixa ele 60% mais lento por 2 s (+2 s por cópia). Chefes ficam 30% mais lentos.", "icon": "Cartas_back.png", "color": Color(0.62, 0.66, 0.74)},
+	{"id": "disparo_vital", "name": "Disparo Vital", "nick": "Crítico Curativo", "rarity": CARD_RARITY_UNCOMMON, "desc": "+5% de chance de crítico. Cada acerto crítico cura 8 de vida (+4 por cópia).", "icon": "Cartas_back.png", "color": Color(1.0, 0.35, 0.42)},
+	{"id": "ultimo_impulso", "name": "Último Impulso", "nick": "Arrancada", "rarity": CARD_RARITY_UNCOMMON, "desc": "Cada abate dá +125% de velocidade, que some ao longo de 1 s (+0,5 s por cópia).", "icon": "Cartas_back.png", "color": Color(0.35, 0.95, 0.85)},
+	{"id": "sangue_coagulado", "name": "Sangue Coagulado", "nick": "Vida Acumulada", "rarity": CARD_RARITY_UNCOMMON, "desc": "Cada abate aumenta a vida máxima em 1 (+1 por cópia) até o fim da partida, até +100 (+100 por cópia).", "icon": "Cartas_back.png", "color": Color(0.75, 0.08, 0.18)},
+	{"id": "pulso_conversao", "name": "Pulso da Conversão", "nick": "Nova de Cura", "rarity": CARD_RARITY_UNCOMMON, "desc": "Na luta de chefe, a cada 20 s (-10% por cópia) solta uma nova que cura 50% da vida máxima. Uma vez por luta (+1 por cópia).", "icon": "Cartas_back.png", "color": Color(0.5, 1.0, 0.7)},
+	{"id": "bobina_catalisadora", "name": "Bobina Catalisadora", "nick": "Raio Guardado", "rarity": CARD_RARITY_UNCOMMON, "desc": "Cada HAB1 guarda 1 carga (até 5, +1 por cópia). Com 3 cargas, o próximo ataque básico solta 3 raios de 175% de dano (+50% por cópia). A recarga da HAB1 cai 20%.", "icon": "Cartas_back.png", "color": Color(0.55, 0.85, 1.0)},
+	{"id": "espinhos_vaghnor", "name": "Espinhos do Vaghnor", "nick": "Sangue Contagioso", "rarity": CARD_RARITY_UNCOMMON, "desc": "10% de chance (+10% por cópia) de causar sangramento. Ao matar, 33% de cada debuff passa para 1 inimigo (+1 por cópia) a até 250 px (+60 px por cópia).", "icon": "Cartas_back.png", "color": Color(0.85, 0.15, 0.25)},
+	{"id": "veu_entropico", "name": "Véu Entrópico", "nick": "Sumiço", "rarity": CARD_RARITY_UNCOMMON, "desc": "Abaixo de 25% de vida, ganha +40% de velocidade e fica invisível por 5 s: os inimigos miram onde você estava e o contato não acerta. Recarga de 30 s (-50% por cópia).", "icon": "Cartas_back.png", "color": Color(0.7, 0.6, 1.0)},
+	{"id": "botas_veludo", "name": "Botas de Veludo", "nick": "Passo Macio", "rarity": CARD_RARITY_UNCOMMON, "desc": "Fora de combate (1,5 s sem causar nem sofrer dano), +30% de velocidade (+30% por cópia).", "icon": "Cartas_back.png", "color": Color(0.85, 0.55, 0.95)},
 	{"id": "limiar_colapso", "name": "Limiar de Colapso", "nick": "Ruptura Vital", "desc": "Rompe inimigos ao cruzarem 70%, 40% e 15% de vida.", "icon": "Deck/carta-Limiar_de_Colapso1.png", "frame_2": "Deck/carta-Limiar_de_Colapso2.png", "color": Color(1.0, 0.42, 0.18)},
 	{"id": "desvio_probabilidade", "name": "Desvio de Probabilidade", "nick": "Quase Acerto", "desc": "Quase acertos hostis fortalecem o proximo golpe direto.", "icon": "Deck/carta-Desvio_de_Probabilidade1.png", "frame_2": "Deck/carta-Desvio_de_Probabilidade2.png", "color": Color(0.74, 0.48, 1.0)},
 	{"id": "ponto_cego", "name": "Ponto Cego", "nick": "Ataque pelas Costas", "desc": "Ataques por tras causam dano extra e desorientam.", "icon": "Deck/carta-Ponto_Cego1.png", "frame_2": "Deck/carta-Ponto_Cego2.png", "color": Color(1.0, 0.86, 0.34)},
+	{"id": "retorno_voluntario", "name": "Retorno Voluntário", "nick": "Uso Guardado", "desc": "+1 uso guardado da HAB1 por cópia, sem limite. A recarga da HAB1 não muda: os usos extras voltam um de cada vez, no tempo normal.", "icon": "Cartas_back.png", "color": Color(0.36, 0.78, 1.0)},
+	{"id": "estoque_ganancia", "name": "Estoque da Ganância", "nick": "Fome de Abate", "desc": "Cada abate dá +3,5% de dano (+1% por cópia), até 10 acúmulos (+5 por cópia), por 7 s. Causar dano renova o tempo.", "icon": "Cartas_back.png", "color": Color(1.0, 0.76, 0.2)},
+	{"id": "espectro_eletrico", "name": "Espectro Elétrico", "nick": "Faísca Errante", "desc": "Gera um orbe de energia perto de você a cada 10 s (-10% por cópia). Pegar o orbe dá +12% de velocidade, até 3 vezes (+3 por cópia), por 12 s.", "icon": "Cartas_back.png", "color": Color(0.45, 0.9, 1.0)},
+	{"id": "eco_ruina", "name": "Eco da Ruína", "nick": "Golpe Parcelado", "desc": "O próximo dano que você sofre cai 10% e chega em 3 golpes (+1 por cópia). Só o último golpe pode matar. Recarga de 15 s.", "icon": "Cartas_back.png", "color": Color(1.0, 0.4, 0.32)},
 	{"id": "mandamento_ruptura", "name": "Mandamento da Ruptura", "nick": "Terceira Lei", "desc": "A cada 3 habilidades, a terceira rompe seus limites.", "icon": "Deck/carta-Mandamento_da_Ruptura1.png", "frame_2": "Deck/carta-Mandamento_da_Ruptura2.png", "color": Color(0.94, 0.7, 1.0)},
-	{"id": "carta_zero", "name": "Carta Zero", "nick": "Origem Numerica", "desc": "Amplifica todos os efeitos numericos das cartas comuns.", "icon": "Deck/carta-Zero1.png", "frame_2": "Deck/carta-Zero2.png", "color": Color(0.9, 0.96, 1.0)},
+	{"id": "carta_zero", "name": "Carta Zero", "nick": "Origem Numerica", "desc": "Amplifica todos os efeitos numericos dos itens comuns.", "icon": "Deck/carta-Zero1.png", "frame_2": "Deck/carta-Zero2.png", "color": Color(0.9, 0.96, 1.0)},
 	{"id": "necrocronismo", "name": "Necrocronismo", "nick": "Aliados Espectrais", "desc": "A cada tantas mortes, um inimigo volta no tempo como Eco aliado: da investidas que atravessam e deixam lentos os inimigos, e implode no fim.", "icon": "Deck/carta-Necrocronismo1.png", "frame_2": "Deck/carta-Necrocronismo2.png", "color": Color(0.46, 1.0, 0.94)},
 	{"id": "coracao_antimateria", "name": "Coração de Antimatéria", "nick": "Implosao Instavel", "desc": "Dano carrega um coracao que implode no proximo acerto.", "icon": "Deck/carta-Cora_o_de_Antimat_ria1.png", "frame_2": "Deck/carta-Cora_o_de_Antimat_ria2.png", "color": Color(0.76, 0.24, 1.0)},
 	{"id": "cofre_excesso", "name": "Cofre do Excesso", "nick": "Reserva de Overkill", "desc": "Armazena dano excedente e descarrega em alvos poderosos.", "icon": "Deck/carta-Cofre_do_Excesso1.png", "frame_2": "Deck/carta-Cofre_do_Excesso2.png", "color": Color(1.0, 0.28, 0.22)},
 	{"id": "critico_absoluto", "name": "Crítico Absoluto", "nick": "Dobra Letal", "rarity": CARD_RARITY_RARE, "desc": "Cada cópia aumenta em 100% o dano final dos acertos críticos, sem limite. Uma cópia dobra o crítico atual; cinco cópias multiplicam por seis.", "icon": "Deck/carta-Critico_Absoluto1.png", "frame_2": "Deck/carta-Critico_Absoluto2.png", "color": CARD_RARITY_RARE_COLOR},
 	{"id": "coracao_paradoxo", "name": "Coracao do Paradoxo", "nick": "Eco Impossivel", "rarity": CARD_RARITY_LEGENDARY, "desc": "18 acertos diretos carregam o nucleo. A proxima Q, E ou teleporte que acertar abre uma ruptura por 5s; danos diretos ecoam apos 0.55s com 35% da forca.", "icon": "Deck/carta-Coracao_do_Paradoxo1.png", "frame_2": "Deck/carta-Coracao_do_Paradoxo2.png", "color": CARD_RARITY_LEGENDARY_COLOR},
-	{"id": "arquivo_impossivel", "name": "Arquivo do Impossível", "nick": "Cópia Sem Fim", "rarity": CARD_RARITY_LEGENDARY, "desc": "Ao adquirir qualquer carta não lendária, recebe uma cópia adicional dela por cópia deste Arquivo. As cópias gratuitas não reativam o Arquivo.", "icon": "Deck/carta-Arquivo_do_Impossivel1.png", "frame_2": "Deck/carta-Arquivo_do_Impossivel2.png", "color": CARD_RARITY_LEGENDARY_COLOR}
+	{"id": "arquivo_impossivel", "name": "Arquivo do Impossível", "nick": "Cópia Sem Fim", "rarity": CARD_RARITY_LEGENDARY, "desc": "Ao adquirir qualquer item não lendário, recebe uma cópia adicional dele por cópia deste Arquivo. As cópias gratuitas não reativam o Arquivo.", "icon": "Deck/carta-Arquivo_do_Impossivel1.png", "frame_2": "Deck/carta-Arquivo_do_Impossivel2.png", "color": CARD_RARITY_LEGENDARY_COLOR}
 ]
 
 const CARD_MAX_COUNTS: = {
@@ -1869,6 +1913,11 @@ const FERROLHO_RUPTURA_COOLDOWN: = 8.0
 const CHOQUE_FONTES_TARGET_COOLDOWN: = 4.0
 const CARD_TREGUA_ID: = "tregua_regenerativa"
 const CARD_CINZAS_ID: = "cinzas_escolha"
+const CARD_MOEDA_ESTAVEL_ID: = "moeda_estavel"
+## Cartas que nunca saem da loja nem de sorteios de recompensa: Cinzas so cai
+## de chefes; Moeda Estavel so vem das missoes do Mercador; Petro virou a Rede
+## de DNA da maquina do Mercador (o companheiro legado so roda em saves antigos).
+const SHOP_EXCLUDED_CARD_IDS: Array[String] = [CARD_CINZAS_ID, CARD_MOEDA_ESTAVEL_ID, "Petro"]
 const CARD_ESCOLHA_ADIADA_ID: = "escolha_adiada"
 const RETIRED_CARD_IDS: Array[String] = [CARD_ESCOLHA_ADIADA_ID, "leitura_instante", "margem_segura", "solo_consolidado"]
 const CARD_RESERVA_ID: = "reserva_pulso"
@@ -1908,14 +1957,14 @@ const CARD_UNLOCK_RULES: = {
 	"Mercenaria": {"metric": "enemy_kills", "target": 420.0, "challenge": "Eliminar 420/420 inimigos"},
 	"devorador_destinos": {"metric": "boss_kills", "target": 2.0, "challenge": "Eliminar 2/2 chefes"},
 	CARD_TREGUA_ID: {"metric": "survive_seconds", "target": 1500.0, "challenge": "Sobreviver 25:00 em uma run"},
-	CARD_CINZAS_ID: {"metric": "shop_purchases", "target": 30.0, "challenge": "Comprar 30/30 cartas e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
+	CARD_CINZAS_ID: {"metric": "shop_purchases", "target": 30.0, "challenge": "Comprar 30/30 itens e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
 	CARD_RESERVA_ID: {"metric": "healing_events", "target": 24.0, "challenge": "Receber cura 24/24 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
 	CARD_CASULO_ID: {"metric": "damage_taken_events", "target": 45.0, "challenge": "Sobreviver a 45/45 impactos e chegar na Fase 2", "all": [{"metric": "phase_reached", "target": 2.0}]},
 	CARD_PASSAGEM_ID: {"metric": "teleports_used", "target": 90.0, "challenge": "Usar teleporte 90/90 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
 	CARD_ANCORA_ID: {"metric": "damage_taken_events", "target": 65.0, "challenge": "Sobreviver a 65/65 impactos e chegar na Fase 2", "all": [{"metric": "phase_reached", "target": 2.0}]},
 	"inercia_cronal": {"metric": "damage_taken_events", "target": 80.0, "challenge": "Sobreviver a 80/80 impactos"},
-	"moeda_estavel": {"metric": "shop_purchases", "target": 18.0, "challenge": "Comprar 18/18 cartas"},
-	"pacto_possibilidades": {"metric": "unique_cards_bought", "target": 18.0, "challenge": "Comprar 18/18 cartas diferentes"},
+	"moeda_estavel": {"metric": "shop_purchases", "target": 18.0, "challenge": "Comprar 18/18 itens"},
+	"pacto_possibilidades": {"metric": "unique_cards_bought", "target": 18.0, "challenge": "Comprar 18/18 itens diferentes"},
 	CARD_RASTRO_ID: {"metric": "teleports_used", "target": 140.0, "challenge": "Usar teleporte 140/140 vezes"},
 	CARD_REBATE_ID: {"metric": "shots_fired", "target": 750.0, "challenge": "Disparar 750/750 vezes"},
 	CARD_IMPULSO_ID: {"metric": "abilities_used", "target": 140.0, "challenge": "Usar habilidades 140/140 vezes"},
@@ -1938,7 +1987,7 @@ const CARD_UNLOCK_RULES: = {
 	"desvio_probabilidade": {"metric": "damage_taken_events", "target": 140.0, "challenge": "Sobreviver a 140/140 impactos"},
 	"ponto_cego": {"metric": "teleports_used", "target": 220.0, "challenge": "Usar teleporte 220/220 vezes"},
 	"mandamento_ruptura": {"metric": "boss_kills", "target": 4.0, "challenge": "Eliminar 4/4 chefes"},
-	"carta_zero": {"metric": "unique_cards_bought", "target": 26.0, "challenge": "Comprar 26/26 cartas diferentes"},
+	"carta_zero": {"metric": "unique_cards_bought", "target": 26.0, "challenge": "Comprar 26/26 itens diferentes"},
 	"necrocronismo": {"metric": "enemy_kills", "target": 980.0, "challenge": "Eliminar 980/980 inimigos"},
 	"coracao_antimateria": {"metric": "boss_kills", "target": 4.0, "challenge": "Eliminar 4/4 chefes"},
 	"cofre_excesso": {"metric": "boss_kills", "target": 4.0, "challenge": "Eliminar 4/4 chefes"}
@@ -1964,7 +2013,7 @@ const SPECTRUM_UNLOCK_RULES: = {
 	"crepuscular": {"metric": "phase_reached", "target": 4.0, "challenge": "Chegar na Fase 4"},
 	"peregrino": {"metric": "phase_reached", "target": 3.0, "challenge": "Chegar na Fase 3"},
 	"equilibrista": {"metric": "survive_seconds", "target": 2400.0, "challenge": "Sobreviver 40:00 em uma run"},
-	"avarento": {"metric": "shop_purchases", "target": 30.0, "challenge": "Comprar 30/30 cartas"},
+	"avarento": {"metric": "shop_purchases", "target": 30.0, "challenge": "Comprar 30/30 itens"},
 	"oportunista": {"metric": "abilities_used", "target": 220.0, "challenge": "Usar habilidades 220/220 vezes"}
 }
 const SPECTRAL_CORE_ENEMY_CHANCE: = 0.055
@@ -1978,7 +2027,7 @@ const CASULO_INTERNAL_COOLDOWN: = 12.0
 const ANCORA_VITAL_LIFE: = 4.0
 const ANCORA_VITAL_HEAL_DURATION: = 3.0
 
-const CATALOG_TABS: = ["Manifestacoes", "Inimigos", "Chefes", "Fases", "Fracoes", "Espectros", "Cartas"]
+const CATALOG_TABS: = ["Manifestacoes", "Inimigos", "Chefes", "Fases", "Fracoes", "Espectros", "Itens"]
 
 const AURAS: = [
 	{"key": "racional", "name": "Racional", "icon": "aurea_cientista.png", "desc": "Ficar imovel pontua. Teleporte desacelera o mundo por 8s e causa Rebote por 3s."},
@@ -1989,7 +2038,7 @@ const AURAS: = [
 	{"key": "voraz", "name": "Voraz", "icon": "aurea_voraz.png", "desc": "Teleporte atraves de inimigos fracos para DEVORA-LOS. Quanto mais Fome, maior o limite de vida devoravel."},
 	{"key": "nula", "name": "Nula", "icon": "aurea_nula.png", "desc": "Ociosidade e abates carregam Vazio; o proximo tiro nulifica um alvo robusto."},
 	{"key": "abissal", "name": "Abissal", "icon": "aurea_abissal.png", "desc": "Cerco acumula Profundidade e invoca a Mare Negra, com o custo de pesar Geovana."},
-	{"key": "profetica", "name": "Profetica", "icon": "aurea_profetica.png", "desc": "De tempos em tempos ela VE O FUTURO: tiros e inimigos aparecem adiantados. Desviar de um tiro previsto guarda um critico."},
+	{"key": "profetica", "name": "Profetica", "icon": "aurea_profetica.png", "desc": "De tempos em tempos ela VE O FUTURO: tiros e inimigos aparecem adiantados. Desviar de um tiro previsto guarda um critico. PROFECIA: um olho dourado abre e por 10 s ela fica mais rapida; se for atingida, o tempo volta e ela refaz tudo."},
 	{"key": "sanguinaria", "name": "Sanguinaria", "icon": AURA_SANGUINARIA_ICON_PATH, "desc": "Dano repetido abre Feridas, alimenta Sede e prepara Carnificina Controlada."},
 	{"key": "crepuscular", "name": "Crepuscular", "icon": "res://assets/sprites/aurea-eclipsa.png", "desc": "Alterna entre Alvorada defensiva e Ocaso ofensivo. Domine a transicao para ativar Eclipse."},
 	{"key": "peregrino", "name": "Peregrino", "icon": "res://assets/sprites/aurea-peregrina.png", "desc": "Andar deixa um rastro que queima e atrasa inimigos. Feche um LACO com o rastro para explodir o Territorio e se curar."},
@@ -2849,6 +2898,10 @@ var henry_incendiary_ability_controller: RefCounted = HenryIncendiaryAbilityCont
 var henry_barometric_ability_controller: RefCounted = HenryBarometricAbilityControllerScript.new()
 var henry_colossus_ability_controller: RefCounted = HenryColossusAbilityControllerScript.new()
 var reactive_survival_card_controller: RefCounted = ReactiveSurvivalCardControllerScript.new()
+var momentum_items_controller: RefCounted = MomentumItemsControllerScript.new()
+var skirmish_items_controller: RefCounted = SkirmishItemsControllerScript.new()
+var coletora_scythe_fx: RefCounted = ColetoraScytheFxScript.new()
+var item_owners: RefCounted = ItemOwnersScript.new([momentum_items_controller, skirmish_items_controller, coletora_scythe_fx])
 var roguelike_point_card_controller: RefCounted = RoguelikePointCardControllerScript.new()
 var card_power_feedback_controller: RefCounted = CardPowerFeedbackControllerScript.new()
 var point_boost_pickup_controller: RefCounted = PointBoostPickupControllerScript.new()
@@ -3284,7 +3337,11 @@ var dimension_route_completed_count: int = 0
 var dimension_route_last_phase: int = 0
 var run_extracted: bool = false
 var interface_text_scale: float = 1.25
+## Texto das conversas (caixa RPG do Mercador e da UMBRA): 100% a 200%.
+var dialogue_text_scale: float = 1.0
 var geovana_bark_scale: float = 0.5
+## Modo de cor para daltonismo (RTColorVisionFilter.MODES).
+var color_vision_mode: String = ColorVisionFilterScript.MODE_OFF
 var analog_fixed: bool = true
 var shop_auto_enabled: bool = true
 var shop_auto_interval: float = 180.0
@@ -3304,18 +3361,12 @@ var gamepad_bindings: Dictionary = {
 	"boss": JOY_BUTTON_BACK
 }
 var gamepad_mapping_action: String = ""
-var keyboard_bindings: Dictionary = {
-	"attack": INPUT_BIND_MOUSE_PREFIX + str(MOUSE_BUTTON_LEFT),
-	"skill": INPUT_BIND_MOUSE_PREFIX + str(MOUSE_BUTTON_RIGHT),
-	"secondary": INPUT_BIND_KEY_PREFIX + str(KEY_Q),
-	"dash": INPUT_BIND_KEY_PREFIX + str(KEY_SHIFT),
-	"lacerante_empower": INPUT_BIND_KEY_PREFIX + str(KEY_R),
-	"dance": INPUT_BIND_KEY_PREFIX + str(KEY_O),
-	"interact": INPUT_BIND_KEY_PREFIX + str(KEY_E),
-	"pause": INPUT_BIND_KEY_PREFIX + str(KEY_ESCAPE),
-	"shop": INPUT_BIND_KEY_PREFIX + str(KEY_P),
-	"boss": INPUT_BIND_KEY_PREFIX + str(KEY_B)
-}
+## Slot "ALEATORIA" do carrossel de montagem: indice sentinela, foco por etapa
+## ("manifest", "aura", "mutation", "effect") e sorteios feitos em silencio.
+const BUILD_RANDOM_INDEX: int = -7
+var build_random_focus: Dictionary = {}
+var build_random_hidden: Dictionary = {}
+var keyboard_bindings: Dictionary = KeyboardBindingDefaultsScript.defaults()
 var keyboard_mapping_action: String = ""
 var desktop_action_gate_msec: Dictionary = {}
 var menu_analog_cooldown: float = 0.0

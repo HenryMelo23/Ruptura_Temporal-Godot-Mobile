@@ -40,7 +40,6 @@ const HOOK_SPEED_MULT := 2.58
 const HOOK_DAMAGE_MAX_HP_RATIO := 0.067
 const HOOK_DAMAGE_FAR_SCALE := 0.62
 const MAX_STOLEN_CARDS := 2
-const REWARD_CARD_COUNT := 1
 const REWARD_BASE_POINTS := 420
 const HISTORY_SAMPLE_INTERVAL := 0.12
 const HISTORY_WINDOW := 2.8
@@ -720,7 +719,7 @@ func _steal_card_from_peer(peer_id: int) -> Dictionary:
 		if int(counts.get(card_id, 0)) > 0:
 			eligible.append(card_id)
 	if eligible.is_empty():
-		game.event_alert_text = "ARPÃO PRENDEU — NENHUMA CARTA ROUBADA"
+		game.event_alert_text = "ARPÃO PRENDEU — NENHUM ITEM ROUBADO"
 		game.event_alert_timer = 1.2
 		return {}
 	var card_id := eligible[game.rng.randi_range(0, eligible.size() - 1)]
@@ -741,7 +740,7 @@ func _steal_card_from_peer(peer_id: int) -> Dictionary:
 	}
 	stolen_cards.append(entry)
 	game.amber_suturer_state["stolen_cards"] = stolen_cards
-	game.event_alert_text = "CARTA ROUBADA: %s" % display_name.to_upper()
+	game.event_alert_text = "ITEM ROUBADO: %s" % display_name.to_upper()
 	game.event_alert_timer = 2.2
 	_emit_visual_event("card_steal", {
 		"pos": Vector2(active_enemy().get("pos", game.player_pos)),
@@ -764,10 +763,10 @@ func apply_remote_card_change(card_id: String, restore: bool, encounter_id: Stri
 			return
 		restore_local_card(card_id)
 		_remember_remote_card_change(change_key, "restored")
-		game._add_text("CARTA DEVOLVIDA: %s" % String(card.get("nick", card.get("name", card_id))).to_upper(), game.player_pos + Vector2(-110.0, -112.0), Color(0.54, 1.0, 0.72), 1.45, 19)
+		game._add_text("ITEM DEVOLVIDO: %s" % String(card.get("nick", card.get("name", card_id))).to_upper(), game.player_pos + Vector2(-110.0, -112.0), Color(0.54, 1.0, 0.72), 1.45, 19)
 	elif previous_state == "" and game._consume_card_count(card_id, 1):
 		_remember_remote_card_change(change_key, "stolen")
-		game.event_alert_text = "CARTA ROUBADA: %s" % CardCatalogDefinitions.display_name(card_id).to_upper()
+		game.event_alert_text = "ITEM ROUBADO: %s" % CardCatalogDefinitions.display_name(card_id).to_upper()
 		game.event_alert_timer = 2.2
 
 
@@ -1071,8 +1070,10 @@ func _drop_defeat_rewards(pos: Vector2) -> void:
 			"suturer_returned": true,
 			"suturer_encounter_id": String(game.amber_suturer_state.get("encounter_id", "")),
 		})
-	game._spawn_random_card_drops(pos, REWARD_CARD_COUNT, 0)
-	game._add_text("%d CARTAS + ROUBADAS DEVOLVIDAS" % REWARD_CARD_COUNT, pos + Vector2(-150.0, -144.0), Color(1.0, 0.86, 0.32), 1.65, 20)
+	# Inimigo Supremo: so pontos (as roubadas voltam porque sao do jogador).
+	RTSupremeEnemyRewards.grant(game, "suturador", pos, "%s:supreme_points" % String(game.amber_suturer_state.get("encounter_id", "")))
+	if not stolen_cards.is_empty():
+		game._add_text("ITENS ROUBADOS DEVOLVIDOS", pos + Vector2(-150.0, -144.0), Color(1.0, 0.86, 0.32), 1.65, 20)
 	game.amber_suturer_state["stolen_cards"] = []
 
 

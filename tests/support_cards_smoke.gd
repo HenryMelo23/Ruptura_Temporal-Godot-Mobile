@@ -67,7 +67,8 @@ func _run() -> void:
 	var cinzas_before: int = game._card_count_by_id(game.CARD_CINZAS_ID)
 	game.shop_locked_slots[game._shop_locked_key(0)] = {"card": common_card.duplicate(true), "price": 500, "visit": 0}
 	_check(game._burn_shop_card(0), "Cinzas could not burn a valid common card")
-	_check(game._is_empty_shop_slot(game.shop_cards[0]), "Cinzas did not leave an empty slot")
+	_check(not game._is_empty_shop_slot(game.shop_cards[0]), "Cinzas should refill the burned slot with a random card")
+	_check(game._card_id(game.shop_cards[0]) != common_card_id, "Cinzas refill must not bring back the burned card")
 	_check(game.shop_presentation.action == "burn", "Cinzas did not start its burn animation")
 	_check(game.shop_presentation.duration == game.shop_presentation.BURN_TIME, "Cinzas burn duration drifted")
 	_check(String(game.shop_presentation.previous_cards[0].get("cinzas_bonus_summary", "")) != "", "Cinzas burn animation did not explain the future bonus")

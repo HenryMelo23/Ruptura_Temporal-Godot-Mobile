@@ -189,7 +189,7 @@ func _emit_acquisition(entry: Dictionary) -> void:
 	})
 	var copies: int = int(entry.get("copies", 1))
 	var copy_text: String = " +%d" % copies if copies > 1 else ""
-	core._add_text("PODER%s  %s x%d" % [copy_text, String(entry.get("name", "CARTA")), int(entry.get("stack", 1))], core.player_pos + Vector2(0, -108), color, 1.05, 20)
+	core._add_text("PODER%s  %s x%d" % [copy_text, String(entry.get("name", "ITEM")), int(entry.get("stack", 1))], core.player_pos + Vector2(0, -108), color, 1.05, 20)
 	core.screen_shake_timer = maxf(core.screen_shake_timer, 0.12)
 	core.screen_shake_strength = maxf(core.screen_shake_strength, 2.8 + 1.6 * float(rarity_power))
 	core._vibrate(34 + int(18.0 * float(rarity_power)), 0.18 + 0.08 * float(rarity_power))

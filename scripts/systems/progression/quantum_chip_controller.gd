@@ -15,8 +15,9 @@ const SAVE_PATH := "user://quantum_chips.cfg"
 const CHIPS: Array = [
 	{
 		"id": CORRUPTOR, "name": "Corruptor Mercantil", "short": "CORRUPTOR",
-		"buff": "Cada carta dropada vira um ? da cor da raridade. Na Fenda do Mercador voce escolhe QUALQUER carta daquela raridade.",
-		"debuff": "Voce nao ve a carta ao coletar; so troca o ? quando a fenda abrir.",
+		"buff": "Modo Drop: cada item dropado vira um ? da cor da raridade. A Fenda do Mercador abre so para voce escolher QUALQUER item daquela raridade.",
+		"debuff": "So no modo Drop (sem loja). Voce nao ve o item ao coletar; so troca o ? quando a fenda abrir.",
+		"drop_mode_only": true,
 		"color": Color(0.74, 0.4, 1.0), "glyph": "?",
 	},
 	{
@@ -48,6 +49,16 @@ const GANANCIA_HIT_COST_KILLS := 3.0
 const GANANCIA_MAX_EXTRA_DAMAGE := 0.5
 
 const RARITY_ORDER: Array = ["common", "uncommon", "rare", "legendary"]
+
+
+## Chip que so existe no modo Drop (sem loja), ex.: o Corruptor de raridade.
+static func drop_mode_only(id: String) -> bool:
+	return bool(chip_def(id).get("drop_mode_only", false))
+
+
+## O chip pode ligar no modo de jogo escolhido agora?
+func allowed_in_current_mode(id: String) -> bool:
+	return not drop_mode_only(id) or (core != null and core._is_drop_game_mode())
 
 var core: Node = null
 var persist := true
@@ -125,7 +136,7 @@ func clear_selection() -> void:
 func selected_count() -> int:
 	var n := 0
 	for chip in CHIPS:
-		if bool(selected.get(chip["id"], false)):
+		if bool(selected.get(chip["id"], false)) and allowed_in_current_mode(String(chip["id"])):
 			n += 1
 	return n + (1 if random_mode else 0)
 
@@ -139,14 +150,14 @@ func is_active(id: String) -> bool:
 func prepare_team_config() -> Dictionary:
 	var ids: Array[String] = []
 	for chip in CHIPS:
-		if bool(selected.get(chip["id"], false)):
+		if bool(selected.get(chip["id"], false)) and allowed_in_current_mode(String(chip["id"])):
 			ids.append(String(chip["id"]))
 	var rolled := ""
 	if random_mode:
 		var pool: Array[String] = []
 		for chip in CHIPS:
 			var id := String(chip["id"])
-			if not ids.has(id):
+			if not ids.has(id) and allowed_in_current_mode(id):
 				pool.append(id)
 		if not pool.is_empty():
 			rolled = pool[core.rng.randi_range(0, pool.size() - 1)]
@@ -188,10 +199,14 @@ func on_run_started(team_config: Dictionary = {}) -> void:
 		for chip in CHIPS:
 			if bool(selected.get(chip["id"], false)):
 				active[chip["id"]] = true
+	# Chips do modo Drop nao ligam no modo Loja (nem pela escolha nem sorteados).
+	for id in active.keys():
+		if not allowed_in_current_mode(String(id)):
+			active.erase(id)
 	if not bool(core.is_multiplayer) and random_mode:
 		var pool: Array = []
 		for chip in CHIPS:
-			if not bool(active.get(chip["id"], false)):
+			if not bool(active.get(chip["id"], false)) and allowed_in_current_mode(String(chip["id"])):
 				pool.append(String(chip["id"]))
 		if not pool.is_empty():
 			random_rolled = String(pool[core.rng.randi_range(0, pool.size() - 1)])
