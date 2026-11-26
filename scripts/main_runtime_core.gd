@@ -5890,6 +5890,7 @@ func _load_textures() -> void :
 	textures["crystal"] = [_safe_load(base + "cristalizador1.png"), _safe_load(base + "cristalizador2.png")]
 	textures["curater"] = [_safe_load(base + "curater1.png"), _safe_load(base + "curater2.png")]
 	textures["larapio"] = [_safe_load(base + "larapio1.png"), _safe_load(base + "larapio2.png")]
+	textures["rebobinador"] = [_safe_load(base + "rebobinador1.png"), _safe_load(base + "rebobinador2.png")]
 	textures["arauto"] = [_safe_load(base + "arauto1.png"), _safe_load(base + "arauto2.png")]
 	textures["aguilhao"] = [_safe_load(base + "aguilhao1.png"), _safe_load(base + "aguilhao2.png")]
 	textures["coin"] = _safe_load(base + "moeda.png")
@@ -18540,7 +18541,7 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 		enemy["hp"] = 0.0
 		collector_hud_pulse = 0.85
 		_add_text("COLETORA", enemy["pos"] + Vector2(0, -62), Color(0.95, 0.08, 0.24), 0.75, _damage_text_size(18))
-		_spawn_radial_particles(Vector2(enemy["pos"]), Color(1.0, 0.08, 0.24), 18)
+		coletora_scythe_fx.on_execute(enemy)
 	var actual_damage: float = hp_before - max(0.0, float(enemy["hp"]))
 	card_power_feedback_controller.on_damage_confirmed(enemy, actual_damage, critical_hit, effective_source_category)
 	skirmish_items_controller.on_enemy_hit(enemy, actual_damage, critical_hit, source, effective_source_category, source_peer_id)
@@ -18892,6 +18893,7 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		boss_hp = 0.0
 		collector_hud_pulse = 1.2
 		_add_text("COLETORA", boss_pos + Vector2(0, -116), Color(0.95, 0.08, 0.24), 1.4, 26)
+		coletora_scythe_fx.on_execute_boss()
 	if boss_hp <= 0.0 and not boss_dead:
 		_player_run_level_controller().grant_confirmed_boss()
 		if current_phase == 1:

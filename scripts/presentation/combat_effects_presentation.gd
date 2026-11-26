@@ -706,6 +706,7 @@ static func _draw_common_card_world(game: Node2D, camera: Vector2) -> void :
 	ReactiveSurvivalCards.draw(game, camera)
 	MomentumItems.draw(game, camera)
 	SkirmishItems.draw(game, camera)
+	game.coletora_scythe_fx.draw(game, camera)
 
 
 static func _draw_rare_card_world(game: Node2D, camera: Vector2) -> void :

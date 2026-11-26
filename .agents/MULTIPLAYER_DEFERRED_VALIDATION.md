@@ -1282,3 +1282,7 @@ Owner: `scripts/systems/cards/skirmish_items_controller.gd`. Os ganchos filtram 
 - **Tornozeleira de Chumbo:** a lentidão em inimigo comum é `evolution_slow`, escrita localmente. Conferir no host.
 - **Sangue Coagulado:** mexe em `player_hp_max` local. Conferir a reconciliação no snapshot do cliente.
 - **Fé Emaculada:** pacote de munição local, sem réplica.
+
+## 2026-11-26 — Foice da Coletora e sprite do Rebobinador (só solo validado)
+- **Foice da Coletora:** a animação (`coletora_scythe_fx`) nasce no `_damage_enemy`/`_damage_boss` de quem executou. Em sala real, conferir se a réplica também vê a foice. Se a execução só roda no host, o cliente precisa de um evento de execução no snapshot.
+- **Rebobinador:** a troca de sprite é só visual (`textures["rebobinador"]`), sem impacto de rede.

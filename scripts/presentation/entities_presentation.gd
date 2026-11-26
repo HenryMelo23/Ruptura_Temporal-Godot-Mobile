@@ -145,7 +145,7 @@ static func _draw_enemies_body(game: Node2D, camera: Vector2) -> void :
 		var size: Vector2 = sizes[kind]
 		var uid: int = int(enemy.get("uid", -1))
 		var alpha: float = float(enemy.get("alpha", 1.0))
-		var modulate_color: Color = ENEMY_TINTS.get(kind, Color.WHITE)
+		var modulate_color: Color = ENEMY_TINTS.get(kind, Color.WHITE) if not (kind == game.ENEMY_COUT_ATTACK_SPEED and game._texture_frame("rebobinador", 0) != null) else Color.WHITE
 		modulate_color.a *= alpha
 		var rolling := false
 		if kind == kind_kamikaze:
